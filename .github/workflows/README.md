@@ -1,41 +1,34 @@
-# GitHub Actions セットアップ
+# GitHub Actions ワークフロー
 
-## Claude Code Review
+このリポジトリでは、Claude Code公式のGitHub Actionsを使用しています。
 
-このワークフローは、PRコメントで `@claude review` または `@codex review` とメンションすると、Claude Opus 4.5を使用した自動コードレビューを実行します。
+## 利用可能なワークフロー
 
-### セットアップ手順
+### 1. `claude.yml` - コメントトリガー
+PRやIssueのコメントで `@claude` とメンションすると、Claudeが自動的にタスクを実行します。
 
-1. **Anthropic API Keyの取得**
-   - https://console.anthropic.com/ にアクセス
-   - APIキーを生成
+**使用方法:**
+```
+@claude このPRをレビューしてください
+```
 
-2. **GitHub Secretsに登録**
-   ```
-   リポジトリ設定 > Secrets and variables > Actions > New repository secret
-   Name: ANTHROPIC_API_KEY
-   Secret: <your-api-key>
-   ```
+### 2. `claude-code-review.yml` - 自動レビュー
+PRが作成または更新されると、自動的にClaudeがコードレビューを実行します。
 
-3. **使用方法**
-   PRコメントに以下を投稿：
-   ```
-   @claude review
-   ```
-   または
-   ```
-   @codex review
-   ```
+**トリガー:**
+- PR作成時（`opened`）
+- PR更新時（`synchronize`）
 
-### 使用モデル
+## セットアップ
 
-- **Claude Opus 4.5** (`claude-opus-4-5-20251101`)
-- 最高品質のコードレビューを提供
-- より高度な推論能力で複雑な問題を検出
+これらのワークフローは `CLAUDE_CODE_OAUTH_TOKEN` シークレットを使用します。
 
-### カスタマイズ
+リポジトリに既に設定されているため、追加のセットアップは不要です。
 
-`claude-review.yml` の `claude_args` を編集することで、以下をカスタマイズ可能：
-- モデルの変更（Opus ↔ Sonnet ↔ Haiku）
-- max-turns（会話の最大ターン数）
-- system-prompt（レビュー方針）
+## カスタマイズ
+
+ワークフローの動作をカスタマイズする場合は、各ワークフローファイルの `claude_args` パラメータを編集してください。
+
+詳細は公式ドキュメントを参照：
+- https://github.com/anthropics/claude-code-action
+- https://code.claude.com/docs/en/github-actions

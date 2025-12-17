@@ -27,19 +27,24 @@
 **優先度**: P0 | **見積**: 7日 | **依存**: T01
 
 ### チェックリスト
-- [ ] APIキー入力UI（React）
-- [ ] APIキー検証エンドポイント（Rust）
-- [ ] 動画ID入力 → activeLiveChatId 取得
-- [ ] `liveChatMessages.list` 実装
-- [ ] レスポンスパース → ChatMessage型
-- [ ] コメント型のフロントエンド連携（Tauri Command）
-- [ ] クォータ消費量のロギング
+- [x] APIキー入力UI（React）
+- [x] APIキー検証エンドポイント（Rust）
+- [x] 動画ID入力 → activeLiveChatId 取得
+- [x] `liveChatMessages.list` 実装
+- [x] レスポンスパース → ChatMessage型
+- [x] コメント型のフロントエンド連携（Tauri Command）
+- [ ] クォータ消費量のロギング（T03で詳細実装予定）
 
 ### テスト項目
-- [ ] 有効なAPIキーで認証成功
-- [ ] 無効なAPIキーでエラー表示
-- [ ] ライブ配信中のコメント取得
-- [ ] 配信終了時のハンドリング
+- [x] 有効なAPIキーで認証成功
+- [x] 無効なAPIキーでエラー表示
+- [ ] ライブ配信中のコメント取得（手動テスト必要）
+- [ ] 配信終了時のハンドリング（T03で実装）
+
+### 成果物
+- `src-tauri/src/youtube/` モジュール（client, types, errors）
+- `src-tauri/src/commands/youtube.rs` Tauriコマンド
+- `src/components/ApiKeySetup.tsx` テスト用UI
 
 ---
 
@@ -252,7 +257,7 @@
 | タスク | ステータス | 完了日 |
 |--------|------------|--------|
 | T01 | ✅ 完了 | 2025-12-17 |
-| T02 | ⬜ 未着手 | - |
+| T02 | ✅ 完了 | 2025-12-18 |
 | T03 | ⬜ 未着手 | - |
 | T04 | ⬜ 未着手 | - |
 | T05 | ⬜ 未着手 | - |

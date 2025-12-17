@@ -1,3 +1,6 @@
+mod commands;
+mod youtube;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -11,6 +14,11 @@ pub fn run() {
       }
       Ok(())
     })
+    .invoke_handler(tauri::generate_handler![
+      commands::youtube::validate_api_key,
+      commands::youtube::get_live_chat_id,
+      commands::youtube::get_chat_messages,
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

@@ -77,6 +77,20 @@ feature/[FeatureName]-[実装した機能名]
 1. PRを作成したら、必ず `@codex review` とコメントを送信すること
 2. レビュー指摘事項を修正した後も、再度 `@codex review` とコメントを送信すること
 
+**PRレビューコメント確認の必須手順**:
+GitHubのPRには2種類のコメントがあり、**両方を必ず確認すること**:
+- **Issue Comments（会話コメント）**: `gh pr view <PR番号> --json comments`
+- **Review Comments（レビューコメント）**: `gh api repos/{owner}/{repo}/pulls/<PR番号>/comments` ⚠️ 重要
+
+両方を確認するコマンド例:
+```bash
+# Issue Comments
+gh pr view 2 --json comments --jq '.comments[-3:] | .[] | "[\(.author.login)] \(.body)"'
+
+# Review Comments（ファイルの特定行へのコメント）
+gh api repos/manaca0923/vtuber-overlay-suite/pulls/2/comments | jq -r '.[] | "[\(.path):\(.line)] \(.body)"'
+```
+
 ## タスク管理
 
 `docs/900_tasks.md` のチェックリストで進捗管理:

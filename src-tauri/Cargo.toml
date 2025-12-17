@@ -1,10 +1,10 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+description = "VTuber streaming support tool"
+authors = ["manaca0923"]
+license = "MIT"
+repository = "https://github.com/manaca0923/vtuber-overlay-suite"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -35,9 +35,21 @@ impl YouTubeClient {
                 log::info!("API key validation successful");
                 Ok(true)
             }
-            reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
-                log::warn!("API key validation failed: invalid or forbidden");
+            reqwest::StatusCode::UNAUTHORIZED => {
+                log::warn!("API key validation failed: unauthorized");
                 Err(YouTubeError::InvalidApiKey)
+            }
+            reqwest::StatusCode::FORBIDDEN => {
+                let error_text = response.text().await?;
+                log::warn!("API key validation forbidden: {}", error_text);
+
+                if error_text.contains("quotaExceeded") {
+                    Err(YouTubeError::QuotaExceeded)
+                } else if error_text.contains("rateLimitExceeded") {
+                    Err(YouTubeError::RateLimitExceeded)
+                } else {
+                    Err(YouTubeError::InvalidApiKey)
+                }
             }
             status => {
                 log::warn!("API key validation returned unexpected status: {}", status);
@@ -68,14 +80,35 @@ impl YouTubeClient {
 
         match response.status() {
             reqwest::StatusCode::OK => {}
-            reqwest::StatusCode::BAD_REQUEST
-            | reqwest::StatusCode::UNAUTHORIZED
-            | reqwest::StatusCode::FORBIDDEN => {
-                log::warn!(
-                    "API key invalid or insufficient permissions: status {}",
-                    response.status()
-                );
+            reqwest::StatusCode::BAD_REQUEST => {
+                let error_text = response.text().await?;
+                log::warn!("Bad request for video {}: {}", video_id, error_text);
+
+                if error_text.contains("keyInvalid") {
+                    return Err(YouTubeError::InvalidApiKey);
+                } else {
+                    // 動画IDの問題など
+                    return Err(YouTubeError::VideoNotFound);
+                }
+            }
+            reqwest::StatusCode::UNAUTHORIZED => {
+                log::warn!("Unauthorized - API key invalid");
                 return Err(YouTubeError::InvalidApiKey);
+            }
+            reqwest::StatusCode::FORBIDDEN => {
+                let error_text = response.text().await?;
+                log::warn!("Forbidden for video {}: {}", video_id, error_text);
+
+                if error_text.contains("quotaExceeded") {
+                    return Err(YouTubeError::QuotaExceeded);
+                } else if error_text.contains("rateLimitExceeded") {
+                    return Err(YouTubeError::RateLimitExceeded);
+                } else if error_text.contains("keyInvalid") {
+                    return Err(YouTubeError::InvalidApiKey);
+                } else {
+                    // その他の権限不足など
+                    return Err(YouTubeError::VideoNotFound);
+                }
             }
             reqwest::StatusCode::NOT_FOUND => {
                 log::warn!("Video not found: {}", video_id);

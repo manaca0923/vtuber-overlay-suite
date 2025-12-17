@@ -1,6 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
 
+type MessageType =
+  | { type: 'text' }
+  | { type: 'superChat'; amount: string; currency: string }
+  | { type: 'superSticker'; stickerId: string }
+  | { type: 'membership'; level: string }
+  | { type: 'membershipGift'; count: number };
+
 interface ChatMessage {
   id: string;
   message: string;
@@ -12,7 +19,7 @@ interface ChatMessage {
   isModerator: boolean;
   isMember: boolean;
   isVerified: boolean;
-  messageType: { type: 'text' };
+  messageType: MessageType;
 }
 
 export function ApiKeySetup() {

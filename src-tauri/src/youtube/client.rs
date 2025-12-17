@@ -66,12 +66,25 @@ impl YouTubeClient {
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            log::warn!(
-                "Failed to fetch live chat ID: status {}",
-                response.status()
-            );
-            return Err(YouTubeError::VideoNotFound);
+        match response.status() {
+            reqwest::StatusCode::OK => {}
+            reqwest::StatusCode::BAD_REQUEST
+            | reqwest::StatusCode::UNAUTHORIZED
+            | reqwest::StatusCode::FORBIDDEN => {
+                log::warn!(
+                    "API key invalid or insufficient permissions: status {}",
+                    response.status()
+                );
+                return Err(YouTubeError::InvalidApiKey);
+            }
+            reqwest::StatusCode::NOT_FOUND => {
+                log::warn!("Video not found: {}", video_id);
+                return Err(YouTubeError::VideoNotFound);
+            }
+            status => {
+                log::warn!("Failed to fetch live chat ID: status {}", status);
+                return Err(YouTubeError::VideoNotFound);
+            }
         }
 
         let data: VideoResponse = response.json().await?;
@@ -125,6 +138,25 @@ impl YouTubeClient {
                     data.polling_interval_millis
                 );
                 Ok(data)
+            }
+            reqwest::StatusCode::BAD_REQUEST => {
+                let error_text = response.text().await?;
+                log::error!("YouTube API bad request: {}", error_text);
+
+                if error_text.contains("keyInvalid") {
+                    log::error!("API key is invalid");
+                    Err(YouTubeError::InvalidApiKey)
+                } else {
+                    log::error!("Bad request - invalid parameters");
+                    Err(YouTubeError::ParseError(format!(
+                        "Bad request: {}",
+                        error_text
+                    )))
+                }
+            }
+            reqwest::StatusCode::UNAUTHORIZED => {
+                log::error!("Unauthorized - API key invalid");
+                Err(YouTubeError::InvalidApiKey)
             }
             reqwest::StatusCode::FORBIDDEN => {
                 let error_text = response.text().await?;

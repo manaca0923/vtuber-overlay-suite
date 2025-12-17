@@ -8,13 +8,13 @@
 **優先度**: P0 | **見積**: 2日 | **依存**: なし
 
 ### チェックリスト
-- [ ] Tauri CLI インストール (`cargo install tauri-cli`)
-- [ ] プロジェクト作成 (`cargo tauri init`)
-- [ ] React + TypeScript + Vite セットアップ
-- [ ] Tailwind CSS 導入
-- [ ] 基本ウィンドウ設定（サイズ、タイトル）
-- [ ] ホットリロード動作確認
-- [ ] ビルド確認（dev/release）
+- [x] Tauri CLI インストール (`cargo install tauri-cli`)
+- [x] プロジェクト作成 (`cargo tauri init`)
+- [x] React + TypeScript + Vite セットアップ
+- [x] Tailwind CSS 導入
+- [x] 基本ウィンドウ設定（サイズ、タイトル）
+- [x] ホットリロード動作確認
+- [x] ビルド確認（dev/release）
 
 ### 成果物
 - `src-tauri/` ディレクトリ
@@ -251,7 +251,7 @@
 
 | タスク | ステータス | 完了日 |
 |--------|------------|--------|
-| T01 | ⬜ 未着手 | - |
+| T01 | ✅ 完了 | 2025-12-17 |
 | T02 | ⬜ 未着手 | - |
 | T03 | ⬜ 未着手 | - |
 | T04 | ⬜ 未着手 | - |

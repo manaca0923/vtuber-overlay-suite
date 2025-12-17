@@ -73,6 +73,10 @@ feature/[FeatureName]-[実装した機能名]
 例: feature/setlist-drag-drop
 ```
 
+**PR作成後の必須手順**:
+1. PRを作成したら、必ず `@codex review` とコメントを送信すること
+2. レビュー指摘事項を修正した後も、再度 `@codex review` とコメントを送信すること
+
 ## タスク管理
 
 `docs/900_tasks.md` のチェックリストで進捗管理:

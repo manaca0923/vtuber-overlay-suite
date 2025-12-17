@@ -19,42 +19,72 @@ impl YouTubeClient {
 
     /// APIキーを検証（videos.listでクォータ1消費）
     pub async fn validate_api_key(&self) -> Result<bool, YouTubeError> {
-        let url = format!(
-            "{}/videos?part=id&id=dQw4w9WgXcQ&key={}",
-            API_BASE, self.api_key
-        );
+        log::info!("Validating API key (quota cost: 1 unit)");
 
-        let response = self.client.get(&url).send().await?;
+        let url = format!("{}/videos", API_BASE);
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&[("part", "id"), ("id", "dQw4w9WgXcQ"), ("key", &self.api_key)])
+            .send()
+            .await?;
 
         match response.status() {
-            reqwest::StatusCode::OK => Ok(true),
+            reqwest::StatusCode::OK => {
+                log::info!("API key validation successful");
+                Ok(true)
+            }
             reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+                log::warn!("API key validation failed: invalid or forbidden");
                 Err(YouTubeError::InvalidApiKey)
             }
-            _ => Ok(false),
+            status => {
+                log::warn!("API key validation returned unexpected status: {}", status);
+                Ok(false)
+            }
         }
     }
 
     /// 動画IDからactiveLiveChatIdを取得
     pub async fn get_live_chat_id(&self, video_id: &str) -> Result<String, YouTubeError> {
-        let url = format!(
-            "{}/videos?part=liveStreamingDetails&id={}&key={}",
-            API_BASE, video_id, self.api_key
+        log::info!(
+            "Fetching live chat ID for video: {} (quota cost: 1 unit)",
+            video_id
         );
 
-        let response = self.client.get(&url).send().await?;
+        let url = format!("{}/videos", API_BASE);
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&[
+                ("part", "liveStreamingDetails"),
+                ("id", video_id),
+                ("key", &self.api_key),
+            ])
+            .send()
+            .await?;
 
         if !response.status().is_success() {
+            log::warn!(
+                "Failed to fetch live chat ID: status {}",
+                response.status()
+            );
             return Err(YouTubeError::VideoNotFound);
         }
 
         let data: VideoResponse = response.json().await?;
 
-        data.items
+        let chat_id = data
+            .items
             .first()
             .and_then(|item| item.live_streaming_details.as_ref())
             .and_then(|details| details.active_live_chat_id.clone())
-            .ok_or(YouTubeError::LiveChatNotFound)
+            .ok_or(YouTubeError::LiveChatNotFound)?;
+
+        log::info!("Live chat ID retrieved: {}", chat_id);
+        Ok(chat_id)
     }
 
     /// ライブチャットメッセージ取得
@@ -63,37 +93,70 @@ impl YouTubeClient {
         live_chat_id: &str,
         page_token: Option<&str>,
     ) -> Result<LiveChatMessagesResponse, YouTubeError> {
-        let mut url = format!(
-            "{}/liveChat/messages?liveChatId={}&part=snippet,authorDetails&key={}",
-            API_BASE, live_chat_id, self.api_key
+        log::info!(
+            "Fetching live chat messages for chat ID: {} (quota cost: ~5 units)",
+            live_chat_id
         );
 
+        let url = format!("{}/liveChat/messages", API_BASE);
+
+        let mut query_params = vec![
+            ("liveChatId", live_chat_id),
+            ("part", "snippet,authorDetails"),
+            ("key", &self.api_key),
+        ];
+
+        // pageTokenがある場合は追加
+        let page_token_string;
         if let Some(token) = page_token {
-            url.push_str(&format!("&pageToken={}", token));
+            page_token_string = token.to_string();
+            query_params.push(("pageToken", &page_token_string));
+            log::debug!("Using page token: {}", token);
         }
 
-        let response = self.client.get(&url).send().await?;
+        let response = self.client.get(&url).query(&query_params).send().await?;
 
         match response.status() {
             reqwest::StatusCode::OK => {
-                let data = response.json().await?;
+                let data: LiveChatMessagesResponse = response.json().await?;
+                log::info!(
+                    "Successfully fetched {} messages (polling interval: {}ms)",
+                    data.items.len(),
+                    data.polling_interval_millis
+                );
                 Ok(data)
             }
             reqwest::StatusCode::FORBIDDEN => {
                 let error_text = response.text().await?;
+                log::error!("YouTube API forbidden error: {}", error_text);
+
                 if error_text.contains("quotaExceeded") {
+                    log::error!("Quota exceeded - daily limit reached");
                     Err(YouTubeError::QuotaExceeded)
                 } else if error_text.contains("rateLimitExceeded") {
+                    log::warn!("Rate limit exceeded - will retry with backoff");
                     Err(YouTubeError::RateLimitExceeded)
                 } else {
+                    log::error!("API key invalid or insufficient permissions");
                     Err(YouTubeError::InvalidApiKey)
                 }
             }
-            reqwest::StatusCode::NOT_FOUND => Err(YouTubeError::LiveChatNotFound),
-            _ => Err(YouTubeError::ParseError(format!(
-                "Unexpected status: {}",
-                response.status()
-            ))),
+            reqwest::StatusCode::NOT_FOUND => {
+                log::warn!("Live chat not found - stream may have ended");
+                Err(YouTubeError::LiveChatNotFound)
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!(
+                    "Unexpected API response - status: {}, body: {}",
+                    status,
+                    error_text
+                );
+                Err(YouTubeError::ParseError(format!(
+                    "Unexpected status: {} - {}",
+                    status, error_text
+                )))
+            }
         }
     }
 }

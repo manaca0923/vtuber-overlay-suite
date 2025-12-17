@@ -28,6 +28,9 @@ pub async fn get_chat_messages(
         .map_err(|e| e.to_string())?;
 
     // レスポンスをChatMessage型に変換
+    let total_items = response.items.len();
+    let mut parse_errors = 0;
+
     let messages: Vec<ChatMessage> = response
         .items
         .into_iter()
@@ -38,6 +41,7 @@ pub async fn get_chat_messages(
             let published_at = match DateTime::parse_from_rfc3339(&item.snippet.published_at) {
                 Ok(dt) => dt.with_timezone(&chrono::Utc),
                 Err(e) => {
+                    parse_errors += 1;
                     log::warn!(
                         "Failed to parse publishedAt for message {}: {}. Skipping message.",
                         item.id,
@@ -47,6 +51,11 @@ pub async fn get_chat_messages(
                 }
             };
 
+            // TODO(T04): SuperChat/メンバーシップ対応
+            // snippet.message_type:
+            //   "textMessageEvent" -> MessageType::Text
+            //   "superChatEvent" -> MessageType::SuperChat
+            //   "membershipGiftingEvent" -> MessageType::MembershipGift
             Some(ChatMessage {
                 id: item.id,
                 message: item.snippet.display_message,
@@ -62,6 +71,23 @@ pub async fn get_chat_messages(
             })
         })
         .collect();
+
+    // 多数のパースエラーが発生した場合は警告
+    if parse_errors > 0 {
+        log::warn!(
+            "Skipped {} messages due to parse errors (total: {})",
+            parse_errors,
+            total_items
+        );
+    }
+
+    // 半分以上のメッセージでパースエラーが発生した場合はエラーを返す
+    if parse_errors > total_items / 2 && total_items > 0 {
+        return Err(format!(
+            "多数のメッセージパースエラーが発生しました ({}/{}件)",
+            parse_errors, total_items
+        ));
+    }
 
     Ok((
         messages,

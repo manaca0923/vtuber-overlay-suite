@@ -30,7 +30,9 @@ export function ApiKeySetup() {
     setSuccess('');
 
     try {
-      const isValid = await invoke<boolean>('validate_api_key', { apiKey });
+      const isValid = await invoke<boolean>('validate_api_key', {
+        api_key: apiKey,
+      });
 
       if (isValid) {
         setSuccess('APIキーが有効です');
@@ -51,8 +53,8 @@ export function ApiKeySetup() {
 
     try {
       const chatId = await invoke<string>('get_live_chat_id', {
-        apiKey,
-        videoId,
+        api_key: apiKey,
+        video_id: videoId,
       });
       setLiveChatId(chatId);
       setSuccess(`Live Chat ID: ${chatId}`);
@@ -72,9 +74,9 @@ export function ApiKeySetup() {
       const [newMessages, _nextPageToken, pollingInterval] = await invoke<
         [ChatMessage[], string | null, number]
       >('get_chat_messages', {
-        apiKey,
-        liveChatId,
-        pageToken: null,
+        api_key: apiKey,
+        live_chat_id: liveChatId,
+        page_token: null,
       });
 
       setMessages(newMessages);

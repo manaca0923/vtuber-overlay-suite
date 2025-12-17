@@ -20,10 +20,15 @@ pub struct ChatMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum MessageType {
+    #[serde(rename = "text")]
     Text,
+    #[serde(rename = "superChat")]
     SuperChat { amount: String, currency: String },
+    #[serde(rename = "superSticker")]
     SuperSticker { sticker_id: String },
+    #[serde(rename = "membership")]
     Membership { level: String },
+    #[serde(rename = "membershipGift")]
     MembershipGift { count: u32 },
 }
 

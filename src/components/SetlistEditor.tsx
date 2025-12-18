@@ -403,6 +403,8 @@ function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandl
               : 'cursor-grab active:cursor-grabbing'
           } text-gray-400 hover:text-gray-600`}
           title={isReordering ? '保存中...' : 'ドラッグして並び替え'}
+          aria-label="曲順を並び替えるドラッグハンドル"
+          role="button"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

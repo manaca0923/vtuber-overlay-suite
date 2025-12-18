@@ -107,15 +107,8 @@ async fn handle_connection(state: Arc<RwLock<WebSocketState>>, stream: TcpStream
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
 
     // ピアIDを取得して登録
-    let peer_id = {
-        let mut state_lock = state.write().await;
-        state_lock.next_id()
-    };
-
-    {
-        let state_lock = state.read().await;
-        state_lock.add_peer(peer_id, tx).await;
-    }
+    let peer_id = state.read().await.next_id();
+    state.read().await.add_peer(peer_id, tx).await;
 
     // 送信タスク: チャネルからメッセージを受信してWebSocketに送信
     let send_task = tokio::spawn(async move {

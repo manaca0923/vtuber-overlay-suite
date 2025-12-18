@@ -4,19 +4,10 @@ use axum::{
     Router,
 };
 use serde_json::json;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 
-use super::websocket::WebSocketState;
-
 /// HTTPサーバーを起動
-///
-/// # 引数
-/// - `state`: 共有状態
-pub async fn start_http_server(
-    _state: Arc<RwLock<WebSocketState>>,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_http_server() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/api/health", get(health_check))
         .route("/overlay/comment", get(overlay_comment))

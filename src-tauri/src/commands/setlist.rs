@@ -543,6 +543,7 @@ pub async fn previous_song(
             .map_err(|e| e.to_string())?;
 
             // 前の曲のタイムスタンプをクリア
+            // （次のset_current_songでstarted_atが再設定される）
             let prev_pos = pos - 1;
             sqlx::query!(
                 "UPDATE setlist_songs
@@ -557,7 +558,7 @@ pub async fn previous_song(
 
             tx.commit().await.map_err(|e| e.to_string())?;
 
-            // 前の曲を現在として設定
+            // 前の曲を現在として設定（started_atを記録）
             set_current_song(setlist_id, pos - 1, state).await
         }
         _ => Err("前の曲がありません".to_string()),

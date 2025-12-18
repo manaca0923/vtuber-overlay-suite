@@ -16,6 +16,27 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   const [error, setError] = useState<string>('');
   const [showAddSong, setShowAddSong] = useState(false);
 
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [setlist, songs] = await Promise.all([
+          getSetlistWithSongs(setlistId),
+          getSongs(),
+        ]);
+        setSetlistData(setlist);
+        setAllSongs(songs);
+        setError('');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [setlistId]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -32,10 +53,6 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-  }, [setlistId]);
 
   const handleRemoveSong = async (setlistSongId: string) => {
     if (!confirm('この曲をセットリストから削除しますか？')) return;

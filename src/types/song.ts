@@ -14,7 +14,7 @@ export interface CreateSongInput {
   artist?: string;
   category?: string;
   tags?: string[];
-  durationSeconds?: number;
+  duration_seconds?: number;
   [key: string]: unknown;
 }
 

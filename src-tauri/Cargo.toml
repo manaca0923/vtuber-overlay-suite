@@ -32,3 +32,5 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
+sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-rustls", "chrono", "uuid"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }

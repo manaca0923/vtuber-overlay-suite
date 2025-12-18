@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            ss.id as \"ss_id!\", ss.position as \"position!\", ss.started_at, ss.ended_at,\n            s.id as \"song_id!\", s.title as \"title!\", s.artist, s.category, s.tags, s.duration_seconds,\n            s.created_at as \"song_created_at!\", s.updated_at as \"song_updated_at!\"\n        FROM setlist_songs ss\n        JOIN songs s ON ss.song_id = s.id\n        WHERE ss.setlist_id = ?\n        ORDER BY ss.position\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "ss_id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "position!",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "started_at",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "ended_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "song_id!",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "title!",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "artist",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "category",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "tags",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "duration_seconds",
+        "ordinal": 9,
+        "type_info": "Int64"
+      },
+      {
+        "name": "song_created_at!",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "song_updated_at!",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "7bb9e0dbdc288673aed335aedd3255d22679d5eaf14b491238ea078e6df9a398"
+}

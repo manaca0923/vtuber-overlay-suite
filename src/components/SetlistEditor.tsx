@@ -134,8 +134,11 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
       return;
     }
 
-    // 楽観的UI更新
-    const newSongs = arrayMove(setlistData.songs, oldIndex, newIndex);
+    // 楽観的UI更新（positionフィールドも更新）
+    const newSongs = arrayMove(setlistData.songs, oldIndex, newIndex).map((song, index) => ({
+      ...song,
+      position: index,
+    }));
     setSetlistData({
       ...setlistData,
       songs: newSongs,

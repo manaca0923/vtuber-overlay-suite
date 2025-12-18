@@ -274,7 +274,9 @@
     }
 
     function removeComment(id) {
-      const el = document.querySelector(`[data-id="${id}"]`);
+      // CSS.escapeでIDをエスケープしてCSSセレクタインジェクションを防止
+      const escapedId = CSS.escape(id);
+      const el = document.querySelector(`[data-id="${escapedId}"]`);
       if (el) {
         el.classList.add('removing');
         setTimeout(() => el.remove(), 300);

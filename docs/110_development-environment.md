@@ -85,14 +85,16 @@ cargo install sqlx-cli --no-default-features --features sqlite
 sqlx database create
 sqlx migrate run
 
-# 4. メタデータの再生成
-cargo sqlx prepare
+# 4. メタデータの再生成（SQLX_OFFLINEを無効化）
+SQLX_OFFLINE=false cargo sqlx prepare
 
 # 5. .envファイルを削除（.gitignoreに含まれているため不要）
 rm .env
 ```
 
-**重要**: `.sqlx/`ディレクトリの変更は必ずGitにコミットしてください。
+**重要**:
+- `.sqlx/`ディレクトリの変更は必ずGitにコミットしてください
+- `cargo sqlx prepare`実行時は**必ず`SQLX_OFFLINE=false`を指定**してください（`.cargo/config.toml`の設定を上書き）
 
 ## セットアップ手順（macOS）
 

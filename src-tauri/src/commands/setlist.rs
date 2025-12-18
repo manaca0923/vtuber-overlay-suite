@@ -46,9 +46,13 @@ pub async fn create_song(
     song.duration_seconds = duration_seconds;
 
     // tagsをJSON文字列に変換
-    let tags_json = tags.and_then(|t| serde_json::to_string(&t).map_err(|e| {
-        log::error!("Failed to serialize tags: {}", e);
-    }).ok());
+    let tags_json = match tags {
+        Some(t) => Some(
+            serde_json::to_string(&t)
+                .map_err(|e| format!("Failed to serialize tags: {}", e))?
+        ),
+        None => None,
+    };
     song.tags = tags_json.clone();
 
     sqlx::query!(
@@ -95,9 +99,13 @@ pub async fn update_song(
     let now = Utc::now().to_rfc3339();
 
     // tagsをJSON文字列に変換
-    let tags_json = tags.and_then(|t| serde_json::to_string(&t).map_err(|e| {
-        log::error!("Failed to serialize tags: {}", e);
-    }).ok());
+    let tags_json = match tags {
+        Some(t) => Some(
+            serde_json::to_string(&t)
+                .map_err(|e| format!("Failed to serialize tags: {}", e))?
+        ),
+        None => None,
+    };
 
     sqlx::query!(
         "UPDATE songs

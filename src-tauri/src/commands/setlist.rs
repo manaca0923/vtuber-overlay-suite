@@ -619,21 +619,31 @@ pub async fn reorder_setlist_songs(
         return Err("曲IDリストが空です".to_string());
     }
 
-    // 入力バリデーション：セットリストの曲数と渡されたIDの数が一致するか確認
-    let actual_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ?"
+    // 入力バリデーション：セットリストの実際の曲IDリストを取得
+    let actual_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM setlist_songs WHERE setlist_id = ? ORDER BY position"
     )
     .bind(&setlist_id)
-    .fetch_one(pool)
+    .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    if actual_count != setlist_song_ids.len() as i64 {
+    // 曲数チェック
+    if actual_ids.len() != setlist_song_ids.len() {
         return Err(format!(
             "曲数が一致しません（期待: {}, 実際: {}）",
-            actual_count,
+            actual_ids.len(),
             setlist_song_ids.len()
         ));
+    }
+
+    // IDの所属確認：渡されたIDがすべてこのセットリストに属しているかチェック
+    use std::collections::HashSet;
+    let passed_set: HashSet<_> = setlist_song_ids.iter().collect();
+    let actual_set: HashSet<_> = actual_ids.iter().collect();
+
+    if passed_set != actual_set {
+        return Err("無効な曲IDが含まれています".to_string());
     }
 
     // トランザクション開始

@@ -308,6 +308,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
                     index={index}
                     onRemove={() => handleRemoveSong(setlistSong.id)}
                     onSetCurrent={() => handleSetCurrent(setlistSong.position)}
+                    isReordering={isReordering}
                   />
                 ))}
               </div>
@@ -326,7 +327,9 @@ interface SetlistSongItemProps {
   onSetCurrent: () => void;
 }
 
-interface SortableSetlistSongItemProps extends SetlistSongItemProps {}
+interface SortableSetlistSongItemProps extends SetlistSongItemProps {
+  isReordering?: boolean;
+}
 
 function SortableSetlistSongItem(props: SortableSetlistSongItemProps) {
   const {
@@ -342,11 +345,13 @@ function SortableSetlistSongItem(props: SortableSetlistSongItemProps) {
     transition,
   };
 
-  // attributesとlistenersを結合
-  const dragHandleProps = {
-    ...attributes,
-    ...listeners,
-  };
+  // attributesとlistenersを結合（保存中は無効化）
+  const dragHandleProps = props.isReordering
+    ? {}
+    : {
+        ...attributes,
+        ...listeners,
+      };
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -357,9 +362,10 @@ function SortableSetlistSongItem(props: SortableSetlistSongItemProps) {
 
 interface SetlistSongItemPropsWithDrag extends SetlistSongItemProps {
   dragHandleProps?: Record<string, unknown>;
+  isReordering?: boolean;
 }
 
-function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandleProps }: SetlistSongItemPropsWithDrag) {
+function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandleProps, isReordering }: SetlistSongItemPropsWithDrag) {
   const { song, status } = setlistSong;
 
   const statusColors = {
@@ -384,8 +390,12 @@ function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandl
       {dragHandleProps && (
         <div
           {...dragHandleProps}
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
-          title="ドラッグして並び替え"
+          className={`flex-shrink-0 ${
+            isReordering
+              ? 'cursor-not-allowed opacity-50'
+              : 'cursor-grab active:cursor-grabbing'
+          } text-gray-400 hover:text-gray-600`}
+          title={isReordering ? '保存中...' : 'ドラッグして並び替え'}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

@@ -177,6 +177,28 @@ pub async fn add_song_to_setlist(
 ) -> Result<(), String> {
     let pool = &state.db;
 
+    // セットリストの存在確認
+    let setlist_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM setlists WHERE id = ?)")
+        .bind(&setlist_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !setlist_exists {
+        return Err(format!("Setlist not found: {}", setlist_id));
+    }
+
+    // 楽曲の存在確認
+    let song_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM songs WHERE id = ?)")
+        .bind(&song_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !song_exists {
+        return Err(format!("Song not found: {}", song_id));
+    }
+
     // 現在の最大positionを取得
     let max_position: Option<i64> = sqlx::query_scalar(
         "SELECT MAX(position) FROM setlist_songs WHERE setlist_id = ?"

@@ -6,6 +6,9 @@ mod youtube;
 use sqlx::SqlitePool;
 use std::sync::{Arc, Mutex};
 
+/// アプリケーションID（tauri.conf.jsonのidentifierと一致させる）
+const APP_IDENTIFIER: &str = "com.vtuber-overlay-suite.desktop";
+
 /// アプリケーション全体の共有状態
 pub struct AppState {
     pub poller: Arc<Mutex<Option<youtube::poller::ChatPoller>>>,
@@ -25,7 +28,7 @@ pub fn run() {
   let db_pool = {
     let app_dir = dirs::data_dir()
       .expect("Failed to get data directory");
-    let app_dir_path = app_dir.join("com.vtuber-overlay-suite.app");
+    let app_dir_path = app_dir.join(APP_IDENTIFIER);
     std::fs::create_dir_all(&app_dir_path).expect("Failed to create app data directory");
     let db_path = app_dir_path.join("app.db");
     tauri::async_runtime::block_on(async {

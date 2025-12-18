@@ -92,6 +92,9 @@ pub fn run() {
       commands::setlist::add_song_to_setlist,
       commands::setlist::remove_song_from_setlist,
       commands::setlist::get_setlist_with_songs,
+      commands::setlist::set_current_song,
+      commands::setlist::next_song,
+      commands::setlist::previous_song,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

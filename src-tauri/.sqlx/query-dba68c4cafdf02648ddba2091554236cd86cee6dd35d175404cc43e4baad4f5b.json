@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE setlist_songs\n                 SET started_at = NULL, ended_at = NULL\n                 WHERE setlist_id = ? AND position = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "dba68c4cafdf02648ddba2091554236cd86cee6dd35d175404cc43e4baad4f5b"
+}

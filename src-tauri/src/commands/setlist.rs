@@ -614,6 +614,28 @@ pub async fn reorder_setlist_songs(
 ) -> Result<(), String> {
     let pool = &state.db;
 
+    // 入力バリデーション：空配列チェック
+    if setlist_song_ids.is_empty() {
+        return Err("曲IDリストが空です".to_string());
+    }
+
+    // 入力バリデーション：セットリストの曲数と渡されたIDの数が一致するか確認
+    let actual_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ?"
+    )
+    .bind(&setlist_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if actual_count != setlist_song_ids.len() as i64 {
+        return Err(format!(
+            "曲数が一致しません（期待: {}, 実際: {}）",
+            actual_count,
+            setlist_song_ids.len()
+        ));
+    }
+
     // トランザクション開始
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -631,6 +653,16 @@ pub async fn reorder_setlist_songs(
         .await
         .map_err(|e| e.to_string())?;
     }
+
+    // セットリストのupdated_atを更新
+    let now = Utc::now().to_rfc3339();
+    sqlx::query!(
+        "UPDATE setlists SET updated_at = ? WHERE id = ?",
+        now, setlist_id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
 
     // コミット
     tx.commit().await.map_err(|e| e.to_string())?;

@@ -10,7 +10,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  DragEndEvent,
+  type DragEndEvent,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -32,6 +32,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [showAddSong, setShowAddSong] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -118,7 +119,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (!over || active.id === over.id || !setlistData) {
+    if (!over || active.id === over.id || !setlistData || isReordering) {
       return;
     }
 
@@ -138,6 +139,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
 
     // サーバーに送信
     setError('');
+    setIsReordering(true);
     try {
       const newOrderIds = newSongs.map((song) => song.id);
       await reorderSetlistSongs(setlistId, newOrderIds);
@@ -145,6 +147,8 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       await loadData(); // エラー時は元に戻す
+    } finally {
+      setIsReordering(false);
     }
   };
 
@@ -235,6 +239,12 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-600">{error}</p>
+        </div>
+      )}
+
+      {isReordering && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-blue-600">曲順を保存中...</p>
         </div>
       )}
 
@@ -332,15 +342,21 @@ function SortableSetlistSongItem(props: SortableSetlistSongItemProps) {
     transition,
   };
 
+  // attributesとlistenersを結合
+  const dragHandleProps = {
+    ...attributes,
+    ...listeners,
+  };
+
   return (
     <div ref={setNodeRef} style={style}>
-      <SetlistSongItem {...props} dragHandleProps={{ ...attributes, ...listeners }} />
+      <SetlistSongItem {...props} dragHandleProps={dragHandleProps} />
     </div>
   );
 }
 
 interface SetlistSongItemPropsWithDrag extends SetlistSongItemProps {
-  dragHandleProps?: ReturnType<typeof useSortable>['attributes'] & ReturnType<typeof useSortable>['listeners'];
+  dragHandleProps?: Record<string, unknown>;
 }
 
 function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandleProps }: SetlistSongItemPropsWithDrag) {

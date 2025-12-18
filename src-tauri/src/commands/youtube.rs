@@ -2,13 +2,9 @@ use crate::youtube::{
     client::YouTubeClient, poller::ChatPoller, poller::PollingEvent, state::PollingState,
     types::ChatMessage,
 };
-use std::sync::{Arc, Mutex};
+use crate::{server::types::WsMessage, AppState};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-
-/// グローバルなポーラー管理用の状態
-pub struct PollerState {
-    pub poller: Arc<Mutex<Option<ChatPoller>>>,
-}
 
 #[tauri::command]
 pub async fn validate_api_key(api_key: String) -> Result<bool, String> {
@@ -112,7 +108,7 @@ pub async fn start_polling(
     api_key: String,
     live_chat_id: String,
     app: AppHandle,
-    state: tauri::State<'_, PollerState>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     log::info!("Starting polling for live chat ID: {}", live_chat_id);
 
@@ -134,11 +130,31 @@ pub async fn start_polling(
         *poller_lock = Some(poller.clone());
     } // ここでロックを解放
 
+    // WebSocketサーバー状態を取得
+    let server_state = Arc::clone(&state.server);
+
     // イベントコールバックを設定
     let app_clone = app.clone();
     let event_callback = move |event: PollingEvent| {
+        // Tauriアプリへのイベント送信
         if let Err(e) = app_clone.emit("polling-event", &event) {
             log::error!("Failed to emit polling event: {}", e);
+        }
+
+        // WebSocketでブロードキャスト
+        if let PollingEvent::Messages { messages } = event {
+            let server_state_clone = Arc::clone(&server_state);
+            let messages_clone = messages.clone();
+            tokio::spawn(async move {
+                let state_lock = server_state_clone.read().await;
+                for message in messages_clone {
+                    state_lock
+                        .broadcast(WsMessage::CommentAdd {
+                            payload: message.clone(),
+                        })
+                        .await;
+                }
+            });
         }
     };
 
@@ -153,7 +169,7 @@ pub async fn start_polling(
 
 /// ポーリングを停止
 #[tauri::command]
-pub async fn stop_polling(state: tauri::State<'_, PollerState>) -> Result<(), String> {
+pub async fn stop_polling(state: tauri::State<'_, AppState>) -> Result<(), String> {
     log::info!("Stopping polling");
 
     let poller_lock = state
@@ -171,7 +187,7 @@ pub async fn stop_polling(state: tauri::State<'_, PollerState>) -> Result<(), St
 /// ポーリング状態を取得
 #[tauri::command]
 pub async fn get_polling_state(
-    state: tauri::State<'_, PollerState>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<Option<PollingState>, String> {
     let poller_lock = state
         .poller
@@ -186,7 +202,7 @@ pub async fn get_polling_state(
 
 /// クォータ情報を取得
 #[tauri::command]
-pub async fn get_quota_info(state: tauri::State<'_, PollerState>) -> Result<(u64, i64), String> {
+pub async fn get_quota_info(state: tauri::State<'_, AppState>) -> Result<(u64, i64), String> {
     let poller_lock = state
         .poller
         .lock()
@@ -207,7 +223,7 @@ pub async fn get_quota_info(state: tauri::State<'_, PollerState>) -> Result<(u64
 
 /// ポーリングが実行中かどうかを確認
 #[tauri::command]
-pub async fn is_polling_running(state: tauri::State<'_, PollerState>) -> Result<bool, String> {
+pub async fn is_polling_running(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     let poller_lock = state
         .poller
         .lock()

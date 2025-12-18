@@ -1,8 +1,14 @@
 mod commands;
+mod server;
 mod youtube;
 
-use commands::youtube::PollerState;
 use std::sync::{Arc, Mutex};
+
+/// アプリケーション全体の共有状態
+pub struct AppState {
+    pub poller: Arc<Mutex<Option<youtube::poller::ChatPoller>>>,
+    pub server: server::ServerState,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,10 +21,35 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // サーバー用の共有状態を作成
+      let server_state = server::create_server_state();
+
+      // HTTPサーバーを起動（バックグラウンド）
+      {
+        let state_clone = Arc::clone(&server_state);
+        tokio::spawn(async move {
+          if let Err(e) = server::start_http_server(state_clone).await {
+            log::error!("HTTP server error: {}", e);
+          }
+        });
+      }
+
+      // WebSocketサーバーを起動（バックグラウンド）
+      {
+        let state_clone = Arc::clone(&server_state);
+        tokio::spawn(async move {
+          if let Err(e) = server::start_websocket_server(state_clone).await {
+            log::error!("WebSocket server error: {}", e);
+          }
+        });
+      }
+
       Ok(())
     })
-    .manage(PollerState {
+    .manage(AppState {
       poller: Arc::new(Mutex::new(None)),
+      server: server::create_server_state(),
     })
     .invoke_handler(tauri::generate_handler![
       commands::youtube::validate_api_key,

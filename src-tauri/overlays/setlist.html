@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setlist Overlay</title>
+  <style>
+    :root {
+      --primary-color: #6366f1;
+      --current-bg: rgba(99, 102, 241, 0.8);
+      --other-bg: rgba(0, 0, 0, 0.5);
+      --text-color: #ffffff;
+      --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      --font-size-title: 24px;
+      --font-size-artist: 14px;
+      --transition-duration: 0.5s;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: transparent;
+      font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+      color: var(--text-color);
+      overflow: hidden;
+    }
+
+    #setlist-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+    }
+
+    .song {
+      padding: 16px 20px;
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      transition: all var(--transition-duration) ease-out;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .song.previous,
+    .song.next {
+      background: var(--other-bg);
+      opacity: 0.6;
+      font-size: 14px;
+    }
+
+    .song.current {
+      background: var(--current-bg);
+      border: 2px solid var(--primary-color);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+      font-size: 18px;
+    }
+
+    .song.entering {
+      animation: slide-up var(--transition-duration) ease-out;
+    }
+
+    .indicator {
+      font-size: 24px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .title {
+      font-size: var(--font-size-title);
+      font-weight: bold;
+      text-shadow: var(--text-shadow);
+      flex: 1;
+    }
+
+    .artist {
+      font-size: var(--font-size-artist);
+      opacity: 0.8;
+      text-shadow: var(--text-shadow);
+    }
+
+    @keyframes slide-up {
+      from {
+        transform: translateY(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="setlist-container">
+    <div class="song previous" id="prev-song">
+      <span class="title">-</span>
+    </div>
+    <div class="song current" id="current-song">
+      <span class="indicator">♪</span>
+      <span class="title">配信準備中...</span>
+      <span class="artist"></span>
+    </div>
+    <div class="song next" id="next-song">
+      <span class="title">-</span>
+    </div>
+  </div>
+
+  <script>
+    const WS_URL = 'ws://localhost:19801/ws';
+    let ws = null;
+    let reconnectDelay = 1000;
+    const maxDelay = 30000;
+
+    function connectWebSocket() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        reconnectDelay = 1000;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleMessage(data);
+        } catch (e) {
+          console.error('Failed to parse message:', e);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket closed. Reconnecting in', reconnectDelay, 'ms');
+        setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+          connectWebSocket();
+        }, reconnectDelay);
+      };
+    }
+
+    function handleMessage(data) {
+      if (data.type === 'setlist:update') {
+        updateSetlist(data.payload);
+      }
+    }
+
+    function updateSetlist(payload) {
+      const { currentIndex, songs } = payload;
+
+      const prevSong = document.getElementById('prev-song');
+      const currentSong = document.getElementById('current-song');
+      const nextSong = document.getElementById('next-song');
+
+      // 前の曲
+      if (currentIndex > 0 && songs[currentIndex - 1]) {
+        const song = songs[currentIndex - 1];
+        prevSong.querySelector('.title').textContent = song.title;
+        prevSong.style.display = 'flex';
+      } else {
+        prevSong.style.display = 'none';
+      }
+
+      // 現在の曲
+      if (songs[currentIndex]) {
+        const song = songs[currentIndex];
+        currentSong.querySelector('.title').textContent = song.title;
+        currentSong.querySelector('.artist').textContent = song.artist;
+        currentSong.classList.add('entering');
+        setTimeout(() => currentSong.classList.remove('entering'), 500);
+      }
+
+      // 次の曲
+      if (currentIndex < songs.length - 1 && songs[currentIndex + 1]) {
+        const song = songs[currentIndex + 1];
+        nextSong.querySelector('.title').textContent = song.title;
+        nextSong.style.display = 'flex';
+      } else {
+        nextSong.style.display = 'none';
+      }
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>

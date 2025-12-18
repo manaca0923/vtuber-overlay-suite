@@ -12,6 +12,29 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // サーバー用の共有状態を作成（setup外で作成してmanageに渡す）
+  let server_state = server::create_server_state();
+
+  // HTTPサーバーを起動（バックグラウンド）
+  {
+    let state_clone = Arc::clone(&server_state);
+    tokio::spawn(async move {
+      if let Err(e) = server::start_http_server(state_clone).await {
+        log::error!("HTTP server error: {}", e);
+      }
+    });
+  }
+
+  // WebSocketサーバーを起動（バックグラウンド）
+  {
+    let state_clone = Arc::clone(&server_state);
+    tokio::spawn(async move {
+      if let Err(e) = server::start_websocket_server(state_clone).await {
+        log::error!("WebSocket server error: {}", e);
+      }
+    });
+  }
+
   tauri::Builder::default()
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -22,34 +45,11 @@ pub fn run() {
         )?;
       }
 
-      // サーバー用の共有状態を作成
-      let server_state = server::create_server_state();
-
-      // HTTPサーバーを起動（バックグラウンド）
-      {
-        let state_clone = Arc::clone(&server_state);
-        tokio::spawn(async move {
-          if let Err(e) = server::start_http_server(state_clone).await {
-            log::error!("HTTP server error: {}", e);
-          }
-        });
-      }
-
-      // WebSocketサーバーを起動（バックグラウンド）
-      {
-        let state_clone = Arc::clone(&server_state);
-        tokio::spawn(async move {
-          if let Err(e) = server::start_websocket_server(state_clone).await {
-            log::error!("WebSocket server error: {}", e);
-          }
-        });
-      }
-
       Ok(())
     })
     .manage(AppState {
       poller: Arc::new(Mutex::new(None)),
-      server: server::create_server_state(),
+      server: server_state,
     })
     .invoke_handler(tauri::generate_handler![
       commands::youtube::validate_api_key,

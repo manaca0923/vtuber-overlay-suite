@@ -1,5 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, RwLock};
@@ -13,22 +14,20 @@ type PeerMap = Arc<RwLock<HashMap<usize, Tx>>>;
 /// WebSocket接続管理状態
 pub struct WebSocketState {
     peers: PeerMap,
-    next_peer_id: usize,
+    next_peer_id: AtomicUsize,
 }
 
 impl WebSocketState {
     pub fn new() -> Self {
         Self {
             peers: Arc::new(RwLock::new(HashMap::new())),
-            next_peer_id: 0,
+            next_peer_id: AtomicUsize::new(0),
         }
     }
 
     /// 新しいピアIDを取得
-    pub fn next_id(&mut self) -> usize {
-        let id = self.next_peer_id;
-        self.next_peer_id += 1;
-        id
+    pub fn next_id(&self) -> usize {
+        self.next_peer_id.fetch_add(1, Ordering::SeqCst)
     }
 
     /// ピアを追加
@@ -65,6 +64,12 @@ impl WebSocketState {
         }
 
         log::debug!("Broadcasted message to {} peers: {:?}", peers.len(), message);
+    }
+}
+
+impl Default for WebSocketState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

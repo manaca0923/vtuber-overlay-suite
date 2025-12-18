@@ -78,19 +78,25 @@
 **優先度**: P0 | **見積**: 3日 | **依存**: T01
 
 ### チェックリスト
-- [ ] HTTP サーバー起動（localhost:19800）
-- [ ] WebSocket サーバー起動（localhost:19801）
-- [ ] `/overlay/comment` エンドポイント
-- [ ] `/overlay/setlist` エンドポイント
-- [ ] `/api/health` ヘルスチェック
-- [ ] WebSocket 接続管理（複数クライアント対応）
-- [ ] コメント配信（WebSocket broadcast）
-- [ ] セットリスト更新配信
+- [x] HTTP サーバー起動（localhost:19800）
+- [x] WebSocket サーバー起動（localhost:19801）
+- [x] `/overlay/comment` エンドポイント
+- [x] `/overlay/setlist` エンドポイント
+- [x] `/api/health` ヘルスチェック
+- [x] WebSocket 接続管理（複数クライアント対応）
+- [x] コメント配信（WebSocket broadcast）
+- [x] セットリスト更新配信
 
 ### テスト項目
-- [ ] ブラウザからオーバーレイ表示
-- [ ] OBS ブラウザソースで表示
-- [ ] 複数ブラウザソース同時接続
+- [ ] ブラウザからオーバーレイ表示（手動テスト必要）
+- [ ] OBS ブラウザソースで表示（手動テスト必要）
+- [ ] 複数ブラウザソース同時接続（手動テスト必要）
+
+### 成果物
+- `src-tauri/src/server/` モジュール（http, websocket, types）
+- `src-tauri/overlays/comment.html` - コメント表示オーバーレイ
+- `src-tauri/overlays/setlist.html` - セットリスト表示オーバーレイ
+- `src-tauri/src/lib.rs` - サーバー自動起動統合
 
 ---
 
@@ -265,7 +271,7 @@
 | T01 | ✅ 完了 | 2025-12-17 |
 | T02 | ✅ 完了 | 2025-12-18 |
 | T03 | ✅ 完了 | 2025-12-18 |
-| T04 | ⬜ 未着手 | - |
+| T04 | ✅ 完了 | 2025-12-18 |
 | T05 | ⬜ 未着手 | - |
 | T06 | ⬜ 未着手 | - |
 | T07 | ⬜ 未着手 | - |

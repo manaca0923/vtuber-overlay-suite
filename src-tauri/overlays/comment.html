@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comment Overlay</title>
+  <style>
+    :root {
+      --primary-color: #6366f1;
+      --background-color: transparent;
+      --text-color: #ffffff;
+      --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      --avatar-size: 48px;
+      --font-size-name: 14px;
+      --font-size-message: 16px;
+      --comment-gap: 8px;
+      --max-comments: 10;
+      --animation-duration: 0.3s;
+      --animation-easing: ease-out;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--background-color);
+      font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+      color: var(--text-color);
+      overflow: hidden;
+    }
+
+    #comment-container {
+      display: flex;
+      flex-direction: column;
+      gap: var(--comment-gap);
+      padding: 16px;
+    }
+
+    .comment {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      animation: comment-enter var(--animation-duration) var(--animation-easing);
+    }
+
+    .comment.removing {
+      animation: comment-exit var(--animation-duration) var(--animation-easing);
+    }
+
+    .comment.superchat {
+      background: linear-gradient(135deg, var(--sc-color, #ff0000) 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid var(--sc-color, #ff0000);
+    }
+
+    .avatar {
+      width: var(--avatar-size);
+      height: var(--avatar-size);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .name {
+      font-size: var(--font-size-name);
+      font-weight: bold;
+      text-shadow: var(--text-shadow);
+    }
+
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .badge-owner {
+      background: #fbbf24;
+      color: #000;
+    }
+
+    .badge-moderator {
+      background: #3b82f6;
+      color: #fff;
+    }
+
+    .badge-member {
+      background: #10b981;
+      color: #fff;
+    }
+
+    .message {
+      font-size: var(--font-size-message);
+      word-wrap: break-word;
+      text-shadow: var(--text-shadow);
+    }
+
+    .amount {
+      font-size: var(--font-size-name);
+      font-weight: bold;
+      color: #fbbf24;
+    }
+
+    @keyframes comment-enter {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes comment-exit {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="comment-container"></div>
+
+  <script>
+    const MAX_COMMENTS = 10;
+    const WS_URL = 'ws://localhost:19801/ws';
+    let ws = null;
+    let reconnectDelay = 1000;
+    const maxDelay = 30000;
+
+    function connectWebSocket() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        reconnectDelay = 1000;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleMessage(data);
+        } catch (e) {
+          console.error('Failed to parse message:', e);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket closed. Reconnecting in', reconnectDelay, 'ms');
+        setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+          connectWebSocket();
+        }, reconnectDelay);
+      };
+    }
+
+    function handleMessage(data) {
+      if (data.type === 'comment:add') {
+        addComment(data.payload);
+      } else if (data.type === 'comment:remove') {
+        removeComment(data.payload.id);
+      }
+    }
+
+    function addComment(comment) {
+      const container = document.getElementById('comment-container');
+      const el = createCommentElement(comment);
+      container.appendChild(el);
+
+      while (container.children.length > MAX_COMMENTS) {
+        const oldest = container.firstChild;
+        oldest.classList.add('removing');
+        setTimeout(() => oldest.remove(), 300);
+      }
+    }
+
+    function createCommentElement(comment) {
+      const div = document.createElement('div');
+      div.className = 'comment';
+      div.dataset.id = comment.id;
+
+      if (comment.messageType === 'superchat') {
+        div.classList.add('superchat');
+      }
+
+      const avatar = document.createElement('img');
+      avatar.className = 'avatar';
+      avatar.src = comment.authorImageUrl;
+      avatar.alt = comment.authorName;
+
+      const content = document.createElement('div');
+      content.className = 'content';
+
+      const header = document.createElement('div');
+      header.className = 'header';
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = comment.authorName;
+      header.appendChild(name);
+
+      if (comment.isOwner) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-owner';
+        badge.textContent = 'Owner';
+        header.appendChild(badge);
+      }
+
+      if (comment.isModerator) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-moderator';
+        badge.textContent = 'Mod';
+        header.appendChild(badge);
+      }
+
+      if (comment.isMember) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-member';
+        badge.textContent = 'Member';
+        header.appendChild(badge);
+      }
+
+      const message = document.createElement('div');
+      message.className = 'message';
+      message.textContent = comment.message;
+
+      content.appendChild(header);
+      content.appendChild(message);
+
+      div.appendChild(avatar);
+      div.appendChild(content);
+
+      return div;
+    }
+
+    function removeComment(id) {
+      const el = document.querySelector(`[data-id="${id}"]`);
+      if (el) {
+        el.classList.add('removing');
+        setTimeout(() => el.remove(), 300);
+      }
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>

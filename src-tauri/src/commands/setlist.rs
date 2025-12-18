@@ -31,6 +31,14 @@ pub async fn create_song(
     duration_seconds: Option<i64>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Song, String> {
+    // 入力バリデーション
+    if title.trim().is_empty() {
+        return Err("Title cannot be empty".to_string());
+    }
+    if title.len() > 255 {
+        return Err("Title is too long (max 255 characters)".to_string());
+    }
+
     let pool = &state.db;
     let mut song = Song::new(title);
     song.artist = artist;
@@ -38,7 +46,9 @@ pub async fn create_song(
     song.duration_seconds = duration_seconds;
 
     // tagsをJSON文字列に変換
-    let tags_json = tags.and_then(|t| serde_json::to_string(&t).ok());
+    let tags_json = tags.and_then(|t| serde_json::to_string(&t).map_err(|e| {
+        log::error!("Failed to serialize tags: {}", e);
+    }).ok());
     song.tags = tags_json.clone();
 
     sqlx::query!(
@@ -71,11 +81,23 @@ pub async fn update_song(
     duration_seconds: Option<i64>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Song, String> {
+    // 入力バリデーション
+    if let Some(ref t) = title {
+        if t.trim().is_empty() {
+            return Err("Title cannot be empty".to_string());
+        }
+        if t.len() > 255 {
+            return Err("Title is too long (max 255 characters)".to_string());
+        }
+    }
+
     let pool = &state.db;
     let now = Utc::now().to_rfc3339();
 
     // tagsをJSON文字列に変換
-    let tags_json = tags.and_then(|t| serde_json::to_string(&t).ok());
+    let tags_json = tags.and_then(|t| serde_json::to_string(&t).map_err(|e| {
+        log::error!("Failed to serialize tags: {}", e);
+    }).ok());
 
     sqlx::query!(
         "UPDATE songs
@@ -149,6 +171,14 @@ pub async fn create_setlist(
     description: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Setlist, String> {
+    // 入力バリデーション
+    if name.trim().is_empty() {
+        return Err("Name cannot be empty".to_string());
+    }
+    if name.len() > 255 {
+        return Err("Name is too long (max 255 characters)".to_string());
+    }
+
     let pool = &state.db;
     let setlist = Setlist::new(name, description);
 
@@ -168,6 +198,22 @@ pub async fn create_setlist(
     Ok(setlist)
 }
 
+/// セットリストを削除
+#[tauri::command]
+pub async fn delete_setlist(id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let pool = &state.db;
+    let result = sqlx::query!("DELETE FROM setlists WHERE id = ?", id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if result.rows_affected() == 0 {
+        return Err(format!("Setlist not found: {}", id));
+    }
+
+    Ok(())
+}
+
 /// セットリストに楽曲を追加
 #[tauri::command]
 pub async fn add_song_to_setlist(
@@ -178,24 +224,24 @@ pub async fn add_song_to_setlist(
     let pool = &state.db;
 
     // セットリストの存在確認
-    let setlist_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM setlists WHERE id = ?)")
+    let setlist_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM setlists WHERE id = ?")
         .bind(&setlist_id)
         .fetch_one(pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    if !setlist_exists {
+    if setlist_count == 0 {
         return Err(format!("Setlist not found: {}", setlist_id));
     }
 
     // 楽曲の存在確認
-    let song_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM songs WHERE id = ?)")
+    let song_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM songs WHERE id = ?")
         .bind(&song_id)
         .fetch_one(pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    if !song_exists {
+    if song_count == 0 {
         return Err(format!("Song not found: {}", song_id));
     }
 

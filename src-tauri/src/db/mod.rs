@@ -6,7 +6,7 @@ pub mod models;
 pub async fn create_pool(db_path: &str) -> Result<SqlitePool, sqlx::Error> {
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(&format!("sqlite:{}", db_path))
+        .connect(&format!("sqlite:{}?mode=rwc", db_path))
         .await?;
 
     // マイグレーション実行

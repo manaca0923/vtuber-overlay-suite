@@ -88,6 +88,7 @@ pub fn run() {
       commands::setlist::delete_song,
       commands::setlist::get_setlists,
       commands::setlist::create_setlist,
+      commands::setlist::delete_setlist,
       commands::setlist::add_song_to_setlist,
       commands::setlist::remove_song_from_setlist,
       commands::setlist::get_setlist_with_songs,

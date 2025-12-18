@@ -49,6 +49,7 @@ npm run test
 |----------|------|
 | `001_requirements.md` | 要件サマリー・受け入れ基準 |
 | `100_architecture.md` | 技術アーキテクチャ・ディレクトリ構成 |
+| `110_development-environment.md` | 開発環境セットアップ・要件 |
 | `200_youtube-api.md` | YouTube API仕様・クォータ管理 |
 | `300_overlay-specs.md` | オーバーレイ・WebSocket仕様 |
 | `400_data-models.md` | SQLiteスキーマ・型定義 |
@@ -98,6 +99,19 @@ gh api repos/manaca0923/vtuber-overlay-suite/pulls/2/comments | jq -r '.[] | "[\
 - `- [x]` 完了
 
 タスク完了時は必ずチェックを更新すること。
+
+## 開発環境
+
+### 現在の環境
+- **主要開発環境**: macOS (Apple Silicon M3)
+- **対象プラットフォーム**: Windows, macOS（将来的にLinuxも検討）
+
+### Windows対応方針
+- macOS環境で開発を行う
+- **Windows環境でのビルド可能性を常に担保**するため、GitHub ActionsのWindowsランナーでビルド＆成果物生成を自動実行（`.github/workflows/build-windows.yml`）
+- Windows環境での本格的な開発は必要になったタイミングで開始
+
+詳細は `docs/110_development-environment.md` を参照。
 
 ## アーキテクチャポイント
 

@@ -51,6 +51,48 @@
 | **chrono** | 0.4 | 日時処理 |
 | **thiserror** | 2.0 | エラー型定義 |
 | **log** | 0.4 | ロギング |
+| **sqlx** | 0.7 | SQLiteデータベースクライアント |
+| **uuid** | 1.0 | UUID生成 |
+| **dirs** | 5.0 | クロスプラットフォームディレクトリ取得 |
+
+### SQLx（データベース）
+
+プロジェクトではSQLxのオフラインモードを使用しています：
+
+- **`.sqlx/`ディレクトリ**: コンパイル時のクエリ検証用メタデータ（Gitにコミット済み）
+- **`.cargo/config.toml`**: `SQLX_OFFLINE=true` を設定済み
+- **DATABASE_URL**: ビルド時に不要（オフラインモード使用）
+
+#### 開発時の注意事項
+
+**通常のビルド**（推奨）:
+```bash
+cargo build
+```
+`.sqlx/`メタデータを使用してコンパイルされるため、データベース接続は不要です。
+
+**クエリ変更時の手順**:
+SQLクエリを変更した場合は、以下の手順でメタデータを更新してください：
+
+```bash
+# 1. 開発用データベースURLを設定（一時的）
+echo "DATABASE_URL=sqlite:./dev.db" > .env
+
+# 2. sqlx-cliのインストール（初回のみ）
+cargo install sqlx-cli --no-default-features --features sqlite
+
+# 3. データベースとマイグレーションの実行
+sqlx database create
+sqlx migrate run
+
+# 4. メタデータの再生成
+cargo sqlx prepare
+
+# 5. .envファイルを削除（.gitignoreに含まれているため不要）
+rm .env
+```
+
+**重要**: `.sqlx/`ディレクトリの変更は必ずGitにコミットしてください。
 
 ## セットアップ手順（macOS）
 

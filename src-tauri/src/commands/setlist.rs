@@ -431,7 +431,7 @@ pub async fn set_current_song(
     // トランザクション開始
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 前の曲のended_atを記録
+    // 1. 現在再生中の曲のended_atを記録
     sqlx::query!(
         "UPDATE setlist_songs
          SET ended_at = ?
@@ -443,7 +443,19 @@ pub async fn set_current_song(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 新しい曲のstarted_atを記録
+    // 2. 対象曲のタイムスタンプをクリア（再生済みの曲を再開できるように）
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET started_at = NULL, ended_at = NULL
+         WHERE setlist_id = ? AND position = ?",
+        setlist_id,
+        position
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. 対象曲を現在の曲として設定
     sqlx::query!(
         "UPDATE setlist_songs
          SET started_at = ?
@@ -515,7 +527,19 @@ pub async fn next_song(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. 次の曲のstarted_atを記録
+    // 2. 次の曲のタイムスタンプをクリア（再生済みの曲を再開できるように）
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET started_at = NULL, ended_at = NULL
+         WHERE setlist_id = ? AND position = ?",
+        setlist_id,
+        next_position
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. 次の曲を現在の曲として設定
     sqlx::query!(
         "UPDATE setlist_songs
          SET started_at = ?

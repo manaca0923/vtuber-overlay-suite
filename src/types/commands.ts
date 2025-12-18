@@ -41,3 +41,6 @@ export const nextSong = (setlistId: string) =>
 
 export const previousSong = (setlistId: string) =>
   invoke<void>('previous_song', { setlistId });
+
+export const reorderSetlistSongs = (setlistId: string, setlistSongIds: string[]) =>
+  invoke<void>('reorder_setlist_songs', { setlistId, setlistSongIds });

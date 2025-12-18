@@ -604,3 +604,36 @@ pub async fn previous_song(
         _ => Err("前の曲がありません".to_string()),
     }
 }
+
+/// セットリスト内の曲順を並び替え
+#[tauri::command]
+pub async fn reorder_setlist_songs(
+    setlist_id: String,
+    setlist_song_ids: Vec<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+
+    // トランザクション開始
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 各曲のpositionを新しいインデックスで更新
+    for (index, setlist_song_id) in setlist_song_ids.iter().enumerate() {
+        let new_position = index as i64;
+
+        sqlx::query!(
+            "UPDATE setlist_songs
+             SET position = ?
+             WHERE id = ? AND setlist_id = ?",
+            new_position, setlist_song_id, setlist_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // コミット
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}

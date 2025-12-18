@@ -57,34 +57,8 @@ pub async fn get_chat_messages(
                 }
             };
 
-            // snippet.message_typeをパースしてMessageTypeを設定
-            let message_type = match item.snippet.message_type.as_str() {
-                "textMessageEvent" => crate::youtube::types::MessageType::Text,
-                "superChatEvent" => {
-                    if let Some(details) = &item.snippet.super_chat_details {
-                        crate::youtube::types::MessageType::SuperChat {
-                            amount: details.amount_display_string.clone(),
-                            currency: details.currency.clone(),
-                        }
-                    } else {
-                        log::warn!("superChatEvent without superChatDetails for message {}", item.id);
-                        crate::youtube::types::MessageType::Text
-                    }
-                }
-                "superStickerEvent" => crate::youtube::types::MessageType::SuperSticker {
-                    sticker_id: String::new(), // TODO: スーパーステッカーの詳細実装
-                },
-                "newSponsorEvent" => crate::youtube::types::MessageType::Membership {
-                    level: String::new(), // TODO: メンバーシップレベル取得
-                },
-                "membershipGiftingEvent" => crate::youtube::types::MessageType::MembershipGift {
-                    count: 1, // TODO: ギフト数取得
-                },
-                _ => {
-                    log::debug!("Unknown message type: {}", item.snippet.message_type);
-                    crate::youtube::types::MessageType::Text
-                }
-            };
+            // snippet.message_typeをパースしてMessageTypeを設定（共通関数を使用）
+            let message_type = crate::youtube::types::parse_message_type(&item.snippet);
 
             Some(ChatMessage {
                 id: item.id,

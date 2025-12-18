@@ -105,3 +105,36 @@ pub struct LiveStreamingDetails {
     #[serde(rename = "activeLiveChatId")]
     pub active_live_chat_id: Option<String>,
 }
+
+/// YouTube APIのメッセージタイプを解析してMessageTypeに変換
+pub fn parse_message_type(snippet: &MessageSnippet) -> MessageType {
+    match snippet.message_type.as_str() {
+        "textMessageEvent" => MessageType::Text,
+        "superChatEvent" => {
+            if let Some(details) = &snippet.super_chat_details {
+                MessageType::SuperChat {
+                    amount: details.amount_display_string.clone(),
+                    currency: details.currency.clone(),
+                }
+            } else {
+                log::warn!(
+                    "superChatEvent without superChatDetails, falling back to Text"
+                );
+                MessageType::Text
+            }
+        }
+        "superStickerEvent" => MessageType::SuperSticker {
+            sticker_id: String::new(), // TODO: スーパーステッカーの詳細実装
+        },
+        "newSponsorEvent" => MessageType::Membership {
+            level: String::new(), // TODO: メンバーシップレベル取得
+        },
+        "membershipGiftingEvent" => MessageType::MembershipGift {
+            count: 1, // TODO: ギフト数取得
+        },
+        _ => {
+            log::debug!("Unknown message type: {}", snippet.message_type);
+            MessageType::Text
+        }
+    }
+}

@@ -199,6 +199,10 @@ impl ChatPoller {
                                         }
                                     };
 
+                                // snippet.message_typeをパースしてMessageTypeを設定（共通関数を使用）
+                                let message_type =
+                                    crate::youtube::types::parse_message_type(&item.snippet);
+
                                 Some(ChatMessage {
                                     id: item.id,
                                     message: item.snippet.display_message,
@@ -210,7 +214,7 @@ impl ChatPoller {
                                     is_moderator: item.author_details.is_chat_moderator,
                                     is_member: item.author_details.is_chat_sponsor,
                                     is_verified: item.author_details.is_verified,
-                                    message_type: crate::youtube::types::MessageType::Text,
+                                    message_type,
                                 })
                             })
                             .collect();

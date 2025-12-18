@@ -428,6 +428,20 @@ pub async fn set_current_song(
     let pool = &state.db;
     let now = Utc::now().to_rfc3339();
 
+    // 指定されたpositionが存在するか確認
+    let exists: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ? AND position = ?"
+    )
+    .bind(&setlist_id)
+    .bind(position)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if exists == 0 {
+        return Err(format!("指定された位置の曲が見つかりません（position: {}）", position));
+    }
+
     // トランザクション開始
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 

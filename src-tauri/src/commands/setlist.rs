@@ -4,6 +4,7 @@ use crate::db::models::{
 use crate::AppState;
 use chrono::Utc;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 /// 楽曲一覧を取得
@@ -427,10 +428,24 @@ pub async fn set_current_song(
     let pool = &state.db;
     let now = Utc::now().to_rfc3339();
 
+    // 指定されたpositionが存在するか確認
+    let exists: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ? AND position = ?"
+    )
+    .bind(&setlist_id)
+    .bind(position)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if exists == 0 {
+        return Err(format!("指定された位置の曲が見つかりません（position: {}）", position));
+    }
+
     // トランザクション開始
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 前の曲のended_atを記録
+    // 1. 現在再生中の曲のended_atを記録
     sqlx::query!(
         "UPDATE setlist_songs
          SET ended_at = ?
@@ -442,7 +457,19 @@ pub async fn set_current_song(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 新しい曲のstarted_atを記録
+    // 2. 対象曲のタイムスタンプをクリア（再生済みの曲を再開できるように）
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET started_at = NULL, ended_at = NULL
+         WHERE setlist_id = ? AND position = ?",
+        setlist_id,
+        position
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. 対象曲を現在の曲として設定
     sqlx::query!(
         "UPDATE setlist_songs
          SET started_at = ?
@@ -514,7 +541,19 @@ pub async fn next_song(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. 次の曲のstarted_atを記録
+    // 2. 次の曲のタイムスタンプをクリア（再生済みの曲を再開できるように）
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET started_at = NULL, ended_at = NULL
+         WHERE setlist_id = ? AND position = ?",
+        setlist_id,
+        next_position
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. 次の曲を現在の曲として設定
     sqlx::query!(
         "UPDATE setlist_songs
          SET started_at = ?
@@ -603,4 +642,112 @@ pub async fn previous_song(
         }
         _ => Err("前の曲がありません".to_string()),
     }
+}
+
+/// セットリスト内の曲順を並び替え
+#[tauri::command]
+pub async fn reorder_setlist_songs(
+    setlist_id: String,
+    setlist_song_ids: Vec<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+
+    // 入力バリデーション：空配列チェック
+    if setlist_song_ids.is_empty() {
+        return Err("曲IDリストが空です".to_string());
+    }
+
+    // 入力バリデーション：セットリストの実際の曲IDリストを取得
+    let actual_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM setlist_songs WHERE setlist_id = ? ORDER BY position"
+    )
+    .bind(&setlist_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // セットリスト存在確認
+    if actual_ids.is_empty() {
+        // セットリストが存在しないか、曲がないか判別
+        let setlist_exists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM setlists WHERE id = ?"
+        )
+        .bind(&setlist_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if setlist_exists == 0 {
+            return Err("セットリストが見つかりません".to_string());
+        }
+        return Err("セットリストに曲がありません".to_string());
+    }
+
+    // 曲数チェック
+    if actual_ids.len() != setlist_song_ids.len() {
+        return Err(format!(
+            "曲数が一致しません（期待: {}, 実際: {}）",
+            actual_ids.len(),
+            setlist_song_ids.len()
+        ));
+    }
+
+    // IDの所属確認：渡されたIDがすべてこのセットリストに属しているかチェック
+    let passed_set: HashSet<_> = setlist_song_ids.iter().collect();
+    let actual_set: HashSet<_> = actual_ids.iter().collect();
+
+    if passed_set != actual_set {
+        return Err("無効な曲IDが含まれています".to_string());
+    }
+
+    // トランザクション開始
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 2フェーズ更新でユニーク制約違反を回避
+    // Phase 1: 一時的なオフセット値に移動（既存のpositionと重複しないように）
+    let offset = 10000i64;
+    for (index, setlist_song_id) in setlist_song_ids.iter().enumerate() {
+        let temp_position = offset + index as i64;
+
+        sqlx::query!(
+            "UPDATE setlist_songs
+             SET position = ?
+             WHERE id = ? AND setlist_id = ?",
+            temp_position, setlist_song_id, setlist_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // Phase 2: 正しいpositionに設定
+    for (index, setlist_song_id) in setlist_song_ids.iter().enumerate() {
+        let new_position = index as i64;
+
+        sqlx::query!(
+            "UPDATE setlist_songs
+             SET position = ?
+             WHERE id = ? AND setlist_id = ?",
+            new_position, setlist_song_id, setlist_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // セットリストのupdated_atを更新
+    let now = Utc::now().to_rfc3339();
+    sqlx::query!(
+        "UPDATE setlists SET updated_at = ? WHERE id = ?",
+        now, setlist_id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // コミット
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
 }

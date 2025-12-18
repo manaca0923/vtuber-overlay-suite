@@ -1,8 +1,25 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getSetlistWithSongs, removeSongFromSetlist, getSongs, addSongToSetlist, setCurrentSong, nextSong, previousSong } from '../types/commands';
+import { getSetlistWithSongs, removeSongFromSetlist, getSongs, addSongToSetlist, setCurrentSong, nextSong, previousSong, reorderSetlistSongs } from '../types/commands';
 import type { SetlistWithSongs, SetlistSong } from '../types/setlist';
 import type { Song } from '../types/song';
 import { parseTags } from '../types/song';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface SetlistEditorProps {
   setlistId: string;
@@ -15,6 +32,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [showAddSong, setShowAddSong] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -87,6 +105,57 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // ドラッグ&ドロップ設定
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px動かしてからドラッグ開始（誤操作防止）
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id || !setlistData || isReordering) {
+      return;
+    }
+
+    const oldIndex = setlistData.songs.findIndex((song) => song.id === active.id);
+    const newIndex = setlistData.songs.findIndex((song) => song.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+
+    // 楽観的UI更新（positionフィールドも更新）
+    const newSongs = arrayMove(setlistData.songs, oldIndex, newIndex).map((song, index) => ({
+      ...song,
+      position: index,
+    }));
+    setSetlistData({
+      ...setlistData,
+      songs: newSongs,
+    });
+
+    // サーバーに送信
+    setError('');
+    setIsReordering(true);
+    try {
+      const newOrderIds = newSongs.map((song) => song.id);
+      await reorderSetlistSongs(setlistId, newOrderIds);
+      await loadData(); // 最新データを再取得
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await loadData(); // エラー時は元に戻す
+    } finally {
+      setIsReordering(false);
     }
   };
 
@@ -180,6 +249,12 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
         </div>
       )}
 
+      {isReordering && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-blue-600">曲順を保存中...</p>
+        </div>
+      )}
+
       {showAddSong && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="text-lg font-semibold text-gray-900 mb-3">楽曲を選択</h3>
@@ -223,17 +298,29 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
-            {setlistData.songs.map((setlistSong, index) => (
-              <SetlistSongItem
-                key={setlistSong.id}
-                setlistSong={setlistSong}
-                index={index}
-                onRemove={() => handleRemoveSong(setlistSong.id)}
-                onSetCurrent={() => handleSetCurrent(setlistSong.position)}
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={setlistData.songs.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="divide-y divide-gray-200">
+                {setlistData.songs.map((setlistSong, index) => (
+                  <SortableSetlistSongItem
+                    key={setlistSong.id}
+                    setlistSong={setlistSong}
+                    index={index}
+                    onRemove={() => handleRemoveSong(setlistSong.id)}
+                    onSetCurrent={() => handleSetCurrent(setlistSong.position)}
+                    isReordering={isReordering}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </div>
@@ -247,8 +334,49 @@ interface SetlistSongItemProps {
   onSetCurrent: () => void;
 }
 
-function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent }: SetlistSongItemProps) {
+interface SortableSetlistSongItemProps extends SetlistSongItemProps {
+  isReordering?: boolean;
+}
+
+function SortableSetlistSongItem(props: SortableSetlistSongItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: props.setlistSong.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  // attributesとlistenersを結合（保存中は無効化）
+  const dragHandleProps = props.isReordering
+    ? {}
+    : {
+        ...attributes,
+        ...listeners,
+      };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SetlistSongItem {...props} dragHandleProps={dragHandleProps} />
+    </div>
+  );
+}
+
+interface SetlistSongItemPropsWithDrag extends SetlistSongItemProps {
+  dragHandleProps?: Record<string, unknown>;
+  isReordering?: boolean;
+}
+
+function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandleProps, isReordering }: SetlistSongItemPropsWithDrag) {
   const { song, status } = setlistSong;
+
+  // parseTags を1回だけ呼び出してキャッシュ
+  const tags = parseTags(song);
 
   const statusColors = {
     pending: 'bg-gray-100 text-gray-600',
@@ -268,6 +396,35 @@ function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent }: Setlist
         status === 'current' ? 'bg-green-50' : 'hover:bg-gray-50'
       }`}
     >
+      {/* ドラッグハンドル */}
+      {dragHandleProps && (
+        <div
+          {...dragHandleProps}
+          className={`flex-shrink-0 ${
+            isReordering
+              ? 'cursor-not-allowed opacity-50'
+              : 'cursor-grab active:cursor-grabbing'
+          } text-gray-400 hover:text-gray-600`}
+          title={isReordering ? '保存中...' : 'ドラッグして並び替え'}
+          aria-label="曲順を並び替えるドラッグハンドル"
+          role="button"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 8h16M4 16h16"
+            />
+          </svg>
+        </div>
+      )}
       <div className="flex-shrink-0 w-8 text-center text-gray-500 font-medium">
         {index + 1}
       </div>
@@ -289,9 +446,9 @@ function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent }: Setlist
             </span>
           )}
         </div>
-        {parseTags(song).length > 0 && (
+        {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {parseTags(song).map((tag, i) => (
+            {tags.map((tag, i) => (
               <span
                 key={i}
                 className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600"

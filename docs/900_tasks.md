@@ -135,7 +135,7 @@
 
 ## T06: セットリストUI・データ管理
 **優先度**: P0 | **見積**: 6日 | **依存**: T01
-**ステータス**: 🔄 **Phase 1完了**（基盤実装済み、UI未実装）
+**ステータス**: 🔄 **Phase 1-2完了、Phase 3一部完了**
 
 ### チェックリスト
 
@@ -144,23 +144,40 @@
 - [x] 楽曲CRUD（Tauri Command）
 - [x] セットリストCRUD（Tauri Command）
 
-#### Phase 2-3: UI実装（未実装）
-- [ ] React: 楽曲一覧表示
-- [ ] React: セットリスト編集画面
-- [ ] ドラッグ&ドロップ曲順変更（@dnd-kit）
-- [ ] 曲切替時タイムスタンプ記録
-- [ ] YouTube概要欄用テキスト出力
+#### Phase 2: 基本UI実装（完了）
+- [x] TypeScript型定義（song.ts, setlist.ts, commands.ts）
+- [x] React: 楽曲一覧表示（SongList.tsx）
+- [x] React: 楽曲作成・編集フォーム（SongForm.tsx）
+- [x] React: セットリスト一覧表示（SetlistList.tsx）
+- [x] React: セットリスト編集画面（SetlistEditor.tsx）
+- [x] App.tsxにタブUI統合
+
+#### Phase 3: 高度な機能（一部完了）
+- [x] @dnd-kit導入
+- [x] 曲切替コマンド実装（set_current_song, next_song, previous_song）
+- [x] 曲切替UI実装（前へ/次へボタン、現在曲ハイライト）
+- [x] 曲切替時タイムスタンプ記録（started_at, ended_at）
+- [x] ドラッグ&ドロップ曲順変更（@dnd-kit）
+- [ ] WebSocket統合（セットリスト更新配信）
+- [ ] YouTube概要欄用タイムスタンプ出力UI
 
 ### テスト項目
-- [ ] 楽曲追加・編集・削除
-- [ ] 曲順ドラッグで変更
+- [x] 楽曲追加・編集・削除
+- [x] セットリスト追加・編集・削除
+- [x] 楽曲をセットリストに追加・削除
+- [x] 曲切替（次へ/前へ/指定位置）
+- [x] 曲順ドラッグで変更
 - [ ] タイムスタンプのコピー
 
-### 成果物（Phase 1）
+### 成果物（Phase 1-2完了、Phase 3一部完了）
 - `src-tauri/migrations/001_initial.sql` - データベーススキーマ
 - `src-tauri/src/db/mod.rs`, `src-tauri/src/db/models.rs` - データベースモジュール
-- `src-tauri/src/commands/setlist.rs` - 楽曲・セットリストCRUDコマンド（9個）
+- `src-tauri/src/commands/setlist.rs` - 楽曲・セットリストCRUDコマンド（12個）
 - `.sqlx/` - sqlxオフラインモードメタデータ
+- `src/types/song.ts`, `src/types/setlist.ts`, `src/types/commands.ts` - 型定義
+- `src/components/SongList.tsx`, `src/components/SongForm.tsx` - 楽曲管理UI
+- `src/components/SetlistList.tsx`, `src/components/SetlistEditor.tsx` - セットリスト管理UI
+- `src/App.tsx` - タブUI統合
 
 ---
 
@@ -296,7 +313,7 @@
 | T03 | ✅ 完了 | 2025-12-18 |
 | T04 | ✅ 完了 | 2025-12-18 |
 | T05 | ✅ 完了 | 2025-12-18（T04で実装済み、追加修正完了） |
-| T06 | 🔄 Phase 1完了 | 2025-12-18（基盤実装、UI未実装） |
+| T06 | 🔄 Phase 1-2完了、Phase 3一部完了 | 2025-12-19（基本UI完了、残りPhase 3実装中） |
 | T07 | ⬜ 未着手 | - |
 | T08 | ⬜ 未着手 | - |
 | T09 | ⬜ 未着手 | - |

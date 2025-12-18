@@ -64,7 +64,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
         artist: artist.trim() || undefined,
         category: category.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
-        durationSeconds: durationSecondsTotal > 0 ? durationSecondsTotal : undefined,
+        duration_seconds: durationSecondsTotal > 0 ? durationSecondsTotal : undefined,
       };
 
       if (song) {

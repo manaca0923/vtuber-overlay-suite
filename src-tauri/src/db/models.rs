@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 /// 楽曲モデル
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Song {
     pub id: String,
     pub title: String,
@@ -42,6 +43,7 @@ impl Song {
 
 /// セットリストモデル
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Setlist {
     pub id: String,
     pub name: String,
@@ -65,6 +67,7 @@ impl Setlist {
 
 /// セットリスト楽曲（中間テーブル）
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct SetlistSong {
     pub id: String,
     pub setlist_id: String,
@@ -99,7 +102,6 @@ pub enum SongStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetlistWithSongs {
-    #[serde(flatten)]
     pub setlist: Setlist,
     pub songs: Vec<SetlistSongWithDetails>,
     pub current_index: i64,
@@ -107,6 +109,7 @@ pub struct SetlistWithSongs {
 
 /// 設定モデル
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Setting {
     pub key: String,
     pub value: String,
@@ -115,6 +118,7 @@ pub struct Setting {
 
 /// コメントログモデル
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct CommentLog {
     pub id: String,
     pub youtube_id: String,

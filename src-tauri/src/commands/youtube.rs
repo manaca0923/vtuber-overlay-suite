@@ -57,11 +57,9 @@ pub async fn get_chat_messages(
                 }
             };
 
-            // TODO(T04): SuperChat/メンバーシップ対応
-            // snippet.message_type:
-            //   "textMessageEvent" -> MessageType::Text
-            //   "superChatEvent" -> MessageType::SuperChat
-            //   "membershipGiftingEvent" -> MessageType::MembershipGift
+            // snippet.message_typeをパースしてMessageTypeを設定（共通関数を使用）
+            let message_type = crate::youtube::types::parse_message_type(&item.snippet);
+
             Some(ChatMessage {
                 id: item.id,
                 message: item.snippet.display_message,
@@ -73,7 +71,7 @@ pub async fn get_chat_messages(
                 is_moderator: item.author_details.is_chat_moderator,
                 is_member: item.author_details.is_chat_sponsor,
                 is_verified: item.author_details.is_verified,
-                message_type: crate::youtube::types::MessageType::Text, // 簡易実装
+                message_type,
             })
         })
         .collect();
@@ -233,4 +231,49 @@ pub async fn is_polling_running(state: tauri::State<'_, AppState>) -> Result<boo
     } else {
         Ok(false)
     }
+}
+
+/// セットリスト更新をブロードキャスト（ダミー実装 - T06で実データに置き換え）
+#[tauri::command]
+pub async fn broadcast_setlist_update(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    use crate::server::types::{SetlistUpdatePayload, SongItem, SongStatus, WsMessage};
+
+    // ダミーデータ
+    let dummy_setlist = SetlistUpdatePayload {
+        current_index: 1,
+        songs: vec![
+            SongItem {
+                id: "1".to_string(),
+                title: "前の曲".to_string(),
+                artist: "アーティスト".to_string(),
+                status: SongStatus::Done,
+            },
+            SongItem {
+                id: "2".to_string(),
+                title: "現在の曲".to_string(),
+                artist: "アーティスト".to_string(),
+                status: SongStatus::Current,
+            },
+            SongItem {
+                id: "3".to_string(),
+                title: "次の曲".to_string(),
+                artist: "アーティスト".to_string(),
+                status: SongStatus::Pending,
+            },
+        ],
+    };
+
+    // WebSocketでブロードキャスト
+    let server_state = Arc::clone(&state.server);
+    tokio::spawn(async move {
+        let state_lock = server_state.read().await;
+        state_lock
+            .broadcast(WsMessage::SetlistUpdate {
+                payload: dummy_setlist,
+            })
+            .await;
+    });
+
+    log::info!("Broadcasted dummy setlist update");
+    Ok(())
 }

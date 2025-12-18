@@ -210,7 +210,8 @@
       div.className = 'comment';
       div.dataset.id = comment.id;
 
-      if (comment.messageType === 'superchat') {
+      // messageTypeはタグ付きenum: { type: "text" | "superChat" | ... }
+      if (comment.messageType?.type === 'superChat') {
         div.classList.add('superchat');
       }
 
@@ -251,6 +252,14 @@
         header.appendChild(badge);
       }
 
+      // スーパーチャットの金額表示
+      if (comment.messageType?.type === 'superChat' && comment.messageType.amount) {
+        const amount = document.createElement('span');
+        amount.className = 'amount';
+        amount.textContent = comment.messageType.amount;
+        header.appendChild(amount);
+      }
+
       const message = document.createElement('div');
       message.className = 'message';
       message.textContent = comment.message;
@@ -265,7 +274,9 @@
     }
 
     function removeComment(id) {
-      const el = document.querySelector(`[data-id="${id}"]`);
+      // CSS.escapeでIDをエスケープしてCSSセレクタインジェクションを防止
+      const escapedId = CSS.escape(id);
+      const el = document.querySelector(`[data-id="${escapedId}"]`);
       if (el) {
         el.classList.add('removing');
         setTimeout(() => el.remove(), 300);

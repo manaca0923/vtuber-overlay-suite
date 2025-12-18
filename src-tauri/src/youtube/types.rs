@@ -6,15 +6,15 @@ use serde::{Deserialize, Serialize};
 pub struct ChatMessage {
     pub id: String,
     pub message: String,
-    pub author_name: String,
-    pub author_channel_id: String,
-    pub author_image_url: String,
-    pub published_at: DateTime<Utc>,
-    pub is_owner: bool,
-    pub is_moderator: bool,
-    pub is_member: bool, // isChatSponsor
-    pub is_verified: bool,
-    pub message_type: MessageType,
+    pub author_name: String,       // → authorName (serde rename)
+    pub author_channel_id: String, // → authorChannelId
+    pub author_image_url: String,  // → authorImageUrl
+    pub published_at: DateTime<Utc>, // → publishedAt
+    pub is_owner: bool,            // → isOwner
+    pub is_moderator: bool,        // → isModerator
+    pub is_member: bool,           // → isMember (isChatSponsor)
+    pub is_verified: bool,         // → isVerified
+    pub message_type: MessageType, // → messageType
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

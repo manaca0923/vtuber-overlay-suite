@@ -26,6 +26,9 @@ pub enum YouTubeError {
     #[error("Rate limit exceeded - retrying with backoff")]
     RateLimitExceeded,
 
+    #[error("Poller is already running")]
+    PollerAlreadyRunning,
+
     #[error("Failed to parse response: {0}")]
     ParseError(String),
 }

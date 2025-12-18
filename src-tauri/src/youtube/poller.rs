@@ -80,14 +80,15 @@ impl ChatPoller {
     {
         // 既に実行中の場合はエラー
         if self.is_running.load(Ordering::SeqCst) {
-            return Err(YouTubeError::ParseError(
-                "Poller is already running".to_string(),
-            ));
+            return Err(YouTubeError::PollerAlreadyRunning);
         }
 
         // 状態を初期化
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock().map_err(|e| {
+                log::error!("Failed to acquire state lock: {}", e);
+                YouTubeError::ParseError("Failed to initialize poller state".to_string())
+            })?;
             *state = Some(PollingState::new(live_chat_id.clone()));
         }
 
@@ -123,7 +124,10 @@ impl ChatPoller {
 
     /// 現在の状態を取得
     pub fn get_state(&self) -> Option<PollingState> {
-        self.state.lock().unwrap().clone()
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.clone())
     }
 
     /// ポーリングループ（内部実装）

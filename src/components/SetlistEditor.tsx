@@ -368,6 +368,9 @@ interface SetlistSongItemPropsWithDrag extends SetlistSongItemProps {
 function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandleProps, isReordering }: SetlistSongItemPropsWithDrag) {
   const { song, status } = setlistSong;
 
+  // parseTags を1回だけ呼び出してキャッシュ
+  const tags = parseTags(song);
+
   const statusColors = {
     pending: 'bg-gray-100 text-gray-600',
     current: 'bg-green-100 text-green-800 font-semibold',
@@ -434,9 +437,9 @@ function SetlistSongItem({ setlistSong, index, onRemove, onSetCurrent, dragHandl
             </span>
           )}
         </div>
-        {parseTags(song).length > 0 && (
+        {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {parseTags(song).map((tag, i) => (
+            {tags.map((tag, i) => (
               <span
                 key={i}
                 className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600"

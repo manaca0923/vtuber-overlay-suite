@@ -4,6 +4,7 @@ use crate::db::models::{
 use crate::AppState;
 use chrono::Utc;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 /// 楽曲一覧を取得
@@ -638,7 +639,6 @@ pub async fn reorder_setlist_songs(
     }
 
     // IDの所属確認：渡されたIDがすべてこのセットリストに属しているかチェック
-    use std::collections::HashSet;
     let passed_set: HashSet<_> = setlist_song_ids.iter().collect();
     let actual_set: HashSet<_> = actual_ids.iter().collect();
 

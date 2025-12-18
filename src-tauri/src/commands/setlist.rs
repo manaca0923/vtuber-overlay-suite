@@ -666,7 +666,24 @@ pub async fn reorder_setlist_songs(
     // トランザクション開始
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 各曲のpositionを新しいインデックスで更新
+    // 2フェーズ更新でユニーク制約違反を回避
+    // Phase 1: 一時的なオフセット値に移動（既存のpositionと重複しないように）
+    let offset = 10000i64;
+    for (index, setlist_song_id) in setlist_song_ids.iter().enumerate() {
+        let temp_position = offset + index as i64;
+
+        sqlx::query!(
+            "UPDATE setlist_songs
+             SET position = ?
+             WHERE id = ? AND setlist_id = ?",
+            temp_position, setlist_song_id, setlist_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // Phase 2: 正しいpositionに設定
     for (index, setlist_song_id) in setlist_song_ids.iter().enumerate() {
         let new_position = index as i64;
 

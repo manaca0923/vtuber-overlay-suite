@@ -416,3 +416,150 @@ pub async fn get_setlist_with_songs(
         current_index,
     })
 }
+
+/// 指定位置の曲を現在の曲として設定
+#[tauri::command]
+pub async fn set_current_song(
+    setlist_id: String,
+    position: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+    let now = Utc::now().to_rfc3339();
+
+    // トランザクション開始
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 前の曲のended_atを記録
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET ended_at = ?
+         WHERE setlist_id = ? AND started_at IS NOT NULL AND ended_at IS NULL",
+        now,
+        setlist_id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 新しい曲のstarted_atを記録
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET started_at = ?
+         WHERE setlist_id = ? AND position = ? AND started_at IS NULL",
+        now,
+        setlist_id,
+        position
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // トランザクションコミット
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// 次の曲へ進む
+#[tauri::command]
+pub async fn next_song(
+    setlist_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+
+    // 現在の曲の位置を取得
+    let current_position: Option<i64> = sqlx::query_scalar(
+        "SELECT position FROM setlist_songs
+         WHERE setlist_id = ? AND started_at IS NOT NULL AND ended_at IS NULL"
+    )
+    .bind(&setlist_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    match current_position {
+        Some(pos) => {
+            // 次の曲が存在するか確認
+            let next_exists: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ? AND position = ?"
+            )
+            .bind(&setlist_id)
+            .bind(pos + 1)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if next_exists > 0 {
+                set_current_song(setlist_id, pos + 1, state).await
+            } else {
+                Err("次の曲がありません".to_string())
+            }
+        }
+        None => {
+            // 現在の曲がない場合は最初の曲から開始
+            set_current_song(setlist_id, 0, state).await
+        }
+    }
+}
+
+/// 前の曲へ戻る
+#[tauri::command]
+pub async fn previous_song(
+    setlist_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+
+    // 現在の曲の位置を取得
+    let current_position: Option<i64> = sqlx::query_scalar(
+        "SELECT position FROM setlist_songs
+         WHERE setlist_id = ? AND started_at IS NOT NULL AND ended_at IS NULL"
+    )
+    .bind(&setlist_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    match current_position {
+        Some(pos) if pos > 0 => {
+            // 前の曲が存在する場合
+            // 前の曲と現在の曲のタイムスタンプをクリア
+            let now = Utc::now().to_rfc3339();
+            let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+            // 現在の曲のended_atを記録
+            sqlx::query!(
+                "UPDATE setlist_songs
+                 SET ended_at = ?
+                 WHERE setlist_id = ? AND position = ?",
+                now,
+                setlist_id,
+                pos
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            // 前の曲のタイムスタンプをクリア
+            let prev_pos = pos - 1;
+            sqlx::query!(
+                "UPDATE setlist_songs
+                 SET started_at = NULL, ended_at = NULL
+                 WHERE setlist_id = ? AND position = ?",
+                setlist_id,
+                prev_pos
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            tx.commit().await.map_err(|e| e.to_string())?;
+
+            // 前の曲を現在として設定
+            set_current_song(setlist_id, pos - 1, state).await
+        }
+        _ => Err("前の曲がありません".to_string()),
+    }
+}

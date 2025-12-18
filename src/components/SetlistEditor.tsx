@@ -110,7 +110,11 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
 
   // ドラッグ&ドロップ設定
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px動かしてからドラッグ開始（誤操作防止）
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })

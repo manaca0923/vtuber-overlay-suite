@@ -629,6 +629,23 @@ pub async fn reorder_setlist_songs(
     .await
     .map_err(|e| e.to_string())?;
 
+    // セットリスト存在確認
+    if actual_ids.is_empty() {
+        // セットリストが存在しないか、曲がないか判別
+        let setlist_exists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM setlists WHERE id = ?"
+        )
+        .bind(&setlist_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if setlist_exists == 0 {
+            return Err("セットリストが見つかりません".to_string());
+        }
+        return Err("セットリストに曲がありません".to_string());
+    }
+
     // 曲数チェック
     if actual_ids.len() != setlist_song_ids.len() {
         return Err(format!(

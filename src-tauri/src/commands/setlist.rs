@@ -525,26 +525,24 @@ pub async fn previous_song(
     match current_position {
         Some(pos) if pos > 0 => {
             // 前の曲が存在する場合
-            // 前の曲と現在の曲のタイムスタンプをクリア
+            // 単一トランザクション内で全ての更新を実行
             let now = Utc::now().to_rfc3339();
+            let prev_pos = pos - 1;
             let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-            // 現在の曲のended_atを記録
+            // 1. 現在再生中の曲のended_atを記録
             sqlx::query!(
                 "UPDATE setlist_songs
                  SET ended_at = ?
-                 WHERE setlist_id = ? AND position = ?",
+                 WHERE setlist_id = ? AND started_at IS NOT NULL AND ended_at IS NULL",
                 now,
-                setlist_id,
-                pos
+                setlist_id
             )
             .execute(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
 
-            // 前の曲のタイムスタンプをクリア
-            // （次のset_current_songでstarted_atが再設定される）
-            let prev_pos = pos - 1;
+            // 2. 前の曲のタイムスタンプをクリア
             sqlx::query!(
                 "UPDATE setlist_songs
                  SET started_at = NULL, ended_at = NULL
@@ -556,10 +554,23 @@ pub async fn previous_song(
             .await
             .map_err(|e| e.to_string())?;
 
+            // 3. 前の曲を現在の曲として設定（started_atを記録）
+            sqlx::query!(
+                "UPDATE setlist_songs
+                 SET started_at = ?
+                 WHERE setlist_id = ? AND position = ? AND started_at IS NULL",
+                now,
+                setlist_id,
+                prev_pos
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            // 全ての更新を単一トランザクションでコミット
             tx.commit().await.map_err(|e| e.to_string())?;
 
-            // 前の曲を現在として設定（started_atを記録）
-            set_current_song(setlist_id, pos - 1, state).await
+            Ok(())
         }
         _ => Err("前の曲がありません".to_string()),
     }

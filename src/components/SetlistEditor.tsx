@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getSetlistWithSongs, removeSongFromSetlist, getSongs, addSongToSetlist, setCurrentSong, nextSong, previousSong } from '../types/commands';
 import type { SetlistWithSongs, SetlistSong } from '../types/setlist';
 import type { Song } from '../types/song';
@@ -16,28 +16,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   const [error, setError] = useState<string>('');
   const [showAddSong, setShowAddSong] = useState(false);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [setlist, songs] = await Promise.all([
-          getSetlistWithSongs(setlistId),
-          getSongs(),
-        ]);
-        setSetlistData(setlist);
-        setAllSongs(songs);
-        setError('');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [setlistId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [setlist, songs] = await Promise.all([
@@ -52,11 +31,16 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setlistId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleRemoveSong = async (setlistSongId: string) => {
     if (!confirm('この曲をセットリストから削除しますか？')) return;
 
+    setError('');
     try {
       await removeSongFromSetlist(setlistId, setlistSongId);
       await loadData();
@@ -66,6 +50,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   };
 
   const handleAddSong = async (songId: string) => {
+    setError('');
     try {
       await addSongToSetlist(setlistId, songId);
       await loadData();
@@ -76,6 +61,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   };
 
   const handleSetCurrent = async (position: number) => {
+    setError('');
     try {
       await setCurrentSong(setlistId, position);
       await loadData();
@@ -85,6 +71,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   };
 
   const handleNext = async () => {
+    setError('');
     try {
       await nextSong(setlistId);
       await loadData();
@@ -94,6 +81,7 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
   };
 
   const handlePrevious = async () => {
+    setError('');
     try {
       await previousSong(setlistId);
       await loadData();

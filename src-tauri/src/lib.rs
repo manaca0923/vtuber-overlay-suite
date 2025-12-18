@@ -23,10 +23,9 @@ pub fn run() {
 
   // データベース初期化（setup前に実行）
   let db_pool = {
-    let app_dir = std::env::var("APPDATA")
-      .or_else(|_| std::env::var("HOME").map(|h| format!("{}/Library/Application Support", h)))
-      .unwrap_or_else(|_| ".".to_string());
-    let app_dir_path = std::path::PathBuf::from(app_dir).join("com.vtuber-overlay-suite.app");
+    let app_dir = dirs::data_dir()
+      .expect("Failed to get data directory");
+    let app_dir_path = app_dir.join("com.vtuber-overlay-suite.app");
     std::fs::create_dir_all(&app_dir_path).expect("Failed to create app data directory");
     let db_path = app_dir_path.join("app.db");
     tauri::async_runtime::block_on(async {

@@ -115,10 +115,14 @@ pub async fn update_song(
 #[tauri::command]
 pub async fn delete_song(id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let pool = &state.db;
-    sqlx::query!("DELETE FROM songs WHERE id = ?", id)
+    let result = sqlx::query!("DELETE FROM songs WHERE id = ?", id)
         .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    if result.rows_affected() == 0 {
+        return Err(format!("Song not found: {}", id));
+    }
 
     Ok(())
 }
@@ -210,13 +214,16 @@ pub async fn remove_song_from_setlist(
 ) -> Result<(), String> {
     let pool = &state.db;
 
+    // トランザクション開始
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
     // 削除する曲のpositionを取得
     let deleted_position: i64 = sqlx::query_scalar(
         "SELECT position FROM setlist_songs WHERE id = ? AND setlist_id = ?"
     )
     .bind(&setlist_song_id)
     .bind(&setlist_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|e| format!("SetlistSong not found: {}", e))?;
 
@@ -225,7 +232,7 @@ pub async fn remove_song_from_setlist(
         "DELETE FROM setlist_songs WHERE id = ?",
         setlist_song_id
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -237,9 +244,12 @@ pub async fn remove_song_from_setlist(
         setlist_id,
         deleted_position
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
+
+    // トランザクションをコミット
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(())
 }

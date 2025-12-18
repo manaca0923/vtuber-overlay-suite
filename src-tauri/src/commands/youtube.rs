@@ -121,7 +121,10 @@ pub async fn start_polling(
 
     // 既存のポーラーを停止して新しいポーラーを設定
     {
-        let mut poller_lock = state.poller.lock().unwrap();
+        let mut poller_lock = state
+            .poller
+            .lock()
+            .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
         if let Some(existing_poller) = poller_lock.as_ref() {
             if existing_poller.is_running() {
                 existing_poller.stop();
@@ -153,7 +156,10 @@ pub async fn start_polling(
 pub async fn stop_polling(state: tauri::State<'_, PollerState>) -> Result<(), String> {
     log::info!("Stopping polling");
 
-    let poller_lock = state.poller.lock().unwrap();
+    let poller_lock = state
+        .poller
+        .lock()
+        .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
     if let Some(poller) = poller_lock.as_ref() {
         poller.stop();
         log::info!("Poller stopped");
@@ -167,7 +173,10 @@ pub async fn stop_polling(state: tauri::State<'_, PollerState>) -> Result<(), St
 pub async fn get_polling_state(
     state: tauri::State<'_, PollerState>,
 ) -> Result<Option<PollingState>, String> {
-    let poller_lock = state.poller.lock().unwrap();
+    let poller_lock = state
+        .poller
+        .lock()
+        .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
     if let Some(poller) = poller_lock.as_ref() {
         Ok(poller.get_state())
     } else {
@@ -178,7 +187,10 @@ pub async fn get_polling_state(
 /// クォータ情報を取得
 #[tauri::command]
 pub async fn get_quota_info(state: tauri::State<'_, PollerState>) -> Result<(u64, i64), String> {
-    let poller_lock = state.poller.lock().unwrap();
+    let poller_lock = state
+        .poller
+        .lock()
+        .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
     if let Some(poller) = poller_lock.as_ref() {
         if let Some(polling_state) = poller.get_state() {
             Ok((
@@ -196,7 +208,10 @@ pub async fn get_quota_info(state: tauri::State<'_, PollerState>) -> Result<(u64
 /// ポーリングが実行中かどうかを確認
 #[tauri::command]
 pub async fn is_polling_running(state: tauri::State<'_, PollerState>) -> Result<bool, String> {
-    let poller_lock = state.poller.lock().unwrap();
+    let poller_lock = state
+        .poller
+        .lock()
+        .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
     if let Some(poller) = poller_lock.as_ref() {
         Ok(poller.is_running())
     } else {

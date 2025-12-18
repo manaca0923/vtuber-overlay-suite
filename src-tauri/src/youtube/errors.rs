@@ -14,6 +14,12 @@ pub enum YouTubeError {
     #[error("Live chat not found or disabled")]
     LiveChatNotFound,
 
+    #[error("Live chat is disabled for this video")]
+    LiveChatDisabled,
+
+    #[error("Invalid page token - resetting pagination")]
+    InvalidPageToken,
+
     #[error("Quota exceeded - please try again tomorrow")]
     QuotaExceeded,
 

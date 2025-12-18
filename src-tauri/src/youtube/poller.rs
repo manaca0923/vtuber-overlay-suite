@@ -139,7 +139,17 @@ impl ChatPoller {
         while is_running.load(Ordering::SeqCst) {
             // 現在の状態を取得
             let (live_chat_id, page_token, polling_interval) = {
-                let state_lock = state.lock().unwrap();
+                let state_lock = match state.lock() {
+                    Ok(lock) => lock,
+                    Err(e) => {
+                        log::error!("Failed to acquire state lock: {}", e);
+                        event_callback(PollingEvent::Error {
+                            message: "内部エラーが発生しました".to_string(),
+                            retrying: false,
+                        });
+                        break;
+                    }
+                };
                 if let Some(s) = state_lock.as_ref() {
                     (
                         s.live_chat_id.clone(),
@@ -159,7 +169,9 @@ impl ChatPoller {
             {
                 Ok(response) => {
                     // 成功: バックオフをリセット
-                    backoff.lock().unwrap().reset();
+                    if let Ok(mut backoff_lock) = backoff.lock() {
+                        backoff_lock.reset();
+                    }
 
                     // メッセージがあればイベント送信
                     if !response.items.is_empty() {
@@ -206,21 +218,24 @@ impl ChatPoller {
 
                     // 状態を更新
                     {
-                        let mut state_lock = state.lock().unwrap();
-                        if let Some(s) = state_lock.as_mut() {
-                            s.update(
-                                response.next_page_token,
-                                response.polling_interval_millis,
-                            );
+                        if let Ok(mut state_lock) = state.lock() {
+                            if let Some(s) = state_lock.as_mut() {
+                                s.update(
+                                    response.next_page_token,
+                                    response.polling_interval_millis,
+                                );
 
-                            // 定期的に状態更新イベントを送信（10回に1回）
-                            if s.poll_count % 10 == 0 {
-                                event_callback(PollingEvent::StateUpdate {
-                                    quota_used: s.quota_used,
-                                    remaining_quota: s.estimated_remaining_quota(),
-                                    poll_count: s.poll_count,
-                                });
+                                // 定期的に状態更新イベントを送信（10回に1回）
+                                if s.poll_count % 10 == 0 {
+                                    event_callback(PollingEvent::StateUpdate {
+                                        quota_used: s.quota_used,
+                                        remaining_quota: s.estimated_remaining_quota(),
+                                        poll_count: s.poll_count,
+                                    });
+                                }
                             }
+                        } else {
+                            log::error!("Failed to acquire state lock for update");
                         }
                     }
 
@@ -240,18 +255,71 @@ impl ChatPoller {
                             is_running.store(false, Ordering::SeqCst);
                             break;
                         }
-                        YouTubeError::LiveChatNotFound => {
-                            // 配信終了: 停止
+                        YouTubeError::LiveChatNotFound | YouTubeError::LiveChatDisabled => {
+                            // 配信終了またはチャット無効: 停止
+                            let reason = match e {
+                                YouTubeError::LiveChatDisabled => {
+                                    "ライブチャットが無効になっています".to_string()
+                                }
+                                _ => "配信が終了しました".to_string(),
+                            };
+
                             event_callback(PollingEvent::StreamEnded);
-                            event_callback(PollingEvent::Stopped {
-                                reason: "配信が終了しました".to_string(),
-                            });
+                            event_callback(PollingEvent::Stopped { reason });
                             is_running.store(false, Ordering::SeqCst);
                             break;
                         }
+                        YouTubeError::InvalidPageToken => {
+                            // ページトークン無効: リセットして続行
+                            log::warn!("Invalid page token detected, resetting pagination");
+
+                            {
+                                if let Ok(mut state_lock) = state.lock() {
+                                    if let Some(s) = state_lock.as_mut() {
+                                        s.reset_page_token();
+                                    }
+                                } else {
+                                    log::error!("Failed to acquire state lock for page token reset");
+                                }
+                            }
+
+                            event_callback(PollingEvent::Error {
+                                message: "ページトークンが無効です。最初から取得し直します".to_string(),
+                                retrying: true,
+                            });
+
+                            // 短い待機後に続行
+                            sleep(std::time::Duration::from_secs(2)).await;
+                        }
                         YouTubeError::RateLimitExceeded => {
                             // レート制限: 指数バックオフで再試行
-                            let delay = backoff.lock().unwrap().next_delay();
+                            let (delay, should_continue) = {
+                                match backoff.lock() {
+                                    Ok(mut backoff_lock) => {
+                                        let delay = backoff_lock.next_delay();
+                                        let should_continue = backoff_lock.should_retry();
+                                        (delay, should_continue)
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to acquire backoff lock: {}", e);
+                                        (std::time::Duration::from_secs(5), false)
+                                    }
+                                }
+                            };
+
+                            if !should_continue {
+                                log::error!("Max retry attempts exceeded for rate limit");
+                                event_callback(PollingEvent::Error {
+                                    message: "最大リトライ回数に達しました".to_string(),
+                                    retrying: false,
+                                });
+                                event_callback(PollingEvent::Stopped {
+                                    reason: "レート制限のリトライ上限に達しました".to_string(),
+                                });
+                                is_running.store(false, Ordering::SeqCst);
+                                break;
+                            }
+
                             log::warn!("Rate limit exceeded, retrying in {:?}", delay);
 
                             event_callback(PollingEvent::Error {
@@ -278,7 +346,36 @@ impl ChatPoller {
                         }
                         _ => {
                             // その他のエラー: 指数バックオフで再試行
-                            let delay = backoff.lock().unwrap().next_delay();
+                            let (delay, should_continue) = {
+                                match backoff.lock() {
+                                    Ok(mut backoff_lock) => {
+                                        let delay = backoff_lock.next_delay();
+                                        let should_continue = backoff_lock.should_retry();
+                                        (delay, should_continue)
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to acquire backoff lock: {}", e);
+                                        (std::time::Duration::from_secs(5), false)
+                                    }
+                                }
+                            };
+
+                            if !should_continue {
+                                log::error!("Max retry attempts exceeded for error: {}", e);
+                                event_callback(PollingEvent::Error {
+                                    message: format!(
+                                        "最大リトライ回数に達しました。エラー: {}",
+                                        e
+                                    ),
+                                    retrying: false,
+                                });
+                                event_callback(PollingEvent::Stopped {
+                                    reason: "リトライ上限に達しました".to_string(),
+                                });
+                                is_running.store(false, Ordering::SeqCst);
+                                break;
+                            }
+
                             log::warn!("Polling error, retrying in {:?}: {}", delay, e);
 
                             event_callback(PollingEvent::Error {
@@ -288,9 +385,12 @@ impl ChatPoller {
 
                             // ページトークンをリセット
                             {
-                                let mut state_lock = state.lock().unwrap();
-                                if let Some(s) = state_lock.as_mut() {
-                                    s.reset_page_token();
+                                if let Ok(mut state_lock) = state.lock() {
+                                    if let Some(s) = state_lock.as_mut() {
+                                        s.reset_page_token();
+                                    }
+                                } else {
+                                    log::error!("Failed to acquire state lock for page token reset");
                                 }
                             }
 

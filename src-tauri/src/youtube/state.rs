@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// ポーリング状態を管理する構造体
@@ -69,87 +68,8 @@ impl PollingState {
     }
 }
 
-/// スレッドセーフなポーリング状態マネージャー
-pub struct PollingStateManager {
-    state: Arc<Mutex<Option<PollingState>>>,
-}
-
-impl PollingStateManager {
-    /// 新しいマネージャーを作成
-    pub fn new() -> Self {
-        Self {
-            state: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    /// ポーリング状態を初期化
-    pub fn initialize(&self, live_chat_id: String) {
-        let mut state = self.state.lock().unwrap();
-        *state = Some(PollingState::new(live_chat_id));
-    }
-
-    /// 状態を更新
-    pub fn update(&self, next_page_token: Option<String>, polling_interval_millis: u64) {
-        let mut state = self.state.lock().unwrap();
-        if let Some(state) = state.as_mut() {
-            state.update(next_page_token, polling_interval_millis);
-        }
-    }
-
-    /// 現在の状態を取得
-    pub fn get_state(&self) -> Option<PollingState> {
-        self.state.lock().unwrap().clone()
-    }
-
-    /// ページトークンを取得
-    pub fn get_page_token(&self) -> Option<String> {
-        self.state
-            .lock()
-            .unwrap()
-            .as_ref()
-            .and_then(|s| s.next_page_token.clone())
-    }
-
-    /// ポーリング間隔を取得
-    pub fn get_polling_interval(&self) -> Duration {
-        self.state
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|s| s.polling_interval())
-            .unwrap_or(Duration::from_secs(5))
-    }
-
-    /// ページトークンをリセット
-    pub fn reset_page_token(&self) {
-        let mut state = self.state.lock().unwrap();
-        if let Some(state) = state.as_mut() {
-            state.reset_page_token();
-        }
-    }
-
-    /// 状態をクリア
-    pub fn clear(&self) {
-        let mut state = self.state.lock().unwrap();
-        *state = None;
-    }
-
-    /// クォータ情報を取得
-    pub fn get_quota_info(&self) -> (u64, i64) {
-        let state = self.state.lock().unwrap();
-        if let Some(state) = state.as_ref() {
-            (state.quota_used, state.estimated_remaining_quota())
-        } else {
-            (0, 10_000)
-        }
-    }
-}
-
-impl Default for PollingStateManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// PollingStateManagerは削除しました
+// ChatPoller内で直接Arc<Mutex<Option<PollingState>>>を使用しています
 
 #[cfg(test)]
 mod tests {
@@ -198,20 +118,4 @@ mod tests {
         assert_eq!(state.estimated_remaining_polls(), 1900); // 9500 / 5
     }
 
-    #[test]
-    fn test_state_manager() {
-        let manager = PollingStateManager::new();
-
-        // 初期化
-        manager.initialize("test-chat-id".to_string());
-        assert!(manager.get_state().is_some());
-
-        // 更新
-        manager.update(Some("token456".to_string()), 7000);
-        assert_eq!(manager.get_page_token(), Some("token456".to_string()));
-
-        // クリア
-        manager.clear();
-        assert!(manager.get_state().is_none());
-    }
 }

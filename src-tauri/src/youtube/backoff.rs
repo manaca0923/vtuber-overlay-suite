@@ -1,10 +1,15 @@
 use std::time::Duration;
 
+/// 指数バックオフの最大試行回数
+/// これを超えるとリトライを停止する
+const MAX_ATTEMPTS: u32 = 10;
+
 /// 指数バックオフを管理する構造体
 /// エラー時のリトライ間隔を指数的に増加させる（1s→2s→4s→8s→16s...）
 pub struct ExponentialBackoff {
     base_delay: Duration,
     max_delay: Duration,
+    max_attempts: u32,
     current_attempt: u32,
 }
 
@@ -14,19 +19,22 @@ impl ExponentialBackoff {
     /// デフォルト設定:
     /// - base_delay: 1秒
     /// - max_delay: 60秒
+    /// - max_attempts: 10回
     pub fn new() -> Self {
         Self {
             base_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(60),
+            max_attempts: MAX_ATTEMPTS,
             current_attempt: 0,
         }
     }
 
     /// カスタム設定でExponentialBackoffインスタンスを作成
-    pub fn with_config(base_delay: Duration, max_delay: Duration) -> Self {
+    pub fn with_config(base_delay: Duration, max_delay: Duration, max_attempts: u32) -> Self {
         Self {
             base_delay,
             max_delay,
+            max_attempts,
             current_attempt: 0,
         }
     }
@@ -49,6 +57,16 @@ impl ExponentialBackoff {
     /// 現在の試行回数を取得
     pub fn attempt_count(&self) -> u32 {
         self.current_attempt
+    }
+
+    /// 最大試行回数に達したかどうかを確認
+    pub fn has_exceeded_max_attempts(&self) -> bool {
+        self.current_attempt >= self.max_attempts
+    }
+
+    /// リトライを続行すべきかどうかを確認
+    pub fn should_retry(&self) -> bool {
+        !self.has_exceeded_max_attempts()
     }
 }
 
@@ -89,11 +107,49 @@ mod tests {
 
     #[test]
     fn test_custom_config() {
-        let mut backoff =
-            ExponentialBackoff::with_config(Duration::from_millis(500), Duration::from_secs(10));
+        let mut backoff = ExponentialBackoff::with_config(
+            Duration::from_millis(500),
+            Duration::from_secs(10),
+            5,
+        );
 
         assert_eq!(backoff.next_delay(), Duration::from_millis(500));
         assert_eq!(backoff.next_delay(), Duration::from_secs(1));
         assert_eq!(backoff.next_delay(), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_max_attempts() {
+        let mut backoff = ExponentialBackoff::with_config(
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+            3,
+        );
+
+        assert!(backoff.should_retry());
+        backoff.next_delay();
+        assert!(backoff.should_retry());
+        backoff.next_delay();
+        assert!(backoff.should_retry());
+        backoff.next_delay();
+        assert!(!backoff.should_retry());
+        assert!(backoff.has_exceeded_max_attempts());
+    }
+
+    #[test]
+    fn test_reset_attempts() {
+        let mut backoff = ExponentialBackoff::with_config(
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+            3,
+        );
+
+        backoff.next_delay();
+        backoff.next_delay();
+        backoff.next_delay();
+        assert!(!backoff.should_retry());
+
+        backoff.reset();
+        assert!(backoff.should_retry());
     }
 }

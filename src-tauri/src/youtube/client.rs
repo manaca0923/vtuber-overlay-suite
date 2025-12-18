@@ -180,6 +180,9 @@ impl YouTubeClient {
                 if error_text.contains("keyInvalid") {
                     log::error!("API key is invalid");
                     Err(YouTubeError::InvalidApiKey)
+                } else if error_text.contains("invalidPageToken") {
+                    log::warn!("Invalid page token - will reset pagination");
+                    Err(YouTubeError::InvalidPageToken)
                 } else {
                     log::error!("Bad request - invalid parameters");
                     Err(YouTubeError::ParseError(format!(
@@ -202,6 +205,9 @@ impl YouTubeClient {
                 } else if error_text.contains("rateLimitExceeded") {
                     log::warn!("Rate limit exceeded - will retry with backoff");
                     Err(YouTubeError::RateLimitExceeded)
+                } else if error_text.contains("liveChatDisabled") {
+                    log::warn!("Live chat is disabled for this video");
+                    Err(YouTubeError::LiveChatDisabled)
                 } else {
                     log::error!("API key invalid or insufficient permissions");
                     Err(YouTubeError::InvalidApiKey)

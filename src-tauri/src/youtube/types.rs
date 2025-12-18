@@ -58,6 +58,17 @@ pub struct MessageSnippet {
     pub published_at: String,
     #[serde(rename = "displayMessage")]
     pub display_message: String,
+    #[serde(rename = "superChatDetails")]
+    pub super_chat_details: Option<SuperChatDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SuperChatDetails {
+    #[serde(rename = "amountDisplayString")]
+    pub amount_display_string: String,
+    pub currency: String,
+    #[serde(rename = "amountMicros")]
+    pub amount_micros: u64,
 }
 
 #[derive(Debug, Deserialize)]

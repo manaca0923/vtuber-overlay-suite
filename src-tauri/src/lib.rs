@@ -60,6 +60,7 @@ pub fn run() {
       commands::youtube::get_polling_state,
       commands::youtube::get_quota_info,
       commands::youtube::is_polling_running,
+      commands::youtube::broadcast_setlist_update,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

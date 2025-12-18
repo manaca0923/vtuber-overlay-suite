@@ -210,7 +210,8 @@
       div.className = 'comment';
       div.dataset.id = comment.id;
 
-      if (comment.messageType === 'superchat') {
+      // messageTypeはタグ付きenum: { type: "text" | "superChat" | ... }
+      if (comment.messageType?.type === 'superChat') {
         div.classList.add('superchat');
       }
 
@@ -249,6 +250,14 @@
         badge.className = 'badge badge-member';
         badge.textContent = 'Member';
         header.appendChild(badge);
+      }
+
+      // スーパーチャットの金額表示
+      if (comment.messageType?.type === 'superChat' && comment.messageType.amount) {
+        const amount = document.createElement('span');
+        amount.className = 'amount';
+        amount.textContent = comment.messageType.amount;
+        header.appendChild(amount);
       }
 
       const message = document.createElement('div');

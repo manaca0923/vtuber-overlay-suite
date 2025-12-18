@@ -479,29 +479,58 @@ pub async fn next_song(
     .await
     .map_err(|e| e.to_string())?;
 
-    match current_position {
-        Some(pos) => {
-            // 次の曲が存在するか確認
-            let next_exists: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ? AND position = ?"
-            )
-            .bind(&setlist_id)
-            .bind(pos + 1)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    let next_position = match current_position {
+        Some(pos) => pos + 1,
+        None => 0, // 現在の曲がない場合は最初の曲から開始
+    };
 
-            if next_exists > 0 {
-                set_current_song(setlist_id, pos + 1, state).await
-            } else {
-                Err("次の曲がありません".to_string())
-            }
-        }
-        None => {
-            // 現在の曲がない場合は最初の曲から開始
-            set_current_song(setlist_id, 0, state).await
-        }
+    // 単一トランザクション内で全ての更新を実行
+    let now = Utc::now().to_rfc3339();
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 次の曲が存在するか確認
+    let next_exists: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM setlist_songs WHERE setlist_id = ? AND position = ?"
+    )
+    .bind(&setlist_id)
+    .bind(next_position)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if next_exists == 0 {
+        return Err("次の曲がありません".to_string());
     }
+
+    // 1. 現在再生中の曲のended_atを記録
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET ended_at = ?
+         WHERE setlist_id = ? AND started_at IS NOT NULL AND ended_at IS NULL",
+        now,
+        setlist_id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2. 次の曲のstarted_atを記録
+    sqlx::query!(
+        "UPDATE setlist_songs
+         SET started_at = ?
+         WHERE setlist_id = ? AND position = ? AND started_at IS NULL",
+        now,
+        setlist_id,
+        next_position
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 全ての更新を単一トランザクションでコミット
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// 前の曲へ戻る

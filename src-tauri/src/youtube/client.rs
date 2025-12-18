@@ -4,6 +4,7 @@ use super::{errors::YouTubeError, types::*};
 
 const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
 
+#[derive(Clone)]
 pub struct YouTubeClient {
     client: Client,
     api_key: String,

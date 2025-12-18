@@ -1,4 +1,14 @@
-use crate::youtube::{client::YouTubeClient, types::ChatMessage};
+use crate::youtube::{
+    client::YouTubeClient, poller::ChatPoller, poller::PollingEvent, state::PollingState,
+    types::ChatMessage,
+};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter};
+
+/// グローバルなポーラー管理用の状態
+pub struct PollerState {
+    pub poller: Arc<Mutex<Option<ChatPoller>>>,
+}
 
 #[tauri::command]
 pub async fn validate_api_key(api_key: String) -> Result<bool, String> {
@@ -94,4 +104,102 @@ pub async fn get_chat_messages(
         response.next_page_token,
         response.polling_interval_millis,
     ))
+}
+
+/// ポーリングを開始
+#[tauri::command]
+pub async fn start_polling(
+    api_key: String,
+    live_chat_id: String,
+    app: AppHandle,
+    state: tauri::State<'_, PollerState>,
+) -> Result<(), String> {
+    log::info!("Starting polling for live chat ID: {}", live_chat_id);
+
+    // 新しいポーラーを作成（ロックの外で）
+    let poller = ChatPoller::new(api_key);
+
+    // 既存のポーラーを停止して新しいポーラーを設定
+    {
+        let mut poller_lock = state.poller.lock().unwrap();
+        if let Some(existing_poller) = poller_lock.as_ref() {
+            if existing_poller.is_running() {
+                existing_poller.stop();
+                log::info!("Stopped existing poller");
+            }
+        }
+        *poller_lock = Some(poller.clone());
+    } // ここでロックを解放
+
+    // イベントコールバックを設定
+    let app_clone = app.clone();
+    let event_callback = move |event: PollingEvent| {
+        if let Err(e) = app_clone.emit("polling-event", &event) {
+            log::error!("Failed to emit polling event: {}", e);
+        }
+    };
+
+    // ポーリングを開始（ロックの外で）
+    poller
+        .start(live_chat_id, event_callback)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// ポーリングを停止
+#[tauri::command]
+pub async fn stop_polling(state: tauri::State<'_, PollerState>) -> Result<(), String> {
+    log::info!("Stopping polling");
+
+    let poller_lock = state.poller.lock().unwrap();
+    if let Some(poller) = poller_lock.as_ref() {
+        poller.stop();
+        log::info!("Poller stopped");
+    }
+
+    Ok(())
+}
+
+/// ポーリング状態を取得
+#[tauri::command]
+pub async fn get_polling_state(
+    state: tauri::State<'_, PollerState>,
+) -> Result<Option<PollingState>, String> {
+    let poller_lock = state.poller.lock().unwrap();
+    if let Some(poller) = poller_lock.as_ref() {
+        Ok(poller.get_state())
+    } else {
+        Ok(None)
+    }
+}
+
+/// クォータ情報を取得
+#[tauri::command]
+pub async fn get_quota_info(state: tauri::State<'_, PollerState>) -> Result<(u64, i64), String> {
+    let poller_lock = state.poller.lock().unwrap();
+    if let Some(poller) = poller_lock.as_ref() {
+        if let Some(polling_state) = poller.get_state() {
+            Ok((
+                polling_state.quota_used,
+                polling_state.estimated_remaining_quota(),
+            ))
+        } else {
+            Ok((0, 10_000))
+        }
+    } else {
+        Ok((0, 10_000))
+    }
+}
+
+/// ポーリングが実行中かどうかを確認
+#[tauri::command]
+pub async fn is_polling_running(state: tauri::State<'_, PollerState>) -> Result<bool, String> {
+    let poller_lock = state.poller.lock().unwrap();
+    if let Some(poller) = poller_lock.as_ref() {
+        Ok(poller.is_running())
+    } else {
+        Ok(false)
+    }
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO setlists (id, name, description, created_at, updated_at)\n         VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "23f53a343e8f4206ade9792f31f2e685c25d2b77f85d62c0f7b64c97a65a68d2"
+}

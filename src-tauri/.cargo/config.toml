@@ -1,0 +1,5 @@
+# SQLx configuration
+# Enable offline mode to allow compilation without a live database connection
+# The .sqlx/ directory contains pre-generated query metadata for compile-time verification
+[env]
+SQLX_OFFLINE = "true"

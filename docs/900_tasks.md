@@ -52,19 +52,25 @@
 **優先度**: P0 | **見積**: 3日 | **依存**: T02
 
 ### チェックリスト
-- [ ] `pollingIntervalMillis` 順守ロジック
-- [ ] `nextPageToken` の永続化・復元
-- [ ] 指数バックオフ実装
-- [ ] rateLimitExceeded 対応
-- [ ] quotaExceeded 対応（ユーザー通知）
-- [ ] liveChatNotFound 対応（配信終了）
-- [ ] 自動再接続ロジック
-- [ ] クォータ残量の推定表示
+- [x] `pollingIntervalMillis` 順守ロジック
+- [x] `nextPageToken` の永続化・復元
+- [x] 指数バックオフ実装
+- [x] rateLimitExceeded 対応
+- [x] quotaExceeded 対応（ユーザー通知）
+- [x] liveChatNotFound 対応（配信終了）
+- [x] 自動再接続ロジック
+- [x] クォータ残量の推定表示
+
+### 成果物
+- `src-tauri/src/youtube/backoff.rs` - 指数バックオフロジック
+- `src-tauri/src/youtube/state.rs` - ポーリング状態管理
+- `src-tauri/src/youtube/poller.rs` - ポーリングマネージャー
+- `src-tauri/src/commands/youtube.rs` - ポーリング制御コマンド追加
 
 ### テスト項目
-- [ ] 2時間連続取得で停止しない
-- [ ] ネットワーク切断→自動復帰
-- [ ] レート制限時のバックオフ動作
+- [ ] 2時間連続取得で停止しない（手動テスト必要）
+- [ ] ネットワーク切断→自動復帰（手動テスト必要）
+- [ ] レート制限時のバックオフ動作（手動テスト必要）
 
 ---
 
@@ -258,7 +264,7 @@
 |--------|------------|--------|
 | T01 | ✅ 完了 | 2025-12-17 |
 | T02 | ✅ 完了 | 2025-12-18 |
-| T03 | ⬜ 未着手 | - |
+| T03 | ✅ 完了 | 2025-12-18 |
 | T04 | ⬜ 未着手 | - |
 | T05 | ⬜ 未着手 | - |
 | T06 | ⬜ 未着手 | - |

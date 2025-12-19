@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { SetlistWithSongs } from '../types/setlist';
 
 interface TimestampExporterProps {
@@ -7,11 +7,13 @@ interface TimestampExporterProps {
 
 export function TimestampExporter({ setlist }: TimestampExporterProps) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   /**
    * 配信開始時刻を取得（最初に開始された曲の開始時刻）
+   * useMemoでキャッシュして重複計算を防ぐ
    */
-  const getStreamStartTime = (): Date | null => {
+  const streamStart = useMemo((): Date | null => {
     const startedSongs = setlist.songs
       .filter(s => s.startedAt)
       .sort((a, b) => {
@@ -30,22 +32,19 @@ export function TimestampExporter({ setlist }: TimestampExporterProps) {
     }
 
     return new Date(firstSong.startedAt);
-  };
+  }, [setlist.songs]);
 
   /**
    * ISO時刻文字列から配信開始からの経過時間を計算
    * @param isoString - ISO 8601形式の時刻文字列
+   * @param streamStartTime - 配信開始時刻
    * @returns "3:45" または "1:23:45" 形式の文字列
    */
-  const formatTime = (isoString: string): string => {
-    const streamStart = getStreamStartTime();
-    if (!streamStart) {
-      return '0:00';
-    }
-
+  const formatTime = (isoString: string, streamStartTime: Date): string => {
     const eventTime = new Date(isoString);
-    const elapsedMs = eventTime.getTime() - streamStart.getTime();
-    const elapsedSeconds = Math.floor(elapsedMs / 1000);
+    const elapsedMs = eventTime.getTime() - streamStartTime.getTime();
+    // 負の経過時間を防ぐ（時刻のずれやデータ異常時の防御）
+    const elapsedSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
 
     const hours = Math.floor(elapsedSeconds / 3600);
     const minutes = Math.floor((elapsedSeconds % 3600) / 60);
@@ -60,11 +59,21 @@ export function TimestampExporter({ setlist }: TimestampExporterProps) {
 
   /**
    * YouTube概要欄用タイムスタンプテキストを生成
+   * 実際に再生された時刻順でソート（startedAt順）
    */
-  const generateTimestamps = (): string => {
+  const timestamps = useMemo((): string => {
+    if (!streamStart) {
+      return '（まだ曲が再生されていません）';
+    }
+
     const startedSongs = setlist.songs
       .filter(s => s.startedAt)
-      .sort((a, b) => a.position - b.position);
+      .sort((a, b) => {
+        // 実際に再生された時刻順でソート
+        const timeA = new Date(a.startedAt!).getTime();
+        const timeB = new Date(b.startedAt!).getTime();
+        return timeA - timeB;
+      });
 
     if (startedSongs.length === 0) {
       return '（まだ曲が再生されていません）';
@@ -72,29 +81,28 @@ export function TimestampExporter({ setlist }: TimestampExporterProps) {
 
     return startedSongs
       .map(song => {
-        const time = formatTime(song.startedAt!);
+        const time = formatTime(song.startedAt!, streamStart);
         const artist = song.song.artist ? ` / ${song.song.artist}` : '';
         return `${time} ${song.song.title}${artist}`;
       })
       .join('\n');
-  };
+  }, [setlist.songs, streamStart]);
 
   /**
    * クリップボードにコピー
    */
   const handleCopy = async () => {
-    const text = generateTimestamps();
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(timestamps);
       setCopied(true);
+      setCopyError(false);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
     }
   };
-
-  const timestamps = generateTimestamps();
-  const streamStart = getStreamStartTime();
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -104,14 +112,16 @@ export function TimestampExporter({ setlist }: TimestampExporterProps) {
           onClick={handleCopy}
           disabled={!streamStart}
           className={`px-4 py-2 rounded-lg transition-colors ${
-            copied
+            copyError
+              ? 'bg-red-600 text-white'
+              : copied
               ? 'bg-green-600 text-white'
               : streamStart
               ? 'bg-blue-600 text-white hover:bg-blue-700'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          {copied ? 'コピーしました！' : 'コピー'}
+          {copyError ? 'コピー失敗' : copied ? 'コピーしました！' : 'コピー'}
         </button>
       </div>
 

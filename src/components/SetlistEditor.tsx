@@ -3,6 +3,7 @@ import { getSetlistWithSongs, removeSongFromSetlist, getSongs, addSongToSetlist,
 import type { SetlistWithSongs, SetlistSong } from '../types/setlist';
 import type { Song } from '../types/song';
 import { parseTags } from '../types/song';
+import { TimestampExporter } from './TimestampExporter';
 import {
   DndContext,
   closestCenter,
@@ -323,6 +324,11 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
           </DndContext>
         )}
       </div>
+
+      {/* タイムスタンプ出力 */}
+      {setlistData && setlistData.songs.length > 0 && (
+        <TimestampExporter setlist={setlistData} />
+      )}
     </div>
   );
 }

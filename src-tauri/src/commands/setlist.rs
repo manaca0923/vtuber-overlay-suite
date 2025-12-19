@@ -760,6 +760,9 @@ pub async fn reorder_setlist_songs(
     // コミット
     tx.commit().await.map_err(|e| e.to_string())?;
 
+    // WebSocketでセットリスト更新をブロードキャスト
+    broadcast_setlist_update_internal(setlist_id, &state).await?;
+
     Ok(())
 }
 
@@ -797,11 +800,13 @@ async fn broadcast_setlist_update_internal(
 
     // WebSocketでブロードキャスト
     let server_state = Arc::clone(&state.server);
+    let setlist_id_for_log = setlist_id.clone();
     tokio::spawn(async move {
         let state_lock = server_state.read().await;
         state_lock
             .broadcast(WsMessage::SetlistUpdate { payload })
             .await;
+        log::debug!("Broadcasted setlist update for setlist: {}", setlist_id_for_log);
     });
 
     Ok(())

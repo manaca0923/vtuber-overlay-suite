@@ -281,6 +281,9 @@ pub async fn add_song_to_setlist(
     .await
     .map_err(|e| e.to_string())?;
 
+    // WebSocketでセットリスト更新をブロードキャスト
+    broadcast_setlist_update_internal(setlist_id, &state).await?;
+
     Ok(())
 }
 
@@ -329,6 +332,9 @@ pub async fn remove_song_from_setlist(
 
     // トランザクションをコミット
     tx.commit().await.map_err(|e| e.to_string())?;
+
+    // WebSocketでセットリスト更新をブロードキャスト
+    broadcast_setlist_update_internal(setlist_id, &state).await?;
 
     Ok(())
 }
@@ -767,6 +773,12 @@ pub async fn reorder_setlist_songs(
 }
 
 /// セットリスト更新をWebSocketでブロードキャスト（内部関数）
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - 呼び出し元はブロードキャスト完了を待たずに即座に`Ok(())`を返す
+/// - ブロードキャスト失敗はログ出力のみで、呼び出し元のコマンド成功には影響しない
+/// - これにより、WebSocket接続がない場合でもコマンド自体は正常に完了する
 async fn broadcast_setlist_update_internal(
     setlist_id: String,
     state: &tauri::State<'_, AppState>,
@@ -798,7 +810,7 @@ async fn broadcast_setlist_update_internal(
             .collect(),
     };
 
-    // WebSocketでブロードキャスト
+    // WebSocketでブロードキャスト（Fire-and-forget）
     let server_state = Arc::clone(&state.server);
     let setlist_id_for_log = setlist_id.clone();
     tokio::spawn(async move {

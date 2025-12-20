@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { ChatMessage } from '../types/chat';
+
+// YouTube API クォータ定数
+const DAILY_QUOTA_LIMIT = 10000; // 1日のクォータ上限
+const QUOTA_PER_REQUEST = 5; // 1リクエストあたりのコスト
+const SAVED_STATE_EXPIRY_HOURS = 6; // 保存状態の有効期限（時間）
 
 interface PollingState {
   next_page_token: string | null;
@@ -13,7 +19,7 @@ interface PollingState {
 type PollingEventType =
   | { type: 'Started'; live_chat_id: string }
   | { type: 'Stopped' }
-  | { type: 'Messages'; messages: unknown[] }
+  | { type: 'Messages'; messages: ChatMessage[] }
   | { type: 'StateUpdate'; state: PollingState }
   | { type: 'Error'; message: string }
   | { type: 'RateLimited'; retry_after_ms: number }
@@ -25,6 +31,15 @@ interface SavedPollingState {
   next_page_token: string | null;
   quota_used: number;
   saved_at: string;
+}
+
+/**
+ * 保存された状態が有効期限内かどうかを判定
+ */
+function isSavedStateValid(savedAt: string): boolean {
+  const savedDate = new Date(savedAt);
+  const hoursOld = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);
+  return hoursOld < SAVED_STATE_EXPIRY_HOURS;
 }
 
 interface CommentControlPanelProps {
@@ -128,12 +143,17 @@ export function CommentControlPanel({
     checkPollingStatus();
   }, []);
 
-  // 保存されたポーリング状態を読み込む
+  // 保存されたポーリング状態を読み込む（有効期限チェック付き）
   useEffect(() => {
     async function loadSavedState() {
       try {
         const saved = await invoke<SavedPollingState | null>('load_polling_state');
-        if (isMountedRef.current && saved && saved.live_chat_id === liveChatId) {
+        if (
+          isMountedRef.current &&
+          saved &&
+          saved.live_chat_id === liveChatId &&
+          isSavedStateValid(saved.saved_at)
+        ) {
           setSavedState(saved);
         }
       } catch (err) {
@@ -211,11 +231,11 @@ export function CommentControlPanel({
 
   // クォータ情報を計算
   const estimatedRemainingQuota = pollingState
-    ? 10000 - pollingState.quota_used
-    : 10000;
-  const estimatedRemainingPolls = Math.floor(estimatedRemainingQuota / 5);
+    ? DAILY_QUOTA_LIMIT - pollingState.quota_used
+    : DAILY_QUOTA_LIMIT;
+  const estimatedRemainingPolls = Math.floor(estimatedRemainingQuota / QUOTA_PER_REQUEST);
   const quotaPercentage = pollingState
-    ? (pollingState.quota_used / 10000) * 100
+    ? (pollingState.quota_used / DAILY_QUOTA_LIMIT) * 100
     : 0;
 
   return (
@@ -311,7 +331,7 @@ export function CommentControlPanel({
               クォータ使用量
             </span>
             <span className="text-sm text-blue-600">
-              {pollingState.quota_used.toLocaleString()} / 10,000 units
+              {pollingState.quota_used.toLocaleString()} / {DAILY_QUOTA_LIMIT.toLocaleString()} units
             </span>
           </div>
           <div className="w-full bg-blue-200 rounded-full h-2">

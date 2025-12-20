@@ -292,13 +292,15 @@
         header.appendChild(badge);
       }
 
-      // メンバーシップのバッジ
+      // メンバーシップのバッジ（レベル表示対応）
       if (messageType === 'membership') {
         const badge = document.createElement('span');
         badge.className = 'badge';
         badge.style.background = '#10b981';
         badge.style.color = '#fff';
-        badge.textContent = 'New Member';
+        // levelフィールドがあれば表示、なければデフォルト
+        const level = comment.messageType.level || 'New Member';
+        badge.textContent = level;
         header.appendChild(badge);
       }
 

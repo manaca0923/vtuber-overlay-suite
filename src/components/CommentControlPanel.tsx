@@ -70,6 +70,14 @@ export function CommentControlPanel({
   const [lastEvent, setLastEvent] = useState<string>('');
   const isMountedRef = useRef(true);
 
+  // コンポーネントのマウント状態を管理
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // ポーリング状態を監視
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
@@ -130,7 +138,6 @@ export function CommentControlPanel({
     setupListener();
 
     return () => {
-      isMountedRef.current = false;
       if (unlisten) {
         unlisten();
       }

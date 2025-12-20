@@ -1,29 +1,73 @@
-use crate::keyring;
+use crate::AppState;
+use sqlx::Row;
 
-/// APIキーをセキュアストレージに保存
+/// APIキーをDBに保存（開発用：本番ではkeyringを使用すべき）
 #[tauri::command]
-pub async fn save_api_key(api_key: String) -> Result<(), String> {
-    keyring::save_api_key(&api_key).map_err(|e| e.to_string())
+pub async fn save_api_key(api_key: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let pool = &state.db;
+    let now = chrono::Utc::now().to_rfc3339();
+    
+    sqlx::query(
+        r#"
+        INSERT INTO settings (key, value, updated_at)
+        VALUES ('api_key', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        "#
+    )
+    .bind(&api_key)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+    
+    log::info!("API key saved to database");
+    Ok(())
 }
 
-/// APIキーをセキュアストレージから取得
+/// APIキーをDBから取得
 #[tauri::command]
-pub async fn get_api_key() -> Result<Option<String>, String> {
-    match keyring::get_api_key() {
-        Ok(key) => Ok(Some(key)),
-        Err(keyring::KeyringError::NotFound) => Ok(None),
-        Err(e) => Err(e.to_string()),
+pub async fn get_api_key(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
+    let pool = &state.db;
+    
+    let result = sqlx::query("SELECT value FROM settings WHERE key = 'api_key'")
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?;
+    
+    if let Some(row) = result {
+        let value: String = row.get("value");
+        log::info!("API key retrieved from database");
+        Ok(Some(value))
+    } else {
+        Ok(None)
     }
 }
 
-/// APIキーをセキュアストレージから削除
+/// APIキーをDBから削除
 #[tauri::command]
-pub async fn delete_api_key() -> Result<(), String> {
-    keyring::delete_api_key().map_err(|e| e.to_string())
+pub async fn delete_api_key(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let pool = &state.db;
+    
+    sqlx::query("DELETE FROM settings WHERE key = 'api_key'")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?;
+    
+    log::info!("API key deleted from database");
+    Ok(())
 }
 
 /// APIキーが保存されているかチェック
 #[tauri::command]
-pub async fn has_api_key() -> Result<bool, String> {
-    keyring::has_api_key().map_err(|e| e.to_string())
+pub async fn has_api_key(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    let pool = &state.db;
+    
+    let result = sqlx::query("SELECT value FROM settings WHERE key = 'api_key'")
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("DB error: {}", e))?;
+    
+    let has_key = result.is_some();
+    log::info!("has_api_key check: {}", has_key);
+    Ok(has_key)
 }

@@ -103,7 +103,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
               placeholder="曲名を入力"
               required
             />
@@ -117,7 +117,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
               type="text"
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
               placeholder="アーティスト名を入力"
             />
           </div>
@@ -130,7 +130,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
               placeholder="カテゴリを入力（例: オリジナル、カバー）"
             />
           </div>
@@ -144,13 +144,13 @@ export function SongForm({ song, onClose }: SongFormProps) {
                 type="text"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     handleAddTag();
                   }
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="タグを入力してEnter"
               />
               <button
@@ -189,7 +189,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
                 type="number"
                 value={durationMinutes}
                 onChange={(e) => setDurationMinutes(e.target.value)}
-                className="w-20 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-20 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
                 placeholder="0"
                 min="0"
               />
@@ -198,7 +198,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
                 type="number"
                 value={durationSeconds}
                 onChange={(e) => setDurationSeconds(e.target.value)}
-                className="w-20 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-20 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
                 placeholder="0"
                 min="0"
                 max="59"

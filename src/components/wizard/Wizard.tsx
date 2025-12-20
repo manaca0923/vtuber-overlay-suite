@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import WizardNavigation from './WizardNavigation';
 import WizardStep1 from './WizardStep1';
@@ -80,9 +80,18 @@ export default function Wizard({ onComplete }: WizardProps) {
     onComplete();
   };
 
-  const updateWizardData = (updates: Partial<WizardData>) => {
-    setWizardData({ ...wizardData, ...updates });
-  };
+  const updateWizardData = useCallback((updates: Partial<WizardData>) => {
+    setWizardData((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  // Step2用のコールバックをメモ化
+  const handleVideoIdChange = useCallback((videoId: string) => {
+    updateWizardData({ videoId });
+  }, [updateWizardData]);
+
+  const handleLiveChatIdChange = useCallback((liveChatId: string | null) => {
+    updateWizardData({ liveChatId });
+  }, [updateWizardData]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -162,12 +171,8 @@ export default function Wizard({ onComplete }: WizardProps) {
             <WizardStep2
               apiKey={wizardData.apiKey}
               videoId={wizardData.videoId}
-              onVideoIdChange={(videoId) =>
-                updateWizardData({ videoId })
-              }
-              onLiveChatIdChange={(liveChatId) =>
-                updateWizardData({ liveChatId })
-              }
+              onVideoIdChange={handleVideoIdChange}
+              onLiveChatIdChange={handleLiveChatIdChange}
             />
           )}
           {currentStep === 3 && (

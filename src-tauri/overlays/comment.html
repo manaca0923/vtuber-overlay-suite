@@ -49,6 +49,10 @@
       animation: comment-enter var(--animation-duration) var(--animation-easing);
     }
 
+    .comment.no-animation {
+      animation: none;
+    }
+
     .comment.removing {
       animation: comment-exit var(--animation-duration) var(--animation-easing);
     }
@@ -164,18 +168,35 @@
   <div id="comment-container"></div>
 
   <script>
-    const MAX_COMMENTS = 10;
+    const MAX_COMMENTS = 30; // 最大表示数を増加
     const WS_URL = 'ws://localhost:19801/ws';
     let ws = null;
     let reconnectDelay = 1000;
     const maxDelay = 30000;
+    let isInitialLoad = true; // 初期ロード中かどうか
+    let pendingComments = []; // 初期ロード用バッファ
+    let initialLoadTimeout = null;
 
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
+      isInitialLoad = true;
+      pendingComments = [];
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
+        
+        // 初期ロード完了を少し待ってからフラグを更新
+        if (initialLoadTimeout) clearTimeout(initialLoadTimeout);
+        initialLoadTimeout = setTimeout(() => {
+          if (pendingComments.length > 0) {
+            // 初期コメントを一括追加（アニメーションなし）
+            renderInitialComments(pendingComments);
+            pendingComments = [];
+          }
+          isInitialLoad = false;
+          console.log('Initial load completed');
+        }, 500); // 500ms待ってから初期ロード完了
       };
 
       ws.onmessage = (event) => {
@@ -202,17 +223,41 @@
 
     function handleMessage(data) {
       if (data.type === 'comment:add') {
-        addComment(data.payload);
+        if (isInitialLoad) {
+          // 初期ロード中はバッファに追加
+          pendingComments.push(data.payload);
+        } else {
+          // 通常モードは1件ずつアニメーション付きで追加
+          addComment(data.payload, true);
+        }
       } else if (data.type === 'comment:remove') {
         removeComment(data.payload.id);
       }
     }
 
-    function addComment(comment) {
+    // 初期コメントを一括レンダリング（アニメーションなし）
+    function renderInitialComments(comments) {
       const container = document.getElementById('comment-container');
-      const el = createCommentElement(comment);
+      // 既存コメントをクリア
+      container.innerHTML = '';
+      
+      // 最新のMAX_COMMENTS件だけを表示
+      const displayComments = comments.slice(-MAX_COMMENTS);
+      
+      displayComments.forEach(comment => {
+        const el = createCommentElement(comment, false);
+        container.appendChild(el);
+      });
+      
+      console.log(`Rendered ${displayComments.length} initial comments`);
+    }
+
+    function addComment(comment, animate = true) {
+      const container = document.getElementById('comment-container');
+      const el = createCommentElement(comment, animate);
       container.appendChild(el);
 
+      // 古いコメントを削除（アニメーション付き）
       while (container.children.length > MAX_COMMENTS) {
         const oldest = container.firstChild;
         oldest.classList.add('removing');
@@ -220,9 +265,9 @@
       }
     }
 
-    function createCommentElement(comment) {
+    function createCommentElement(comment, animate = true) {
       const div = document.createElement('div');
-      div.className = 'comment';
+      div.className = animate ? 'comment' : 'comment no-animation';
       div.dataset.id = comment.id;
 
       // messageTypeはタグ付きenum: { type: "text" | "superChat" | ... }

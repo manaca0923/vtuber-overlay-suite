@@ -143,6 +143,15 @@
       return params.get('setlist_id') || params.get('id');
     }
 
+    // エラーメッセージを表示
+    function showError(message) {
+      const currentSong = document.getElementById('current-song');
+      if (currentSong) {
+        currentSong.querySelector('.title').textContent = message;
+        currentSong.querySelector('.artist').textContent = '';
+      }
+    }
+
     // HTTP APIからセットリストを取得して表示
     async function fetchAndDisplaySetlist() {
       const setlistId = getSetlistIdFromUrl();
@@ -155,6 +164,7 @@
         const response = await fetch(`${API_BASE_URL}/setlist/${setlistId}`);
         if (!response.ok) {
           console.error('Failed to fetch setlist:', response.status);
+          showError('セットリストの取得に失敗しました');
           return;
         }
         const data = await response.json();
@@ -162,6 +172,7 @@
         updateSetlist(data);
       } catch (e) {
         console.error('Error fetching setlist:', e);
+        showError('接続エラーが発生しました');
       }
     }
 

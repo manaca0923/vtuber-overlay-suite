@@ -45,6 +45,7 @@ function isSavedStateValid(savedAt: string): boolean {
   const savedDate = new Date(savedAt);
   // 無効な日付の場合はfalseを返す
   if (isNaN(savedDate.getTime())) {
+    console.warn('Invalid saved_at date:', savedAt);
     return false;
   }
   const hoursOld = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);

@@ -39,23 +39,6 @@ pub async fn start_http_server_with_db(db: SqlitePool) -> Result<(), Box<dyn std
     Ok(())
 }
 
-/// HTTPサーバーを起動（後方互換性のため残す）
-pub async fn start_http_server() -> Result<(), Box<dyn std::error::Error>> {
-    let app = Router::new()
-        .route("/api/health", get(health_check))
-        .route("/overlay/comment", get(overlay_comment))
-        .route("/overlay/setlist", get(overlay_setlist))
-        .layer(CorsLayer::permissive());
-
-    let addr = "127.0.0.1:19800";
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    log::info!("HTTP server listening on http://{}", addr);
-
-    axum::serve(listener, app).await?;
-
-    Ok(())
-}
-
 /// ヘルスチェックエンドポイント
 async fn health_check() -> impl IntoResponse {
     Json(json!({

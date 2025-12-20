@@ -11,7 +11,7 @@ const PRESETS = {
     text: 'スパチャありがとうございます！',
     author: 'スパチャ太郎',
   },
-};
+} as const;
 
 export function TestModeButton() {
   const [showDialog, setShowDialog] = useState(false);

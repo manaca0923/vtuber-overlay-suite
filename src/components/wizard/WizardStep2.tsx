@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface WizardStep2Props {
@@ -29,7 +29,7 @@ export default function WizardStep2({
     return input;
   };
 
-  const handleGetChatId = async (vid: string) => {
+  const handleGetChatId = useCallback(async (vid: string) => {
     if (!vid.trim()) {
       setError('動画IDを入力してください');
       return;
@@ -53,7 +53,7 @@ export default function WizardStep2({
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiKey, onLiveChatIdChange]);
 
   // 動画ID変更時に自動でチャットID取得（debounce）
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function WizardStep2({
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [videoId]);
+  }, [videoId, handleGetChatId]);
 
   const handleInputChange = (value: string) => {
     const vid = extractVideoId(value);

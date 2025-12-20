@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import WizardNavigation from './WizardNavigation';
+import WizardStep1 from './WizardStep1';
+import WizardStep2 from './WizardStep2';
+import WizardStep3 from './WizardStep3';
+import WizardStep4 from './WizardStep4';
 
 interface WizardData {
   apiKey: string;
@@ -122,25 +126,37 @@ export default function Wizard({ onComplete }: WizardProps) {
         {/* ステップコンテンツ */}
         <div className="mb-6">
           {currentStep === 1 && (
-            <div className="text-center text-gray-600">
-              Step 1: APIキー入力（実装予定）
-            </div>
+            <WizardStep1
+              apiKey={wizardData.apiKey}
+              onApiKeyChange={(apiKey) =>
+                updateWizardData({ apiKey })
+              }
+              onValidationChange={(isValid) =>
+                updateWizardData({ apiKeyValid: isValid })
+              }
+            />
           )}
           {currentStep === 2 && (
-            <div className="text-center text-gray-600">
-              Step 2: 動画ID入力（実装予定）
-            </div>
+            <WizardStep2
+              apiKey={wizardData.apiKey}
+              videoId={wizardData.videoId}
+              onVideoIdChange={(videoId) =>
+                updateWizardData({ videoId })
+              }
+              onLiveChatIdChange={(liveChatId) =>
+                updateWizardData({ liveChatId })
+              }
+            />
           )}
           {currentStep === 3 && (
-            <div className="text-center text-gray-600">
-              Step 3: テンプレート選択（実装予定）
-            </div>
+            <WizardStep3
+              selectedTemplate={wizardData.selectedTemplate}
+              onTemplateChange={(selectedTemplate) =>
+                updateWizardData({ selectedTemplate })
+              }
+            />
           )}
-          {currentStep === 4 && (
-            <div className="text-center text-gray-600">
-              Step 4: OBS設定ガイド（実装予定）
-            </div>
-          )}
+          {currentStep === 4 && <WizardStep4 />}
         </div>
 
         {/* ナビゲーション */}

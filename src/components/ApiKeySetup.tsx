@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { CommentControlPanel } from './CommentControlPanel';
 import type { ChatMessage } from '../types/chat';
 
@@ -13,17 +13,19 @@ export function ApiKeySetup() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isApiKeyLoaded, setIsApiKeyLoaded] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const isMountedRef = useRef(true);
-
   // 保存済みAPIキーとウィザード設定を自動読み込み
   useEffect(() => {
+    let isMounted = true;
+    
     async function loadSavedSettings() {
       try {
         // APIキー読み込み
         const hasKey = await invoke<boolean>('has_api_key');
+        console.log('ApiKeySetup: has_api_key =', hasKey);
         if (hasKey) {
           const savedKey = await invoke<string>('get_api_key');
-          if (isMountedRef.current && savedKey) {
+          console.log('ApiKeySetup: got key =', savedKey ? 'yes' : 'no');
+          if (isMounted && savedKey) {
             setApiKey(savedKey);
             setIsApiKeyLoaded(true);
           }
@@ -35,11 +37,12 @@ export function ApiKeySetup() {
           live_chat_id: string;
           saved_at: string;
         } | null>('load_wizard_settings');
-        if (isMountedRef.current && wizardSettings) {
+        console.log('ApiKeySetup: wizard settings =', wizardSettings);
+        if (isMounted && wizardSettings) {
           setVideoId(wizardSettings.video_id);
           setLiveChatId(wizardSettings.live_chat_id);
           setSuccess('保存済み設定を読み込みました');
-        } else if (isMountedRef.current && hasKey) {
+        } else if (isMounted && hasKey) {
           setSuccess('保存済みAPIキーを読み込みました');
         }
       } catch (err) {
@@ -49,7 +52,7 @@ export function ApiKeySetup() {
     loadSavedSettings();
 
     return () => {
-      isMountedRef.current = false;
+      isMounted = false;
     };
   }, []);
 
@@ -63,50 +66,42 @@ export function ApiKeySetup() {
         apiKey: apiKey,
       });
 
-      if (!isMountedRef.current) return;
-
       if (isValid) {
         // APIキーを保存
         await invoke('save_api_key', { apiKey: apiKey });
-        if (isMountedRef.current) {
-          setIsApiKeyLoaded(true);
-          setSuccess('APIキーが有効です。保存しました。');
-        }
+        setIsApiKeyLoaded(true);
+        setSuccess('APIキーが有効です。保存しました。');
       } else {
         setError('APIキーが無効です');
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        // Tauri 2.0のエラーハンドリング
-        let errorMessage = 'APIキーの検証に失敗しました';
-        if (err instanceof Error) {
-          errorMessage = err.message;
-        } else if (typeof err === 'string') {
-          errorMessage = err;
-        } else if (err && typeof err === 'object' && 'message' in err) {
-          errorMessage = String((err as any).message);
-        } else {
-          errorMessage = String(err);
-        }
-        
-        // エラーメッセージをユーザーフレンドリーに変換
-        if (errorMessage.includes('API key is invalid') || errorMessage.includes('InvalidApiKey')) {
-          errorMessage = 'APIキーが無効です。正しいAPIキーを入力してください。';
-        } else if (errorMessage.includes('Quota exceeded')) {
-          errorMessage = 'APIクォータが超過しています。明日再度お試しください。';
-        } else if (errorMessage.includes('Rate limit exceeded')) {
-          errorMessage = 'レート制限に達しました。しばらく待ってから再度お試しください。';
-        } else if (errorMessage.includes('HTTP request failed')) {
-          errorMessage = 'ネットワークエラーが発生しました。インターネット接続を確認してください。';
-        }
-        
-        setError(errorMessage);
-        console.error('API key validation error:', err);
+      // Tauri 2.0のエラーハンドリング
+      let errorMessage = 'APIキーの検証に失敗しました';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMessage = String((err as any).message);
+      } else {
+        errorMessage = String(err);
       }
+      
+      // エラーメッセージをユーザーフレンドリーに変換
+      if (errorMessage.includes('API key is invalid') || errorMessage.includes('InvalidApiKey')) {
+        errorMessage = 'APIキーが無効です。正しいAPIキーを入力してください。';
+      } else if (errorMessage.includes('Quota exceeded')) {
+        errorMessage = 'APIクォータが超過しています。明日再度お試しください。';
+      } else if (errorMessage.includes('Rate limit exceeded')) {
+        errorMessage = 'レート制限に達しました。しばらく待ってから再度お試しください。';
+      } else if (errorMessage.includes('HTTP request failed')) {
+        errorMessage = 'ネットワークエラーが発生しました。インターネット接続を確認してください。';
+      }
+      
+      setError(errorMessage);
+      console.error('API key validation error:', err);
     } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -116,12 +111,27 @@ export function ApiKeySetup() {
     setSuccess('');
 
     try {
+      // URLから動画IDを抽出
+      let extractedVideoId = videoId;
+      const urlMatch = videoId.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (urlMatch) {
+        extractedVideoId = urlMatch[1];
+      }
+
       const chatId = await invoke<string>('get_live_chat_id', {
         apiKey: apiKey,
-        videoId: videoId,
+        videoId: extractedVideoId,
       });
       setLiveChatId(chatId);
-      setSuccess(`Live Chat ID: ${chatId}`);
+      setVideoId(extractedVideoId); // 抽出したIDに更新
+      
+      // 設定を保存（App.tsxで読み込み直せば反映される）
+      await invoke('save_wizard_settings', {
+        videoId: extractedVideoId,
+        liveChatId: chatId,
+      });
+      
+      setSuccess(`設定を保存しました。ページをリロードすると上部のコントロールパネルに反映されます。`);
     } catch (err) {
       setError(`エラー: ${err}`);
     } finally {

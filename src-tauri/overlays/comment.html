@@ -168,41 +168,25 @@
   <div id="comment-container"></div>
 
   <script>
-    const MAX_COMMENTS = 30; // 最大表示数を増加
+    const MAX_COMMENTS = 30;
     const WS_URL = 'ws://localhost:19801/ws';
     let ws = null;
     let reconnectDelay = 1000;
-    const maxDelay = 30000;
-    let isInitialLoad = true; // 初期ロード中かどうか
-    let pendingComments = []; // 初期ロード用バッファ
-    let initialLoadTimeout = null;
 
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
-      isInitialLoad = true;
-      pendingComments = [];
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        
-        // 初期ロード完了を少し待ってからフラグを更新
-        if (initialLoadTimeout) clearTimeout(initialLoadTimeout);
-        initialLoadTimeout = setTimeout(() => {
-          if (pendingComments.length > 0) {
-            // 初期コメントを一括追加（アニメーションなし）
-            renderInitialComments(pendingComments);
-            pendingComments = [];
-          }
-          isInitialLoad = false;
-          console.log('Initial load completed');
-        }, 500); // 500ms待ってから初期ロード完了
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          handleMessage(data);
+          if (data.type === 'comment:add') {
+            addComment(data.payload);
+          }
         } catch (e) {
           console.error('Failed to parse message:', e);
         }
@@ -213,61 +197,34 @@
       };
 
       ws.onclose = () => {
-        console.log('WebSocket closed. Reconnecting in', reconnectDelay, 'ms');
+        console.log('WebSocket closed, reconnecting...');
         setTimeout(() => {
-          reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
           connectWebSocket();
         }, reconnectDelay);
       };
     }
 
-    function handleMessage(data) {
-      if (data.type === 'comment:add') {
-        if (isInitialLoad) {
-          // 初期ロード中はバッファに追加
-          pendingComments.push(data.payload);
-        } else {
-          // 通常モードは1件ずつアニメーション付きで追加
-          addComment(data.payload, true);
-        }
-      } else if (data.type === 'comment:remove') {
-        removeComment(data.payload.id);
+    function addComment(comment) {
+      const container = document.getElementById('comment-container');
+      
+      // 重複チェック（再接続時のキャッシュ復元で重要）
+      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
+        return; // 既に表示済み
       }
-    }
-
-    // 初期コメントを一括レンダリング（アニメーションなし）
-    function renderInitialComments(comments) {
-      const container = document.getElementById('comment-container');
-      // 既存コメントをクリア
-      container.innerHTML = '';
       
-      // 最新のMAX_COMMENTS件だけを表示
-      const displayComments = comments.slice(-MAX_COMMENTS);
-      
-      displayComments.forEach(comment => {
-        const el = createCommentElement(comment, false);
-        container.appendChild(el);
-      });
-      
-      console.log(`Rendered ${displayComments.length} initial comments`);
-    }
-
-    function addComment(comment, animate = true) {
-      const container = document.getElementById('comment-container');
-      const el = createCommentElement(comment, animate);
+      const el = createCommentElement(comment);
       container.appendChild(el);
 
-      // 古いコメントを削除（アニメーション付き）
+      // 古いコメントを削除
       while (container.children.length > MAX_COMMENTS) {
-        const oldest = container.firstChild;
-        oldest.classList.add('removing');
-        setTimeout(() => oldest.remove(), 300);
+        container.firstChild.remove();
       }
     }
 
-    function createCommentElement(comment, animate = true) {
+    function createCommentElement(comment) {
       const div = document.createElement('div');
-      div.className = animate ? 'comment' : 'comment no-animation';
+      div.className = 'comment';
       div.dataset.id = comment.id;
 
       // messageTypeはタグ付きenum: { type: "text" | "superChat" | ... }
@@ -370,16 +327,6 @@
       div.appendChild(content);
 
       return div;
-    }
-
-    function removeComment(id) {
-      // CSS.escapeでIDをエスケープしてCSSセレクタインジェクションを防止
-      const escapedId = CSS.escape(id);
-      const el = document.querySelector(`[data-id="${escapedId}"]`);
-      if (el) {
-        el.classList.add('removing');
-        setTimeout(() => el.remove(), 300);
-      }
     }
 
     connectWebSocket();

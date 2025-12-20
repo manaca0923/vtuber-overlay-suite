@@ -17,7 +17,15 @@ export default function WizardStep3({
       <div className="space-y-4">
         {/* デフォルトテンプレート */}
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => onTemplateChange('default')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onTemplateChange('default');
+            }
+          }}
           className={`p-6 border-2 rounded-lg cursor-pointer transition-all ${
             selectedTemplate === 'default'
               ? 'border-blue-600 bg-blue-50'

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface WizardStep2Props {
@@ -17,6 +17,13 @@ export default function WizardStep2({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // URL解析ロジック
   const extractVideoId = (input: string): string => {
@@ -44,14 +51,22 @@ export default function WizardStep2({
         api_key: apiKey,
         video_id: vid,
       });
-      onLiveChatIdChange(chatId);
-      setSuccess(`チャットIDを取得しました: ${chatId.substring(0, 20)}...`);
+
+      // コンポーネントがアンマウントされていない場合のみstate更新
+      if (isMountedRef.current) {
+        onLiveChatIdChange(chatId);
+        setSuccess(`チャットIDを取得しました: ${chatId.substring(0, 20)}...`);
+      }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`エラー: ${errorMessage}`);
-      onLiveChatIdChange(null);
+      if (isMountedRef.current) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`エラー: ${errorMessage}`);
+        onLiveChatIdChange(null);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [apiKey, onLiveChatIdChange]);
 

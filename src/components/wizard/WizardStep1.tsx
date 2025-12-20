@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface WizardStep1Props {
@@ -15,6 +15,13 @@ export default function WizardStep1({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleValidate = async () => {
     if (!apiKey.trim()) {
@@ -31,22 +38,32 @@ export default function WizardStep1({
         api_key: apiKey,
       });
 
+      if (!isMountedRef.current) return;
+
       if (isValid) {
         // APIキーを保存
         await invoke('save_api_key', { api_key: apiKey });
-        setSuccess('APIキーが有効です。保存しました。');
-        onValidationChange(true);
+        if (isMountedRef.current) {
+          setSuccess('APIキーが有効です。保存しました。');
+          onValidationChange(true);
+        }
       } else {
-        setError('APIキーが無効です');
-        onValidationChange(false);
+        if (isMountedRef.current) {
+          setError('APIキーが無効です');
+          onValidationChange(false);
+        }
       }
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : String(err);
-      setError(`エラー: ${errorMessage}`);
-      onValidationChange(false);
+      if (isMountedRef.current) {
+        const errorMessage =
+          err instanceof Error ? err.message : String(err);
+        setError(`エラー: ${errorMessage}`);
+        onValidationChange(false);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 

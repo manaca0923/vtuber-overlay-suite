@@ -330,15 +330,25 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 - [x] state.rs: with_saved_stateのユニットテスト追加（3ケース）
 - [x] websocket.rs: 空行重複修正
 - [x] PollingStateData: polling_interval_millisの後方互換性コメント追加
+- [x] websocket.rs: state.read()のロック取得を効率化（1回に統合）
+
+#### 6. setlist_id指定オーバーレイのWS競合修正
+- [x] SetlistUpdatePayloadにsetlist_idフィールドを追加
+- [x] broadcast_setlist_update_internalでsetlist_idをペイロードに含める
+- [x] fetch_latest_setlist_messageでsetlist_idをペイロードに含める
+- [x] setlist.htmlでWS受信時にsetlist_idでフィルタリング
 
 ### 設計判断
-- **WebSocket setlist_id競合**: 現時点ではsetlist_id指定オーバーレイは未実装のため、最新セットリスト固定で問題なし。将来実装時はSetlistUpdatePayloadにsetlist_idを含めてクライアントでフィルタする設計を検討。
+- **WebSocket setlist_id競合**: 解決済み。SetlistUpdatePayloadにsetlist_idを含め、オーバーレイ側でフィルタリングを実装。URLパラメータでsetlist_idを指定したオーバーレイは該当セットリストの更新のみを受け付け、指定なし（最新モード）の場合は全ての更新を受け入れる。
 
 ### 成果物
 - `src-tauri/src/youtube/poller.rs` - pollingIntervalMillis順守修正
 - `src-tauri/src/youtube/state.rs` - polling_interval_millis復元対応、テスト追加
 - `src-tauri/src/commands/youtube.rs` - 永続化項目追加、wizard_settingsコマンド追加
-- `src-tauri/src/server/websocket.rs` - 接続時初期データ送信、タイミング改善
+- `src-tauri/src/server/websocket.rs` - 接続時初期データ送信、タイミング改善、ロック効率化
+- `src-tauri/src/server/types.rs` - SetlistUpdatePayloadにsetlist_id追加
+- `src-tauri/src/commands/setlist.rs` - broadcast時にsetlist_id含める
+- `src-tauri/overlays/setlist.html` - WS受信時setlist_idフィルタリング
 - `src/components/wizard/Wizard.tsx` - 入力値保存、警告表示改善
 - `src/components/ApiKeySetup.tsx` - wizard設定の自動読み込み
 

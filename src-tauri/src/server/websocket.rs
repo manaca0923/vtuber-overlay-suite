@@ -121,9 +121,13 @@ async fn handle_connection(
     // 先にセットリストを取得（DBアクセスが先、ピア登録後に送信）
     let initial_message = fetch_latest_setlist_message(&db).await;
 
-    // ピアIDを取得して登録
-    let peer_id = state.read().await.next_id();
-    state.read().await.add_peer(peer_id, tx.clone()).await;
+    // ピアIDを取得して登録（1回のロック取得で処理）
+    let peer_id = {
+        let state_guard = state.read().await;
+        let id = state_guard.next_id();
+        state_guard.add_peer(id, tx.clone()).await;
+        id
+    };
 
     // 接続時に最新セットリストを送信
     if let Some(msg) = initial_message {
@@ -256,6 +260,7 @@ async fn fetch_latest_setlist_message(pool: &SqlitePool) -> Option<WsMessage> {
         .collect();
 
     let payload = SetlistUpdatePayload {
+        setlist_id,
         current_index,
         songs,
     };

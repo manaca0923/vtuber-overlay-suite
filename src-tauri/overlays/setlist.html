@@ -214,6 +214,16 @@
 
     function handleMessage(data) {
       if (data.type === 'setlist:update') {
+        const urlSetlistId = getSetlistIdFromUrl();
+        const messageSetlistId = data.payload.setlistId;
+
+        // URLでsetlist_idが指定されている場合は、そのIDとマッチするメッセージのみ処理
+        // 指定されていない場合（最新モード）は全てのWS更新を受け入れる
+        if (urlSetlistId && messageSetlistId && urlSetlistId !== messageSetlistId) {
+          console.log('Ignoring setlist update for different setlist:', messageSetlistId, 'expected:', urlSetlistId);
+          return;
+        }
+
         updateSetlist(data.payload);
       }
     }

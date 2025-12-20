@@ -4,6 +4,7 @@
 ///
 /// # Examples
 /// ```
+/// use app_lib::util::mask_api_key;
 /// let masked = mask_api_key("AIzaSyABC123def456GHI789");
 /// assert_eq!(masked, "AIza***I789");
 /// ```

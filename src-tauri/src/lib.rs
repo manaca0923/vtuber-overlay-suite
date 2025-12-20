@@ -2,7 +2,7 @@ mod commands;
 mod db;
 mod keyring;
 mod server;
-mod util;
+pub mod util; // doctestのためpubにする
 mod youtube;
 
 use sqlx::SqlitePool;

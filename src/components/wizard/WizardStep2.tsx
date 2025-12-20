@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface WizardStep2Props {
@@ -17,13 +17,7 @@ export default function WizardStep2({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // URL解析ロジック
   const extractVideoId = (input: string): string => {
@@ -36,50 +30,57 @@ export default function WizardStep2({
     return input;
   };
 
-  const handleGetChatId = useCallback(async (vid: string) => {
-    if (!vid.trim()) {
-      setError('動画IDを入力してください');
+  // 動画ID変更時に自動でチャットID取得（debounce）
+  useEffect(() => {
+    if (!videoId.trim()) {
+      setLoading(false);
+      setError('');
+      setSuccess('');
       return;
     }
+
+    // 前のリクエストをキャンセル
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const currentController = abortControllerRef.current;
 
     setLoading(true);
     setError('');
     setSuccess('');
 
-    try {
-      const chatId = await invoke<string>('get_live_chat_id', {
-        api_key: apiKey,
-        video_id: vid,
-      });
-
-      // コンポーネントがアンマウントされていない場合のみstate更新
-      if (isMountedRef.current) {
-        onLiveChatIdChange(chatId);
-        setSuccess(`チャットIDを取得しました: ${chatId.substring(0, 20)}...`);
+    const timer = setTimeout(async () => {
+      try {
+        console.log('Fetching live chat ID for:', videoId);
+        const chatId = await invoke<string>('get_live_chat_id', {
+          apiKey: apiKey,
+          videoId: videoId,
+        });
+        
+        // キャンセルされていなければ更新
+        if (!currentController.signal.aborted) {
+          console.log('Chat ID received:', chatId);
+          onLiveChatIdChange(chatId);
+          setSuccess(`チャットIDを取得しました: ${chatId.substring(0, 20)}...`);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!currentController.signal.aborted) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          console.error('Error fetching chat ID:', errorMessage);
+          setError(`エラー: ${errorMessage}`);
+          onLiveChatIdChange(null);
+          setLoading(false);
+        }
       }
-    } catch (err) {
-      if (isMountedRef.current) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(`エラー: ${errorMessage}`);
-        onLiveChatIdChange(null);
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [apiKey, onLiveChatIdChange]);
-
-  // 動画ID変更時に自動でチャットID取得（debounce）
-  useEffect(() => {
-    if (!videoId.trim()) return;
-
-    const timer = setTimeout(() => {
-      handleGetChatId(videoId);
     }, 500);
 
-    return () => clearTimeout(timer);
-  }, [videoId, handleGetChatId]);
+    return () => {
+      clearTimeout(timer);
+      currentController.abort();
+    };
+  }, [videoId, apiKey, onLiveChatIdChange]);
 
   const handleInputChange = (value: string) => {
     const vid = extractVideoId(value);
@@ -104,7 +105,7 @@ export default function WizardStep2({
             value={videoId}
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder="https://www.youtube.com/watch?v=... または動画ID"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
             disabled={loading}
           />
           <p className="mt-2 text-sm text-gray-500">

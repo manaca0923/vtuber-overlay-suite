@@ -1,5 +1,27 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// YouTube APIは数値を文字列で返すことがあるため、両方に対応
+fn deserialize_string_or_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrU64 {
+        String(String),
+        U64(u64),
+    }
+    
+    match StringOrU64::deserialize(deserializer)? {
+        StringOrU64::String(s) => s.parse::<u64>().map_err(|e| {
+            D::Error::custom(format!("Failed to parse '{}' as u64: {}", s, e))
+        }),
+        StringOrU64::U64(n) => Ok(n),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,7 +57,7 @@ pub enum MessageType {
 // YouTube API レスポンス型
 #[derive(Debug, Deserialize)]
 pub struct LiveChatMessagesResponse {
-    #[serde(rename = "pollingIntervalMillis")]
+    #[serde(rename = "pollingIntervalMillis", deserialize_with = "deserialize_string_or_u64")]
     pub polling_interval_millis: u64,
     #[serde(rename = "nextPageToken")]
     pub next_page_token: Option<String>,
@@ -71,7 +93,7 @@ pub struct SuperChatDetails {
     #[serde(rename = "amountDisplayString")]
     pub amount_display_string: String,
     pub currency: String,
-    #[serde(rename = "amountMicros")]
+    #[serde(rename = "amountMicros", deserialize_with = "deserialize_string_or_u64")]
     pub amount_micros: u64,
 }
 
@@ -82,7 +104,7 @@ pub struct SuperStickerDetails {
     #[serde(rename = "amountDisplayString")]
     pub amount_display_string: String,
     pub currency: String,
-    #[serde(rename = "amountMicros")]
+    #[serde(rename = "amountMicros", deserialize_with = "deserialize_string_or_u64")]
     pub amount_micros: u64,
 }
 

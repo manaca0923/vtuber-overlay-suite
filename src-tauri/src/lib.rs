@@ -6,7 +6,9 @@ pub mod util; // doctestのためpubにする
 mod youtube;
 
 use sqlx::SqlitePool;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 /// アプリケーションID（tauri.conf.jsonのidentifierと一致させる）
 const APP_IDENTIFIER: &str = "com.vtuber-overlay-suite.desktop";
@@ -58,8 +60,23 @@ pub fn run() {
 
       // HTTPサーバーを起動（DB接続付き）
       let http_db = db_pool_for_http.clone();
-      tokio::spawn(async move {
-        if let Err(e) = server::start_http_server_with_db(http_db).await {
+      
+      // オーバーレイディレクトリのパスを取得
+      // 開発中はsrc-tauri/overlays、本番ではリソースディレクトリを使用
+      let overlays_dir = if cfg!(debug_assertions) {
+        // 開発環境：src-tauri/overlaysを直接参照
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("overlays")
+      } else {
+        // 本番環境：アプリバンドル内のリソースを使用
+        app.path().resource_dir()
+          .expect("Failed to get resource directory")
+          .join("overlays")
+      };
+      
+      log::info!("Overlays directory: {:?}", overlays_dir);
+      
+      tauri::async_runtime::spawn(async move {
+        if let Err(e) = server::start_http_server_with_db(http_db, overlays_dir).await {
           log::error!("HTTP server error: {}", e);
         }
       });
@@ -68,7 +85,7 @@ pub fn run() {
       {
         let state_clone = Arc::clone(&server_state);
         let ws_db = db_pool_for_ws.clone();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
           if let Err(e) = server::start_websocket_server(state_clone, ws_db).await {
             log::error!("WebSocket server error: {}", e);
           }

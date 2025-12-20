@@ -7,6 +7,7 @@ use axum::{
 use serde::Serialize;
 use serde_json::json;
 use sqlx::SqlitePool;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
@@ -14,12 +15,14 @@ use tower_http::cors::CorsLayer;
 #[derive(Clone)]
 pub struct HttpState {
     pub db: Arc<SqlitePool>,
+    pub overlays_dir: PathBuf,
 }
 
 /// HTTPサーバーを起動（DB接続付き）
-pub async fn start_http_server_with_db(db: SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let state = HttpState {
         db: Arc::new(db),
+        overlays_dir,
     };
 
     let app = Router::new()
@@ -28,6 +31,7 @@ pub async fn start_http_server_with_db(db: SqlitePool) -> Result<(), Box<dyn std
         .route("/api/setlist/{id}", get(get_setlist_api))
         .route("/overlay/comment", get(overlay_comment))
         .route("/overlay/setlist", get(overlay_setlist))
+        .route("/overlay/test", get(overlay_test))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -50,13 +54,51 @@ async fn health_check() -> impl IntoResponse {
 }
 
 /// コメントオーバーレイHTML
-async fn overlay_comment() -> impl IntoResponse {
-    Html(include_str!("../../overlays/comment.html"))
+async fn overlay_comment(State(state): State<HttpState>) -> impl IntoResponse {
+    let path = state.overlays_dir.join("comment.html");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Html(content).into_response(),
+        Err(e) => {
+            // パス情報をログには記録するがレスポンスには含めない
+            log::error!("Failed to read comment.html from {:?}: {}", path, e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load overlay".to_string(),
+            ).into_response()
+        }
+    }
 }
 
 /// セットリストオーバーレイHTML
-async fn overlay_setlist() -> impl IntoResponse {
-    Html(include_str!("../../overlays/setlist.html"))
+async fn overlay_setlist(State(state): State<HttpState>) -> impl IntoResponse {
+    let path = state.overlays_dir.join("setlist.html");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Html(content).into_response(),
+        Err(e) => {
+            // パス情報をログには記録するがレスポンスには含めない
+            log::error!("Failed to read setlist.html from {:?}: {}", path, e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load overlay".to_string(),
+            ).into_response()
+        }
+    }
+}
+
+/// WebSocketテストページ
+async fn overlay_test(State(state): State<HttpState>) -> impl IntoResponse {
+    let path = state.overlays_dir.join("test.html");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Html(content).into_response(),
+        Err(e) => {
+            // パス情報をログには記録するがレスポンスには含めない
+            log::error!("Failed to read test.html from {:?}: {}", path, e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load test page".to_string(),
+            ).into_response()
+        }
+    }
 }
 
 /// セットリストAPIレスポンス

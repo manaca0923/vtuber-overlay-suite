@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ApiKeySetup } from './components/ApiKeySetup';
+import { CommentControlPanel } from './components/CommentControlPanel';
 import { SongList } from './components/SongList';
 import { SetlistList } from './components/SetlistList';
 import { TestModeButton } from './components/TestModeButton';
@@ -9,26 +10,58 @@ import Wizard from './components/wizard/Wizard';
 type Tab = 'comment' | 'setlist';
 type AppMode = 'wizard' | 'main';
 
+interface WizardSettings {
+  video_id: string;
+  live_chat_id: string;
+  saved_at: string;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('comment');
   const [appMode, setAppMode] = useState<AppMode>('wizard');
   const [isCheckingFirstLaunch, setIsCheckingFirstLaunch] = useState(true);
+  const [apiKey, setApiKey] = useState<string>('');
+  const [wizardSettings, setWizardSettings] = useState<WizardSettings | null>(null);
 
-  // 初回起動判定
+  // 初回起動判定 & 設定読み込み
   useEffect(() => {
-    async function checkFirstLaunch() {
+    async function initialize() {
       try {
         const hasKey = await invoke<boolean>('has_api_key');
-        setAppMode(hasKey ? 'main' : 'wizard');
+        console.log('has_api_key:', hasKey);
+        if (hasKey) {
+          // APIキーを読み込む
+          try {
+            const key = await invoke<string | null>('get_api_key');
+            console.log('API key loaded:', key ? 'yes' : 'no');
+            if (key) {
+              setApiKey(key);
+            }
+          } catch (err) {
+            console.error('Failed to load API key:', err);
+          }
+          // ウィザード設定を読み込む
+          try {
+            const settings = await invoke<WizardSettings | null>('load_wizard_settings');
+            console.log('Wizard settings loaded:', settings);
+            if (settings) {
+              setWizardSettings(settings);
+            }
+          } catch (err) {
+            console.error('Failed to load wizard settings:', err);
+          }
+          setAppMode('main');
+        } else {
+          setAppMode('wizard');
+        }
       } catch (err) {
         console.error('Failed to check API key:', err);
-        // エラー時はウィザード表示（安全側に倒す）
         setAppMode('wizard');
       } finally {
         setIsCheckingFirstLaunch(false);
       }
     }
-    checkFirstLaunch();
+    initialize();
   }, []);
 
   // ローディング画面
@@ -43,9 +76,28 @@ function App() {
     );
   }
 
+  // ウィザード完了ハンドラ
+  const handleWizardComplete = async () => {
+    // 設定を再読み込み
+    try {
+      const key = await invoke<string | null>('get_api_key');
+      if (key) {
+        setApiKey(key);
+      }
+      const settings = await invoke<WizardSettings | null>('load_wizard_settings');
+      console.log('Wizard completed, settings:', settings);
+      if (settings) {
+        setWizardSettings(settings);
+      }
+    } catch (err) {
+      console.error('Failed to reload settings after wizard:', err);
+    }
+    setAppMode('main');
+  };
+
   // ウィザードモード
   if (appMode === 'wizard') {
-    return <Wizard onComplete={() => setAppMode('main')} />;
+    return <Wizard onComplete={handleWizardComplete} />;
   }
 
   return (
@@ -86,6 +138,11 @@ function App() {
             <div className="flex justify-end">
               <TestModeButton />
             </div>
+            <CommentControlPanel
+              apiKey={apiKey}
+              videoId={wizardSettings?.video_id ?? ''}
+              liveChatId={wizardSettings?.live_chat_id ?? ''}
+            />
             <ApiKeySetup />
           </div>
         )}

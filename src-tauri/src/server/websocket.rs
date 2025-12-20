@@ -1,6 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
@@ -8,14 +8,20 @@ use tokio::sync::{mpsc, RwLock};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 use super::types::{SetlistUpdatePayload, SongItem, SongStatus, WsMessage};
+use crate::youtube::types::ChatMessage;
 
 type Tx = mpsc::UnboundedSender<Message>;
 type PeerMap = Arc<RwLock<HashMap<usize, Tx>>>;
+
+/// コメントキャッシュの最大数
+const MAX_COMMENT_CACHE: usize = 50;
 
 /// WebSocket接続管理状態
 pub struct WebSocketState {
     peers: PeerMap,
     next_peer_id: AtomicUsize,
+    /// コメントキャッシュ（新規接続時に送信）
+    comment_cache: Arc<RwLock<VecDeque<ChatMessage>>>,
 }
 
 impl WebSocketState {
@@ -23,6 +29,7 @@ impl WebSocketState {
         Self {
             peers: Arc::new(RwLock::new(HashMap::new())),
             next_peer_id: AtomicUsize::new(0),
+            comment_cache: Arc::new(RwLock::new(VecDeque::with_capacity(MAX_COMMENT_CACHE))),
         }
     }
 
@@ -45,8 +52,42 @@ impl WebSocketState {
         log::info!("WebSocket peer {} disconnected. Total peers: {}", peer_id, peers.len());
     }
 
+    /// キャッシュされたコメントを取得
+    pub async fn get_cached_comments(&self) -> Vec<ChatMessage> {
+        let cache = self.comment_cache.read().await;
+        cache.iter().cloned().collect()
+    }
+
+    /// コメントをキャッシュに追加
+    pub async fn add_to_cache(&self, comment: ChatMessage) {
+        let mut cache = self.comment_cache.write().await;
+        if cache.len() >= MAX_COMMENT_CACHE {
+            cache.pop_front();
+        }
+        cache.push_back(comment);
+    }
+
+    /// 複数コメントをキャッシュに追加
+    ///
+    /// Note: 現在は未使用だが、バッチインポート機能で使用予定
+    #[allow(dead_code)]
+    pub async fn add_comments_to_cache(&self, comments: Vec<ChatMessage>) {
+        let mut cache = self.comment_cache.write().await;
+        for comment in comments {
+            if cache.len() >= MAX_COMMENT_CACHE {
+                cache.pop_front();
+            }
+            cache.push_back(comment);
+        }
+    }
+
     /// 全ピアにメッセージをブロードキャスト
     pub async fn broadcast(&self, message: WsMessage) {
+        // コメントの場合はキャッシュに追加
+        if let WsMessage::CommentAdd { ref payload } = message {
+            self.add_to_cache(payload.clone()).await;
+        }
+
         let json = match serde_json::to_string(&message) {
             Ok(j) => j,
             Err(e) => {
@@ -118,8 +159,12 @@ async fn handle_connection(
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
 
-    // 先にセットリストを取得（DBアクセスが先、ピア登録後に送信）
-    let initial_message = fetch_latest_setlist_message(&db).await;
+    // 先にセットリストとキャッシュされたコメントを取得
+    let initial_setlist = fetch_latest_setlist_message(&db).await;
+    let cached_comments = {
+        let state_guard = state.read().await;
+        state_guard.get_cached_comments().await
+    };
 
     // ピアIDを取得して登録（1回のロック取得で処理）
     let peer_id = {
@@ -130,12 +175,26 @@ async fn handle_connection(
     };
 
     // 接続時に最新セットリストを送信
-    if let Some(msg) = initial_message {
+    if let Some(msg) = initial_setlist {
         if let Ok(json) = serde_json::to_string(&msg) {
             if tx.send(Message::Text(json)).is_err() {
                 log::warn!("Failed to send initial setlist to peer {}", peer_id);
             } else {
                 log::debug!("Sent initial setlist to peer {}", peer_id);
+            }
+        }
+    }
+
+    // 接続時にキャッシュされたコメントを送信
+    if !cached_comments.is_empty() {
+        log::info!("Sending {} cached comments to peer {}", cached_comments.len(), peer_id);
+        for comment in cached_comments {
+            let msg = WsMessage::CommentAdd { payload: comment };
+            if let Ok(json) = serde_json::to_string(&msg) {
+                if tx.send(Message::Text(json)).is_err() {
+                    log::warn!("Failed to send cached comment to peer {}", peer_id);
+                    break;
+                }
             }
         }
     }

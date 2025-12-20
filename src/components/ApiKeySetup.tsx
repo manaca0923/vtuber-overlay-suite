@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { CommentControlPanel } from './CommentControlPanel';
 import type { ChatMessage } from '../types/chat';
+import { handleTauriError } from '../utils/errorMessages';
 
 export function ApiKeySetup() {
   const [apiKey, setApiKey] = useState('');
@@ -13,17 +14,19 @@ export function ApiKeySetup() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isApiKeyLoaded, setIsApiKeyLoaded] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const isMountedRef = useRef(true);
-
   // 保存済みAPIキーとウィザード設定を自動読み込み
   useEffect(() => {
+    let isMounted = true;
+    
     async function loadSavedSettings() {
       try {
         // APIキー読み込み
         const hasKey = await invoke<boolean>('has_api_key');
+        console.log('ApiKeySetup: has_api_key =', hasKey);
         if (hasKey) {
           const savedKey = await invoke<string>('get_api_key');
-          if (isMountedRef.current && savedKey) {
+          console.log('ApiKeySetup: got key =', savedKey ? 'yes' : 'no');
+          if (isMounted && savedKey) {
             setApiKey(savedKey);
             setIsApiKeyLoaded(true);
           }
@@ -35,11 +38,12 @@ export function ApiKeySetup() {
           live_chat_id: string;
           saved_at: string;
         } | null>('load_wizard_settings');
-        if (isMountedRef.current && wizardSettings) {
+        console.log('ApiKeySetup: wizard settings =', wizardSettings);
+        if (isMounted && wizardSettings) {
           setVideoId(wizardSettings.video_id);
           setLiveChatId(wizardSettings.live_chat_id);
           setSuccess('保存済み設定を読み込みました');
-        } else if (isMountedRef.current && hasKey) {
+        } else if (isMounted && hasKey) {
           setSuccess('保存済みAPIキーを読み込みました');
         }
       } catch (err) {
@@ -49,7 +53,7 @@ export function ApiKeySetup() {
     loadSavedSettings();
 
     return () => {
-      isMountedRef.current = false;
+      isMounted = false;
     };
   }, []);
 
@@ -60,30 +64,23 @@ export function ApiKeySetup() {
 
     try {
       const isValid = await invoke<boolean>('validate_api_key', {
-        api_key: apiKey,
+        apiKey: apiKey,
       });
-
-      if (!isMountedRef.current) return;
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { api_key: apiKey });
-        if (isMountedRef.current) {
-          setIsApiKeyLoaded(true);
-          setSuccess('APIキーが有効です。保存しました。');
-        }
+        await invoke('save_api_key', { apiKey: apiKey });
+        setIsApiKeyLoaded(true);
+        setSuccess('APIキーが有効です。保存しました。');
       } else {
         setError('APIキーが無効です');
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(`エラー: ${errorMessage}`);
-      }
+      const errorMessage = handleTauriError(err, 'APIキーの検証に失敗しました');
+      setError(errorMessage);
+      console.error('API key validation error:', err);
     } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -93,12 +90,27 @@ export function ApiKeySetup() {
     setSuccess('');
 
     try {
+      // URLから動画IDを抽出
+      let extractedVideoId = videoId;
+      const urlMatch = videoId.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (urlMatch && urlMatch[1]) {
+        extractedVideoId = urlMatch[1];
+      }
+
       const chatId = await invoke<string>('get_live_chat_id', {
-        api_key: apiKey,
-        video_id: videoId,
+        apiKey: apiKey,
+        videoId: extractedVideoId,
       });
       setLiveChatId(chatId);
-      setSuccess(`Live Chat ID: ${chatId}`);
+      setVideoId(extractedVideoId); // 抽出したIDに更新
+      
+      // 設定を保存（App.tsxで読み込み直せば反映される）
+      await invoke('save_wizard_settings', {
+        videoId: extractedVideoId,
+        liveChatId: chatId,
+      });
+      
+      setSuccess(`設定を保存しました。ページをリロードすると上部のコントロールパネルに反映されます。`);
     } catch (err) {
       setError(`エラー: ${err}`);
     } finally {
@@ -115,9 +127,9 @@ export function ApiKeySetup() {
       const result = await invoke<[ChatMessage[], string | null, number]>(
         'get_chat_messages',
         {
-          api_key: apiKey,
-          live_chat_id: liveChatId,
-          page_token: null,
+          apiKey: apiKey,
+          liveChatId: liveChatId,
+          pageToken: null,
         }
       );
       const newMessages = result[0];
@@ -153,7 +165,7 @@ export function ApiKeySetup() {
             type={showApiKey ? 'text' : 'password'}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            className="w-full p-2 pr-12 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full p-2 pr-12 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-400"
             placeholder="AIza..."
           />
           <button
@@ -190,7 +202,7 @@ export function ApiKeySetup() {
           type="text"
           value={videoId}
           onChange={(e) => setVideoId(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+          className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder:text-gray-400"
           placeholder="dQw4w9WgXcQ"
         />
         <button

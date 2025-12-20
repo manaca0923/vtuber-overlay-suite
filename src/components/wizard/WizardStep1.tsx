@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { handleTauriError } from '../../utils/errorMessages';
 
 interface WizardStep1Props {
   apiKey: string;
@@ -18,7 +19,9 @@ export default function WizardStep1({
   const [showApiKey, setShowApiKey] = useState(false);
   const isMountedRef = useRef(true);
 
+  // マウント状態を追跡（非同期操作後のstate更新を防ぐ）
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
@@ -36,31 +39,28 @@ export default function WizardStep1({
 
     try {
       const isValid = await invoke<boolean>('validate_api_key', {
-        api_key: apiKey,
+        apiKey: apiKey,
       });
 
+      // アンマウント後はstate更新をスキップ
       if (!isMountedRef.current) return;
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { api_key: apiKey });
-        if (isMountedRef.current) {
-          setSuccess('APIキーが有効です。保存しました。');
-          onValidationChange(true);
-        }
+        await invoke('save_api_key', { apiKey: apiKey });
+        if (!isMountedRef.current) return;
+        setSuccess('APIキーが有効です。保存しました。');
+        onValidationChange(true);
       } else {
-        if (isMountedRef.current) {
-          setError('APIキーが無効です');
-          onValidationChange(false);
-        }
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        const errorMessage =
-          err instanceof Error ? err.message : String(err);
-        setError(`エラー: ${errorMessage}`);
+        setError('APIキーが無効です');
         onValidationChange(false);
       }
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      const errorMessage = handleTauriError(err, 'APIキーの検証に失敗しました');
+      setError(errorMessage);
+      onValidationChange(false);
+      console.error('API key validation error:', err);
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
@@ -96,7 +96,7 @@ export default function WizardStep1({
               value={apiKey}
               onChange={(e) => onApiKeyChange(e.target.value)}
               placeholder="AIzaSy..."
-              className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
               disabled={loading}
             />
             <button

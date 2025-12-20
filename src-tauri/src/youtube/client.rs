@@ -175,7 +175,14 @@ impl YouTubeClient {
 
         match response.status() {
             reqwest::StatusCode::OK => {
-                let data: LiveChatMessagesResponse = response.json().await?;
+                // JSONパースエラーの詳細を取得するため、まずテキストとして取得
+                let body = response.text().await?;
+                let data: LiveChatMessagesResponse = serde_json::from_str(&body)
+                    .map_err(|e| {
+                        log::error!("Failed to parse chat messages response: {}", e);
+                        log::debug!("Response body: {}", &body[..std::cmp::min(500, body.len())]);
+                        YouTubeError::ParseError(format!("JSON parse error: {}", e))
+                    })?;
                 log::info!(
                     "Successfully fetched {} messages (polling interval: {}ms)",
                     data.items.len(),

@@ -14,7 +14,7 @@
       --font-size-name: 14px;
       --font-size-message: 16px;
       --comment-gap: 8px;
-      --max-comments: 10;
+      --max-comments: 30;
       --animation-duration: 0.3s;
       --animation-easing: ease-out;
     }
@@ -47,6 +47,10 @@
       border-radius: 8px;
       backdrop-filter: blur(8px);
       animation: comment-enter var(--animation-duration) var(--animation-easing);
+    }
+
+    .comment.no-animation {
+      animation: none;
     }
 
     .comment.removing {
@@ -164,11 +168,10 @@
   <div id="comment-container"></div>
 
   <script>
-    const MAX_COMMENTS = 10;
+    const MAX_COMMENTS = 30;
     const WS_URL = 'ws://localhost:19801/ws';
     let ws = null;
     let reconnectDelay = 1000;
-    const maxDelay = 30000;
 
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
@@ -181,7 +184,9 @@
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          handleMessage(data);
+          if (data.type === 'comment:add') {
+            addComment(data.payload);
+          }
         } catch (e) {
           console.error('Failed to parse message:', e);
         }
@@ -192,31 +197,34 @@
       };
 
       ws.onclose = () => {
-        console.log('WebSocket closed. Reconnecting in', reconnectDelay, 'ms');
+        console.log('WebSocket closed, reconnecting...');
         setTimeout(() => {
-          reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
           connectWebSocket();
         }, reconnectDelay);
       };
     }
 
-    function handleMessage(data) {
-      if (data.type === 'comment:add') {
-        addComment(data.payload);
-      } else if (data.type === 'comment:remove') {
-        removeComment(data.payload.id);
-      }
-    }
-
     function addComment(comment) {
       const container = document.getElementById('comment-container');
+
+      // comment.idがundefined/nullの場合はスキップ
+      if (!comment || !comment.id) {
+        console.warn('Invalid comment: missing id', comment);
+        return;
+      }
+
+      // 重複チェック（再接続時のキャッシュ復元で重要）
+      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
+        return; // 既に表示済み
+      }
+
       const el = createCommentElement(comment);
       container.appendChild(el);
 
+      // 古いコメントを削除
       while (container.children.length > MAX_COMMENTS) {
-        const oldest = container.firstChild;
-        oldest.classList.add('removing');
-        setTimeout(() => oldest.remove(), 300);
+        container.firstChild.remove();
       }
     }
 
@@ -325,16 +333,6 @@
       div.appendChild(content);
 
       return div;
-    }
-
-    function removeComment(id) {
-      // CSS.escapeでIDをエスケープしてCSSセレクタインジェクションを防止
-      const escapedId = CSS.escape(id);
-      const el = document.querySelector(`[data-id="${escapedId}"]`);
-      if (el) {
-        el.classList.add('removing');
-        setTimeout(() => el.remove(), 300);
-      }
     }
 
     connectWebSocket();

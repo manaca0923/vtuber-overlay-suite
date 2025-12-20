@@ -66,8 +66,8 @@ export default function Wizard({ onComplete }: WizardProps) {
     if (wizardData.videoId && wizardData.liveChatId) {
       try {
         await invoke('save_wizard_settings', {
-          video_id: wizardData.videoId,
-          live_chat_id: wizardData.liveChatId,
+          videoId: wizardData.videoId,
+          liveChatId: wizardData.liveChatId,
         });
       } catch (err) {
         console.error('Failed to save wizard settings:', err);

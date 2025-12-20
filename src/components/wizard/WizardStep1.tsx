@@ -36,14 +36,14 @@ export default function WizardStep1({
 
     try {
       const isValid = await invoke<boolean>('validate_api_key', {
-        api_key: apiKey,
+        apiKey: apiKey,
       });
 
       if (!isMountedRef.current) return;
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { api_key: apiKey });
+        await invoke('save_api_key', { apiKey: apiKey });
         if (isMountedRef.current) {
           setSuccess('APIキーが有効です。保存しました。');
           onValidationChange(true);

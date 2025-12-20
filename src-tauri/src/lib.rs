@@ -58,7 +58,7 @@ pub fn run() {
 
       // HTTPサーバーを起動（DB接続付き）
       let http_db = db_pool_for_http.clone();
-      tokio::spawn(async move {
+      tauri::async_runtime::spawn(async move {
         if let Err(e) = server::start_http_server_with_db(http_db).await {
           log::error!("HTTP server error: {}", e);
         }
@@ -68,7 +68,7 @@ pub fn run() {
       {
         let state_clone = Arc::clone(&server_state);
         let ws_db = db_pool_for_ws.clone();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
           if let Err(e) = server::start_websocket_server(state_clone, ws_db).await {
             log::error!("WebSocket server error: {}", e);
           }

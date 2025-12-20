@@ -60,14 +60,14 @@ export function ApiKeySetup() {
 
     try {
       const isValid = await invoke<boolean>('validate_api_key', {
-        api_key: apiKey,
+        apiKey: apiKey,
       });
 
       if (!isMountedRef.current) return;
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { api_key: apiKey });
+        await invoke('save_api_key', { apiKey: apiKey });
         if (isMountedRef.current) {
           setIsApiKeyLoaded(true);
           setSuccess('APIキーが有効です。保存しました。');
@@ -94,8 +94,8 @@ export function ApiKeySetup() {
 
     try {
       const chatId = await invoke<string>('get_live_chat_id', {
-        api_key: apiKey,
-        video_id: videoId,
+        apiKey: apiKey,
+        videoId: videoId,
       });
       setLiveChatId(chatId);
       setSuccess(`Live Chat ID: ${chatId}`);
@@ -115,9 +115,9 @@ export function ApiKeySetup() {
       const result = await invoke<[ChatMessage[], string | null, number]>(
         'get_chat_messages',
         {
-          api_key: apiKey,
-          live_chat_id: liveChatId,
-          page_token: null,
+          apiKey: apiKey,
+          liveChatId: liveChatId,
+          pageToken: null,
         }
       );
       const newMessages = result[0];

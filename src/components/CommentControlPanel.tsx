@@ -208,11 +208,11 @@ export function CommentControlPanel({
 
       try {
         await invoke('start_polling', {
-          api_key: apiKey,
-          live_chat_id: liveChatId,
-          next_page_token: shouldUseSavedState ? savedState.next_page_token : null,
-          quota_used: shouldUseSavedState ? savedState.quota_used : null,
-          polling_interval_millis: shouldUseSavedState ? savedState.polling_interval_millis : null,
+          apiKey: apiKey,
+          liveChatId: liveChatId,
+          nextPageToken: shouldUseSavedState ? savedState.next_page_token : null,
+          quotaUsed: shouldUseSavedState ? savedState.quota_used : null,
+          pollingIntervalMillis: shouldUseSavedState ? savedState.polling_interval_millis : null,
         });
         if (isMountedRef.current) {
           setIsPolling(true);
@@ -242,10 +242,10 @@ export function CommentControlPanel({
         const latestState = await invoke<PollingState | null>('get_polling_state');
         if (latestState) {
           await invoke('save_polling_state', {
-            live_chat_id: liveChatId,
-            next_page_token: latestState.next_page_token,
-            quota_used: latestState.quota_used,
-            polling_interval_millis: latestState.polling_interval_millis,
+            liveChatId: liveChatId,
+            nextPageToken: latestState.next_page_token,
+            quotaUsed: latestState.quota_used,
+            pollingIntervalMillis: latestState.polling_interval_millis,
           });
         }
       }

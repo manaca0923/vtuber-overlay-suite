@@ -48,8 +48,8 @@ export default function WizardStep2({
 
     try {
       const chatId = await invoke<string>('get_live_chat_id', {
-        api_key: apiKey,
-        video_id: vid,
+        apiKey: apiKey,
+        videoId: vid,
       });
 
       // コンポーネントがアンマウントされていない場合のみstate更新

@@ -40,6 +40,9 @@ pub fn run() {
     })
   };
 
+  // HTTPサーバー用にdb_poolをclone
+  let db_pool_for_http = db_pool.clone();
+
   tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .setup(move |app| {
@@ -51,9 +54,10 @@ pub fn run() {
         )?;
       }
 
-      // HTTPサーバーを起動（Tauriのランタイム内で起動）
+      // HTTPサーバーを起動（DB接続付き）
+      let http_db = db_pool_for_http.clone();
       tokio::spawn(async move {
-        if let Err(e) = server::start_http_server().await {
+        if let Err(e) = server::start_http_server_with_db(http_db).await {
           log::error!("HTTP server error: {}", e);
         }
       });

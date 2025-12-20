@@ -259,6 +259,8 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 #### 3. セットリストオーバーレイの初期同期（高優先）
 - [x] WebSocket接続時に初期データを送信（broadcast_setlist_updateコマンド追加）
 - [x] currentIndex == -1時のオーバーレイ表示を修正
+- [x] HTTP API経由での初期データ取得（`/api/setlist/{id}`エンドポイント追加）
+- [x] オーバーレイでURLパラメータからsetlist_idを取得し自動フェッチ
 
 #### 4. APIキー保存の再利用（高優先）
 - [x] メイン画面起動時に保存済みAPIキーを読み込む
@@ -281,8 +283,9 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 - `src-tauri/src/youtube/poller.rs` - start_with_stateメソッド追加
 - `src-tauri/src/youtube/state.rs` - with_saved_stateコンストラクタ追加
 - `src-tauri/overlays/comment.html` - 全メッセージ種別のスタイル・表示対応
-- `src-tauri/overlays/setlist.html` - currentIndex === -1時の表示修正
+- `src-tauri/overlays/setlist.html` - currentIndex === -1時の表示修正、HTTP API初期フェッチ追加
 - `src-tauri/src/commands/setlist.rs` - broadcast_setlist_updateコマンド追加
+- `src-tauri/src/server/http.rs` - セットリスト取得API（`/api/setlist/{id}`）追加
 
 ---
 

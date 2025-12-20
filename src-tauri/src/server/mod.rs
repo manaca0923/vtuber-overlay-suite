@@ -2,7 +2,7 @@ mod http;
 pub mod types;
 mod websocket;
 
-pub use http::start_http_server;
+pub use http::{start_http_server, start_http_server_with_db};
 pub use types::ServerState;
 pub use websocket::start_websocket_server;
 

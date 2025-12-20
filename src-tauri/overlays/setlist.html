@@ -132,9 +132,38 @@
 
   <script>
     const WS_URL = 'ws://localhost:19801/ws';
+    const API_BASE_URL = 'http://localhost:19800/api';
     let ws = null;
     let reconnectDelay = 1000;
     const maxDelay = 30000;
+
+    // URLパラメータからセットリストIDを取得
+    function getSetlistIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('setlist_id') || params.get('id');
+    }
+
+    // HTTP APIからセットリストを取得して表示
+    async function fetchAndDisplaySetlist() {
+      const setlistId = getSetlistIdFromUrl();
+      if (!setlistId) {
+        console.log('No setlist_id in URL, waiting for WebSocket updates');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/setlist/${setlistId}`);
+        if (!response.ok) {
+          console.error('Failed to fetch setlist:', response.status);
+          return;
+        }
+        const data = await response.json();
+        console.log('Fetched setlist data:', data);
+        updateSetlist(data);
+      } catch (e) {
+        console.error('Error fetching setlist:', e);
+      }
+    }
 
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
@@ -142,6 +171,8 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
+        // 接続成功後、HTTP APIで初期データを取得
+        fetchAndDisplaySetlist();
       };
 
       ws.onmessage = (event) => {

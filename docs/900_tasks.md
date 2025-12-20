@@ -485,9 +485,9 @@ T10-Bマージ後のレビューで指摘された追加修正項目
   - 参照: CLAUDE.md「セキュリティ」セクション
   - 備考: macOS=Keychain, Windows=Credential Manager, Linux=Secret Service API
 
-- [ ] **空文字列APIキーのバリデーション** (PR#15)
-  - `save_api_key`で空文字列のAPIキーを保存できてしまう
-  - 対応: 保存前にバリデーションを追加
+- [x] **空文字列APIキーのバリデーション** (PR#15, PR#19で対応済み)
+  - ~~`save_api_key`で空文字列のAPIキーを保存できてしまう~~
+  - 対応済み: `src-tauri/src/commands/keyring.rs:27-30`でバリデーション追加
 
 ### コード品質
 

@@ -24,6 +24,11 @@ use sqlx::Row;
 /// DBファイルは平文で保存されるため、セキュリティリスクがあります。
 #[tauri::command]
 pub async fn save_api_key(api_key: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    // 空文字列のバリデーション
+    if api_key.trim().is_empty() {
+        return Err("API key cannot be empty".to_string());
+    }
+
     let pool = &state.db;
     let now = chrono::Utc::now().to_rfc3339();
     

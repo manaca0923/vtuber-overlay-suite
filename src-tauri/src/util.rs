@@ -13,14 +13,17 @@ pub fn mask_api_key(api_key: &str) -> String {
         return "***".to_string();
     }
 
-    let len = api_key.len();
-    if len <= 8 {
+    // 文字数（バイト数ではなく）で判定
+    let char_count = api_key.chars().count();
+    if char_count <= 8 {
         // 短いキーは全体をマスク
         return "***".to_string();
     }
 
-    let prefix = &api_key[..4];
-    let suffix = &api_key[len - 4..];
+    // UTF-8安全な文字単位での分割
+    let chars: Vec<char> = api_key.chars().collect();
+    let prefix: String = chars.iter().take(4).collect();
+    let suffix: String = chars.iter().skip(char_count - 4).collect();
     format!("{}***{}", prefix, suffix)
 }
 
@@ -47,5 +50,14 @@ mod tests {
 
         // 9文字（マスキング開始）
         assert_eq!(mask_api_key("123456789"), "1234***6789");
+
+        // 非ASCII文字（マルチバイト文字）- 9文字
+        assert_eq!(mask_api_key("こんにちは世界です"), "こんにち***世界です");
+
+        // 絵文字 - 9文字（注: 一部の絵文字は複数のコードポイントを持つ可能性あり）
+        assert_eq!(mask_api_key("🔑🔐🔓🔒🔏🔎🔍🔐🔑"), "🔑🔐🔓🔒***🔎🔍🔐🔑");
+
+        // 混在（ASCII + 日本語）- 10文字
+        assert_eq!(mask_api_key("APIキー12345"), "APIキ***2345");
     }
 }

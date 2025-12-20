@@ -77,6 +77,7 @@ export function CommentControlPanel({
   const [loading, setLoading] = useState(false);
   const [lastEvent, setLastEvent] = useState<string>('');
   const isMountedRef = useRef(true);
+  const unlistenRef = useRef<UnlistenFn | null>(null);
 
   // コンポーネントのマウント状態を管理
   useEffect(() => {
@@ -88,11 +89,9 @@ export function CommentControlPanel({
 
   // ポーリング状態を監視
   useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-
     async function setupListener() {
       try {
-        unlisten = await listen<PollingEventType>('polling-event', (event) => {
+        unlistenRef.current = await listen<PollingEventType>('polling-event', (event) => {
           if (!isMountedRef.current) return;
 
           const payload = event.payload;
@@ -146,9 +145,7 @@ export function CommentControlPanel({
     setupListener();
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      unlistenRef.current?.();
     };
   }, [liveChatId]);
 

@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
 import { CommentControlPanel } from './CommentControlPanel';
 import type { ChatMessage } from '../types/chat';
+import { handleTauriError } from '../utils/errorMessages';
 
 export function ApiKeySetup() {
   const [apiKey, setApiKey] = useState('');
@@ -75,29 +76,7 @@ export function ApiKeySetup() {
         setError('APIキーが無効です');
       }
     } catch (err) {
-      // Tauri 2.0のエラーハンドリング
-      let errorMessage = 'APIキーの検証に失敗しました';
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === 'string') {
-        errorMessage = err;
-      } else if (err && typeof err === 'object' && 'message' in err) {
-        errorMessage = String((err as any).message);
-      } else {
-        errorMessage = String(err);
-      }
-      
-      // エラーメッセージをユーザーフレンドリーに変換
-      if (errorMessage.includes('API key is invalid') || errorMessage.includes('InvalidApiKey')) {
-        errorMessage = 'APIキーが無効です。正しいAPIキーを入力してください。';
-      } else if (errorMessage.includes('Quota exceeded')) {
-        errorMessage = 'APIクォータが超過しています。明日再度お試しください。';
-      } else if (errorMessage.includes('Rate limit exceeded')) {
-        errorMessage = 'レート制限に達しました。しばらく待ってから再度お試しください。';
-      } else if (errorMessage.includes('HTTP request failed')) {
-        errorMessage = 'ネットワークエラーが発生しました。インターネット接続を確認してください。';
-      }
-      
+      const errorMessage = handleTauriError(err, 'APIキーの検証に失敗しました');
       setError(errorMessage);
       console.error('API key validation error:', err);
     } finally {

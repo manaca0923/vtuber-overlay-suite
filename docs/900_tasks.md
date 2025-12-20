@@ -297,7 +297,7 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 
 ## T10-C: 追加レビュー指摘対応
 **優先度**: P0 | **見積**: 1日 | **依存**: T10-B
-**ステータス**: 🔄 **進行中**
+**ステータス**: ✅ **完了**
 
 ### 背景
 T10-Bマージ後のレビューで指摘された追加修正項目
@@ -305,30 +305,42 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 ### チェックリスト
 
 #### 1. pollingIntervalMillis順守の修正（高優先）
-- [ ] poller.rsでレスポンス受信後の新しい間隔でsleepするよう修正
-- [ ] 状態更新後に最新のpolling_intervalを取得して使用
+- [x] poller.rsでレスポンス受信後の新しい間隔でsleepするよう修正
+- [x] 状態更新後に最新のpolling_intervalを取得して使用
 
 #### 2. ウィザード入力値の引き継ぎ・保存（高優先）
-- [ ] ウィザードで入力したvideoId/liveChatIdをメイン画面に引き継ぎ
-- [ ] 設定をDBまたはsettingsに永続化
-- [ ] App.tsxでwizardDataを受け取り、ApiKeySetupに渡す
+- [x] ウィザードで入力したvideoId/liveChatIdをメイン画面に引き継ぎ
+- [x] 設定をDBまたはsettingsに永続化（save_wizard_settings/load_wizard_settingsコマンド）
+- [x] ApiKeySetupで保存済み設定を自動読み込み
 
 #### 3. WebSocket接続時のセットリスト初期送信（高優先）
-- [ ] websocket.rsで接続完了時に最新セットリストを送信
-- [ ] HTTP取得失敗時のフォールバック対応
+- [x] websocket.rsで接続完了時に最新セットリストを送信
+- [x] DBアクセスをピア登録前に実行（タイミング改善）
+- 注: HTTP取得失敗時はHTTP APIで取得可能（既存実装）
 
 #### 4. polling_interval_millisの永続化（中優先）
-- [ ] save_polling_stateでpolling_interval_millisを保存
-- [ ] load_polling_stateでpolling_interval_millisを復元
-- [ ] state.rsのwith_saved_stateでpolling_interval_millisを受け取る
+- [x] save_polling_stateでpolling_interval_millisを保存
+- [x] load_polling_stateでpolling_interval_millisを復元
+- [x] state.rsのwith_saved_stateでpolling_interval_millisを受け取る
+- [x] 後方互換性コメント追加
+
+#### 5. 追加改善（レビュー推奨）
+- [x] Wizard.tsx: 設定保存失敗時に2秒間警告を表示してから完了
+- [x] websocket.rs: 初期送信ログをdebugレベルに変更
+- [x] state.rs: with_saved_stateのユニットテスト追加（3ケース）
+- [x] websocket.rs: 空行重複修正
+- [x] PollingStateData: polling_interval_millisの後方互換性コメント追加
+
+### 設計判断
+- **WebSocket setlist_id競合**: 現時点ではsetlist_id指定オーバーレイは未実装のため、最新セットリスト固定で問題なし。将来実装時はSetlistUpdatePayloadにsetlist_idを含めてクライアントでフィルタする設計を検討。
 
 ### 成果物
 - `src-tauri/src/youtube/poller.rs` - pollingIntervalMillis順守修正
-- `src-tauri/src/youtube/state.rs` - polling_interval_millis復元対応
-- `src-tauri/src/commands/youtube.rs` - 永続化項目追加
-- `src-tauri/src/server/websocket.rs` - 接続時初期データ送信
-- `src/components/wizard/Wizard.tsx` - 入力値引き継ぎ
-- `src/App.tsx` - wizardData受け渡し
+- `src-tauri/src/youtube/state.rs` - polling_interval_millis復元対応、テスト追加
+- `src-tauri/src/commands/youtube.rs` - 永続化項目追加、wizard_settingsコマンド追加
+- `src-tauri/src/server/websocket.rs` - 接続時初期データ送信、タイミング改善
+- `src/components/wizard/Wizard.tsx` - 入力値保存、警告表示改善
+- `src/components/ApiKeySetup.tsx` - wizard設定の自動読み込み
 
 ---
 

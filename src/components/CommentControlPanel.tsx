@@ -24,7 +24,14 @@ type PollingEventType =
   | { type: 'started'; live_chat_id: string }
   | { type: 'stopped'; reason: string }
   | { type: 'messages'; messages: ChatMessage[] }
-  | { type: 'stateUpdate'; quota_used: number; remaining_quota: number; poll_count: number }
+  | {
+      type: 'stateUpdate';
+      quota_used: number;
+      remaining_quota: number;
+      poll_count: number;
+      next_page_token: string | null;
+      polling_interval_millis: number;
+    }
   | { type: 'error'; message: string; retrying: boolean }
   | { type: 'quotaExceeded' }
   | { type: 'streamEnded' };
@@ -103,10 +110,10 @@ export function CommentControlPanel({
               setLastEvent(`${payload.messages.length}件のコメントを取得`);
               break;
             case 'stateUpdate':
-              // Rust側のStateUpdateイベントからPollingStateを構築
+              // Rust側のStateUpdateイベントからPollingStateを構築（全フィールドを更新）
               setPollingState((prev) => ({
-                next_page_token: prev?.next_page_token ?? null,
-                polling_interval_millis: prev?.polling_interval_millis ?? 5000,
+                next_page_token: payload.next_page_token,
+                polling_interval_millis: payload.polling_interval_millis,
                 live_chat_id: prev?.live_chat_id ?? liveChatId,
                 quota_used: payload.quota_used,
                 poll_count: payload.poll_count,
@@ -230,13 +237,17 @@ export function CommentControlPanel({
     setLoading(true);
 
     try {
-      // 現在の状態を保存してから停止
-      if (pollingState && liveChatId) {
-        await invoke('save_polling_state', {
-          live_chat_id: liveChatId,
-          next_page_token: pollingState.next_page_token,
-          quota_used: pollingState.quota_used,
-        });
+      // 停止前に最新の状態を取得して保存
+      // （stateUpdateイベントは10回に1回しか送信されないため、get_polling_stateで最新を取得）
+      if (liveChatId) {
+        const latestState = await invoke<PollingState | null>('get_polling_state');
+        if (latestState) {
+          await invoke('save_polling_state', {
+            live_chat_id: liveChatId,
+            next_page_token: latestState.next_page_token,
+            quota_used: latestState.quota_used,
+          });
+        }
       }
 
       await invoke('stop_polling');
@@ -253,7 +264,7 @@ export function CommentControlPanel({
         setLoading(false);
       }
     }
-  }, [pollingState, liveChatId]);
+  }, [liveChatId]);
 
   // クォータ情報を計算
   const estimatedRemainingQuota = pollingState

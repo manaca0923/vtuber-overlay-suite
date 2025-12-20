@@ -43,6 +43,8 @@ pub enum PollingEvent {
         quota_used: u64,
         remaining_quota: i64,
         poll_count: u64,
+        next_page_token: Option<String>,
+        polling_interval_millis: u64,
     },
 }
 
@@ -273,6 +275,8 @@ impl ChatPoller {
                                         quota_used: s.quota_used,
                                         remaining_quota: s.estimated_remaining_quota(),
                                         poll_count: s.poll_count,
+                                        next_page_token: s.next_page_token.clone(),
+                                        polling_interval_millis: s.polling_interval_millis,
                                     });
                                 }
                             }

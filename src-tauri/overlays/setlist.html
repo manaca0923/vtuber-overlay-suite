@@ -155,14 +155,18 @@
     // HTTP APIからセットリストを取得して表示
     async function fetchAndDisplaySetlist() {
       const setlistId = getSetlistIdFromUrl();
-      if (!setlistId) {
-        console.log('No setlist_id in URL, waiting for WebSocket updates');
-        return;
-      }
+      // setlist_idがURLにない場合は最新のセットリストを取得
+      const apiUrl = setlistId
+        ? `${API_BASE_URL}/setlist/${setlistId}`
+        : `${API_BASE_URL}/setlist/latest`;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/setlist/${setlistId}`);
+        const response = await fetch(apiUrl);
         if (!response.ok) {
+          if (response.status === 404) {
+            console.log('No setlist found, waiting for WebSocket updates');
+            return;
+          }
           console.error('Failed to fetch setlist:', response.status);
           showError('セットリストの取得に失敗しました');
           return;

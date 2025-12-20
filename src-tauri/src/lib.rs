@@ -1,6 +1,8 @@
 mod commands;
 mod db;
+mod keyring;
 mod server;
+pub mod util; // doctestのためpubにする
 mod youtube;
 
 use sqlx::SqlitePool;
@@ -95,6 +97,10 @@ pub fn run() {
       commands::setlist::next_song,
       commands::setlist::previous_song,
       commands::setlist::reorder_setlist_songs,
+      commands::keyring::save_api_key,
+      commands::keyring::get_api_key,
+      commands::keyring::delete_api_key,
+      commands::keyring::has_api_key,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

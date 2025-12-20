@@ -257,17 +257,24 @@
 
 ## T11: 認証情報保護
 **優先度**: P1 | **見積**: 2日 | **依存**: T02
+**ステータス**: ✅ **完了**
 
 ### チェックリスト
-- [ ] keyring クレート導入
-- [ ] Windows: Credential Manager 連携
-- [ ] macOS: Keychain 連携
-- [ ] APIキー保存/取得/削除
-- [ ] ログマスキング実装
+- [x] keyring クレート導入
+- [x] Windows: Credential Manager 連携
+- [x] macOS: Keychain 連携
+- [x] APIキー保存/取得/削除
+- [x] ログマスキング実装
 
 ### テスト項目
-- [ ] APIキーが平文で保存されない
-- [ ] ログにAPIキーが出力されない
+- [x] APIキーが平文で保存されない
+- [x] ログにAPIキーが出力されない
+
+### 成果物
+- `src-tauri/src/keyring.rs` - セキュアストレージ抽象化レイヤー
+- `src-tauri/src/commands/keyring.rs` - APIキー保存/取得/削除コマンド
+- `src-tauri/src/util.rs` - ログマスキングユーティリティ
+- `src-tauri/src/youtube/client.rs` - YouTubeClientのDebugトレイトでAPIキーマスキング
 
 ---
 
@@ -322,7 +329,7 @@
 | T08 | ⬜ 未着手 | - |
 | T09 | ⬜ 未着手 | - |
 | T10 | ⬜ 未着手 | - |
-| T11 | ⬜ 未着手 | - |
+| T11 | ✅ 完了 | 2025-12-20 |
 | T12 | ⬜ 未着手 | - |
 | T13 | ⬜ 未着手 | - |
 

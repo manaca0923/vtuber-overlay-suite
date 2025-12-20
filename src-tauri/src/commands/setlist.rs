@@ -802,6 +802,7 @@ async fn broadcast_setlist_update_internal(
 
     // SetlistUpdatePayload に変換
     let payload = SetlistUpdatePayload {
+        setlist_id: setlist_id.clone(),
         current_index: setlist_data.current_index as i32,
         songs: setlist_data
             .songs

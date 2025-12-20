@@ -295,6 +295,65 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 
 ---
 
+## T10-C: 追加レビュー指摘対応
+**優先度**: P0 | **見積**: 1日 | **依存**: T10-B
+**ステータス**: ✅ **完了**
+
+### 背景
+T10-Bマージ後のレビューで指摘された追加修正項目
+
+### チェックリスト
+
+#### 1. pollingIntervalMillis順守の修正（高優先）
+- [x] poller.rsでレスポンス受信後の新しい間隔でsleepするよう修正
+- [x] 状態更新後に最新のpolling_intervalを取得して使用
+
+#### 2. ウィザード入力値の引き継ぎ・保存（高優先）
+- [x] ウィザードで入力したvideoId/liveChatIdをメイン画面に引き継ぎ
+- [x] 設定をDBまたはsettingsに永続化（save_wizard_settings/load_wizard_settingsコマンド）
+- [x] ApiKeySetupで保存済み設定を自動読み込み
+
+#### 3. WebSocket接続時のセットリスト初期送信（高優先）
+- [x] websocket.rsで接続完了時に最新セットリストを送信
+- [x] DBアクセスをピア登録前に実行（タイミング改善）
+- 注: HTTP取得失敗時はHTTP APIで取得可能（既存実装）
+
+#### 4. polling_interval_millisの永続化（中優先）
+- [x] save_polling_stateでpolling_interval_millisを保存
+- [x] load_polling_stateでpolling_interval_millisを復元
+- [x] state.rsのwith_saved_stateでpolling_interval_millisを受け取る
+- [x] 後方互換性コメント追加
+
+#### 5. 追加改善（レビュー推奨）
+- [x] Wizard.tsx: 設定保存失敗時に2秒間警告を表示してから完了
+- [x] websocket.rs: 初期送信ログをdebugレベルに変更
+- [x] state.rs: with_saved_stateのユニットテスト追加（3ケース）
+- [x] websocket.rs: 空行重複修正
+- [x] PollingStateData: polling_interval_millisの後方互換性コメント追加
+- [x] websocket.rs: state.read()のロック取得を効率化（1回に統合）
+
+#### 6. setlist_id指定オーバーレイのWS競合修正
+- [x] SetlistUpdatePayloadにsetlist_idフィールドを追加
+- [x] broadcast_setlist_update_internalでsetlist_idをペイロードに含める
+- [x] fetch_latest_setlist_messageでsetlist_idをペイロードに含める
+- [x] setlist.htmlでWS受信時にsetlist_idでフィルタリング
+
+### 設計判断
+- **WebSocket setlist_id競合**: 解決済み。SetlistUpdatePayloadにsetlist_idを含め、オーバーレイ側でフィルタリングを実装。URLパラメータでsetlist_idを指定したオーバーレイは該当セットリストの更新のみを受け付け、指定なし（最新モード）の場合は全ての更新を受け入れる。
+
+### 成果物
+- `src-tauri/src/youtube/poller.rs` - pollingIntervalMillis順守修正
+- `src-tauri/src/youtube/state.rs` - polling_interval_millis復元対応、テスト追加
+- `src-tauri/src/commands/youtube.rs` - 永続化項目追加、wizard_settingsコマンド追加
+- `src-tauri/src/server/websocket.rs` - 接続時初期データ送信、タイミング改善、ロック効率化
+- `src-tauri/src/server/types.rs` - SetlistUpdatePayloadにsetlist_id追加
+- `src-tauri/src/commands/setlist.rs` - broadcast時にsetlist_id含める
+- `src-tauri/overlays/setlist.html` - WS受信時setlist_idフィルタリング
+- `src/components/wizard/Wizard.tsx` - 入力値保存、警告表示改善
+- `src/components/ApiKeySetup.tsx` - wizard設定の自動読み込み
+
+---
+
 ## T10: 初回設定ウィザード + テストモード
 **優先度**: P1 | **見積**: 5日 | **依存**: T02, T05
 **ステータス**: ✅ **完了**
@@ -403,6 +462,7 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 | T09 | ⬜ 未着手 | - |
 | T10 | ✅ 完了 | 2025-12-20（Phase 1-4すべて完了） |
 | T10-B | ✅ 完了 | 2025-12-20（レビュー指摘対応完了） |
+| T10-C | ✅ 完了 | 2025-12-20（追加レビュー指摘対応） |
 | T11 | ✅ 完了 | 2025-12-20 |
 | T12 | ⬜ 未着手 | - |
 | T13 | ⬜ 未着手 | - |

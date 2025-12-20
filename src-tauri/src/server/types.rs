@@ -39,6 +39,7 @@ pub struct CommentRemovePayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetlistUpdatePayload {
+    pub setlist_id: String,
     pub current_index: i32,
     pub songs: Vec<SongItem>,
 }

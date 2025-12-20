@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import WizardNavigation from './WizardNavigation';
 import WizardStep1 from './WizardStep1';
 import WizardStep2 from './WizardStep2';
@@ -29,6 +30,7 @@ export default function Wizard({ onComplete }: WizardProps) {
     setupComplete: false,
   });
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
 
   const canProceedToNextStep = (): boolean => {
     switch (currentStep) {
@@ -59,7 +61,21 @@ export default function Wizard({ onComplete }: WizardProps) {
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    // ウィザード設定を保存
+    if (wizardData.videoId && wizardData.liveChatId) {
+      try {
+        await invoke('save_wizard_settings', {
+          video_id: wizardData.videoId,
+          live_chat_id: wizardData.liveChatId,
+        });
+      } catch (err) {
+        console.error('Failed to save wizard settings:', err);
+        // 保存失敗時は警告を表示し、2秒後に完了
+        setWarning('設定の保存に失敗しましたが、セットアップは完了します。次回起動時に再設定が必要な場合があります。');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
     setWizardData({ ...wizardData, setupComplete: true });
     onComplete();
   };
@@ -119,6 +135,13 @@ export default function Wizard({ onComplete }: WizardProps) {
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
+          </div>
+        )}
+
+        {/* 警告表示 */}
+        {warning && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+            {warning}
           </div>
         )}
 

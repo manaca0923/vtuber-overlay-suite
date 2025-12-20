@@ -105,6 +105,8 @@ pub async fn get_chat_messages(
 pub async fn start_polling(
     api_key: String,
     live_chat_id: String,
+    next_page_token: Option<String>,
+    quota_used: Option<u64>,
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
@@ -158,7 +160,12 @@ pub async fn start_polling(
 
     // ポーリングを開始（ロックの外で）
     poller
-        .start(live_chat_id, event_callback)
+        .start_with_state(
+            live_chat_id,
+            next_page_token,
+            quota_used.unwrap_or(0),
+            event_callback,
+        )
         .await
         .map_err(|e| e.to_string())?;
 
@@ -231,6 +238,77 @@ pub async fn is_polling_running(state: tauri::State<'_, AppState>) -> Result<boo
     } else {
         Ok(false)
     }
+}
+
+/// ポーリング状態をDBに保存
+#[tauri::command]
+pub async fn save_polling_state(
+    live_chat_id: String,
+    next_page_token: Option<String>,
+    quota_used: u64,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // JSON形式でポーリング状態を保存
+    let polling_data = serde_json::json!({
+        "live_chat_id": live_chat_id,
+        "next_page_token": next_page_token,
+        "quota_used": quota_used,
+        "saved_at": now
+    });
+    let polling_data_str =
+        serde_json::to_string(&polling_data).map_err(|e| format!("JSON serialize error: {}", e))?;
+
+    // settingsテーブルにUPSERT
+    sqlx::query!(
+        r#"
+        INSERT INTO settings (key, value, updated_at)
+        VALUES ('polling_state', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        "#,
+        polling_data_str,
+        now
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+
+    log::info!("Saved polling state for live_chat_id: {}", live_chat_id);
+    Ok(())
+}
+
+/// 保存されたポーリング状態をDBから読み込む
+#[tauri::command]
+pub async fn load_polling_state(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<PollingStateData>, String> {
+    let pool = &state.db;
+
+    let result: Option<String> = sqlx::query_scalar(
+        "SELECT value FROM settings WHERE key = 'polling_state'"
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+
+    if let Some(json_str) = result {
+        let data: PollingStateData =
+            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+        Ok(Some(data))
+    } else {
+        Ok(None)
+    }
+}
+
+/// 保存されたポーリング状態のデータ構造
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PollingStateData {
+    pub live_chat_id: String,
+    pub next_page_token: Option<String>,
+    pub quota_used: u64,
+    pub saved_at: String,
 }
 
 /// テストモード: ダミーコメントを送信

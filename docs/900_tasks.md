@@ -237,6 +237,64 @@
 
 ---
 
+## T10-B: コードレビュー指摘対応（追加タスク）
+**優先度**: P0 | **見積**: 2日 | **依存**: T10
+**ステータス**: ✅ **完了**
+
+### 背景
+T10完了後のコードレビューで指摘された未完成箇所の対応
+
+### チェックリスト
+
+#### 1. WebSocket配信経路の接続（高優先）
+- [x] ポーリング開始/停止UI（CommentControlPanel.tsx）を実装
+- [x] フロントからstart_polling/stop_pollingを呼び出す
+- [x] ポーリング状態の表示（実行中/停止中）
+
+#### 2. ポーリング状態/クォータの可視化（高優先）
+- [x] フロントでpolling-eventを購読
+- [x] クォータ残量の推定表示UI
+- [x] エラー通知の可視化
+
+#### 3. セットリストオーバーレイの初期同期（高優先）
+- [x] WebSocket接続時に初期データを送信（broadcast_setlist_updateコマンド追加）
+- [x] currentIndex == -1時のオーバーレイ表示を修正
+- [x] HTTP API経由での初期データ取得（`/api/setlist/{id}`エンドポイント追加）
+- [x] オーバーレイでURLパラメータからsetlist_idを取得し自動フェッチ
+
+#### 4. APIキー保存の再利用（高優先）
+- [x] メイン画面起動時に保存済みAPIキーを読み込む
+- [x] 自動入力でそのままポーリング開始可能に
+
+#### 5. メッセージ種別の対応（中優先）
+- [x] superStickerの詳細（ステッカーID取得）
+- [x] membershipのレベル取得
+- [x] membershipGiftのギフト数取得
+- [x] オーバーレイ側の表示実装
+
+#### 6. ページネーション状態の永続化（中優先）
+- [x] nextPageTokenをDBに保存
+- [x] クォータ使用量の永続化
+- [x] アプリ再起動時の復元処理（「続きから開始」ボタン）
+- [x] StateUpdateイベントにnext_page_tokenとpolling_interval_millisを追加
+- [x] 停止時に最新のポーリング状態を取得して保存（10回に1回のstateUpdate問題を解消）
+
+#### 7. セットリストオーバーレイ初期表示改善（追加修正）
+- [x] `/api/setlist/latest`エンドポイント追加（setlist_id未指定時に最新セットリストを返す）
+- [x] オーバーレイでsetlist_id未指定時も自動で最新セットリストを取得
+
+### 成果物
+- `src/components/CommentControlPanel.tsx` - コメント制御パネル（ポーリング制御、状態表示、クォータ可視化）
+- `src-tauri/src/commands/youtube.rs` - save_polling_state/load_polling_stateコマンド追加
+- `src-tauri/src/youtube/poller.rs` - start_with_stateメソッド追加
+- `src-tauri/src/youtube/state.rs` - with_saved_stateコンストラクタ追加
+- `src-tauri/overlays/comment.html` - 全メッセージ種別のスタイル・表示対応
+- `src-tauri/overlays/setlist.html` - currentIndex === -1時の表示修正、HTTP API初期フェッチ追加
+- `src-tauri/src/commands/setlist.rs` - broadcast_setlist_updateコマンド追加
+- `src-tauri/src/server/http.rs` - セットリスト取得API（`/api/setlist/{id}`）追加
+
+---
+
 ## T10: 初回設定ウィザード + テストモード
 **優先度**: P1 | **見積**: 5日 | **依存**: T02, T05
 **ステータス**: ✅ **完了**
@@ -344,6 +402,7 @@
 | T08 | ⬜ 未着手 | - |
 | T09 | ⬜ 未着手 | - |
 | T10 | ✅ 完了 | 2025-12-20（Phase 1-4すべて完了） |
+| T10-B | ✅ 完了 | 2025-12-20（レビュー指摘対応完了） |
 | T11 | ✅ 完了 | 2025-12-20 |
 | T12 | ⬜ 未着手 | - |
 | T13 | ⬜ 未着手 | - |

@@ -28,6 +28,21 @@ impl PollingState {
         }
     }
 
+    /// 保存された状態から復元
+    pub fn with_saved_state(
+        live_chat_id: String,
+        next_page_token: Option<String>,
+        quota_used: u64,
+    ) -> Self {
+        Self {
+            next_page_token,
+            polling_interval_millis: 5000,
+            live_chat_id,
+            quota_used,
+            poll_count: 0,
+        }
+    }
+
     /// ポーリング間隔をDurationとして取得
     ///
     /// 最低5秒を保証

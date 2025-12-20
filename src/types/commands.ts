@@ -45,6 +45,9 @@ export const previousSong = (setlistId: string) =>
 export const reorderSetlistSongs = (setlistId: string, setlistSongIds: string[]) =>
   invoke<void>('reorder_setlist_songs', { setlist_id: setlistId, setlist_song_ids: setlistSongIds });
 
+export const broadcastSetlistUpdate = (setlistId: string) =>
+  invoke<void>('broadcast_setlist_update', { setlist_id: setlistId });
+
 // Test mode commands
 export const sendTestComment = (commentText: string, authorName: string) =>
   invoke<void>('send_test_comment', { comment_text: commentText, author_name: authorName });

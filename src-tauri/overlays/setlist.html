@@ -132,9 +132,53 @@
 
   <script>
     const WS_URL = 'ws://localhost:19801/ws';
+    const API_BASE_URL = 'http://localhost:19800/api';
     let ws = null;
     let reconnectDelay = 1000;
     const maxDelay = 30000;
+
+    // URLパラメータからセットリストIDを取得
+    function getSetlistIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('setlist_id') || params.get('id');
+    }
+
+    // エラーメッセージを表示
+    function showError(message) {
+      const currentSong = document.getElementById('current-song');
+      if (currentSong) {
+        currentSong.querySelector('.title').textContent = message;
+        currentSong.querySelector('.artist').textContent = '';
+      }
+    }
+
+    // HTTP APIからセットリストを取得して表示
+    async function fetchAndDisplaySetlist() {
+      const setlistId = getSetlistIdFromUrl();
+      // setlist_idがURLにない場合は最新のセットリストを取得
+      const apiUrl = setlistId
+        ? `${API_BASE_URL}/setlist/${setlistId}`
+        : `${API_BASE_URL}/setlist/latest`;
+
+      try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.log('No setlist found, waiting for WebSocket updates');
+            return;
+          }
+          console.error('Failed to fetch setlist:', response.status);
+          showError('セットリストの取得に失敗しました');
+          return;
+        }
+        const data = await response.json();
+        console.log('Fetched setlist data:', data);
+        updateSetlist(data);
+      } catch (e) {
+        console.error('Error fetching setlist:', e);
+        showError('接続エラーが発生しました');
+      }
+    }
 
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
@@ -142,6 +186,8 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
+        // 接続成功後、HTTP APIで初期データを取得
+        fetchAndDisplaySetlist();
       };
 
       ws.onmessage = (event) => {
@@ -179,6 +225,30 @@
       const currentSong = document.getElementById('current-song');
       const nextSong = document.getElementById('next-song');
 
+      // 曲がない場合
+      if (!songs || songs.length === 0) {
+        prevSong.style.display = 'none';
+        currentSong.querySelector('.title').textContent = '曲がありません';
+        currentSong.querySelector('.artist').textContent = '';
+        nextSong.style.display = 'none';
+        return;
+      }
+
+      // currentIndex === -1 の場合（曲が選択されていない）
+      if (currentIndex < 0 || currentIndex >= songs.length) {
+        prevSong.style.display = 'none';
+        currentSong.querySelector('.title').textContent = '配信準備中...';
+        currentSong.querySelector('.artist').textContent = '';
+        // 次の曲として最初の曲を表示
+        if (songs.length > 0) {
+          nextSong.querySelector('.title').textContent = songs[0].title;
+          nextSong.style.display = 'flex';
+        } else {
+          nextSong.style.display = 'none';
+        }
+        return;
+      }
+
       // 前の曲
       if (currentIndex > 0 && songs[currentIndex - 1]) {
         const song = songs[currentIndex - 1];
@@ -189,18 +259,16 @@
       }
 
       // 現在の曲
-      if (songs[currentIndex]) {
-        const song = songs[currentIndex];
-        currentSong.querySelector('.title').textContent = song.title;
-        currentSong.querySelector('.artist').textContent = song.artist;
-        currentSong.classList.add('entering');
-        setTimeout(() => currentSong.classList.remove('entering'), 500);
-      }
+      const song = songs[currentIndex];
+      currentSong.querySelector('.title').textContent = song.title;
+      currentSong.querySelector('.artist').textContent = song.artist || '';
+      currentSong.classList.add('entering');
+      setTimeout(() => currentSong.classList.remove('entering'), 500);
 
       // 次の曲
       if (currentIndex < songs.length - 1 && songs[currentIndex + 1]) {
-        const song = songs[currentIndex + 1];
-        nextSong.querySelector('.title').textContent = song.title;
+        const nextSongData = songs[currentIndex + 1];
+        nextSong.querySelector('.title').textContent = nextSongData.title;
         nextSong.style.display = 'flex';
       } else {
         nextSong.style.display = 'none';

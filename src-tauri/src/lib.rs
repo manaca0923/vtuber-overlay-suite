@@ -40,6 +40,9 @@ pub fn run() {
     })
   };
 
+  // HTTPサーバー用にdb_poolをclone
+  let db_pool_for_http = db_pool.clone();
+
   tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .setup(move |app| {
@@ -51,9 +54,10 @@ pub fn run() {
         )?;
       }
 
-      // HTTPサーバーを起動（Tauriのランタイム内で起動）
+      // HTTPサーバーを起動（DB接続付き）
+      let http_db = db_pool_for_http.clone();
       tokio::spawn(async move {
-        if let Err(e) = server::start_http_server().await {
+        if let Err(e) = server::start_http_server_with_db(http_db).await {
           log::error!("HTTP server error: {}", e);
         }
       });
@@ -85,6 +89,8 @@ pub fn run() {
       commands::youtube::get_quota_info,
       commands::youtube::is_polling_running,
       commands::youtube::send_test_comment,
+      commands::youtube::save_polling_state,
+      commands::youtube::load_polling_state,
       commands::setlist::get_songs,
       commands::setlist::create_song,
       commands::setlist::update_song,
@@ -99,6 +105,7 @@ pub fn run() {
       commands::setlist::next_song,
       commands::setlist::previous_song,
       commands::setlist::reorder_setlist_songs,
+      commands::setlist::broadcast_setlist_update,
       commands::keyring::save_api_key,
       commands::keyring::get_api_key,
       commands::keyring::delete_api_key,

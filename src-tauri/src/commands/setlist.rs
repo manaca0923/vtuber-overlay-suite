@@ -383,9 +383,11 @@ pub async fn get_setlist_with_songs(
         .unwrap_or(-1);
 
     // SetlistSongWithDetailsに変換
+    // Note: current_indexは配列のインデックス（0始まり連続）で、row.positionとは異なる
     let songs: Vec<SetlistSongWithDetails> = rows
         .into_iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(idx, row)| {
             let song = Song {
                 id: row.song_id,
                 title: row.title,
@@ -401,7 +403,7 @@ pub async fn get_setlist_with_songs(
             let status = if current_index == -1 {
                 SongStatus::Pending
             } else {
-                match row.position.cmp(&current_index) {
+                match (idx as i64).cmp(&current_index) {
                     Ordering::Less => SongStatus::Done,
                     Ordering::Equal => SongStatus::Current,
                     Ordering::Greater => SongStatus::Pending,
@@ -770,6 +772,18 @@ pub async fn reorder_setlist_songs(
     broadcast_setlist_update_internal(setlist_id, &state).await?;
 
     Ok(())
+}
+
+/// セットリスト更新をWebSocketでブロードキャスト（公開コマンド）
+///
+/// オーバーレイを後から開いた場合や、手動でセットリストを再送信したい場合に使用
+#[tauri::command]
+pub async fn broadcast_setlist_update(
+    setlist_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("Broadcasting setlist update for setlist: {}", setlist_id);
+    broadcast_setlist_update_internal(setlist_id, &state).await
 }
 
 /// セットリスト更新をWebSocketでブロードキャスト（内部関数）

@@ -32,9 +32,11 @@ function App() {
         if (hasKey) {
           // APIキーを読み込む
           try {
-            const key = await invoke<string>('get_api_key');
+            const key = await invoke<string | null>('get_api_key');
             console.log('API key loaded:', key ? 'yes' : 'no');
-            setApiKey(key);
+            if (key) {
+              setApiKey(key);
+            }
           } catch (err) {
             console.error('Failed to load API key:', err);
           }
@@ -78,8 +80,10 @@ function App() {
   const handleWizardComplete = async () => {
     // 設定を再読み込み
     try {
-      const key = await invoke<string>('get_api_key');
-      setApiKey(key);
+      const key = await invoke<string | null>('get_api_key');
+      if (key) {
+        setApiKey(key);
+      }
       const settings = await invoke<WizardSettings | null>('load_wizard_settings');
       console.log('Wizard completed, settings:', settings);
       if (settings) {

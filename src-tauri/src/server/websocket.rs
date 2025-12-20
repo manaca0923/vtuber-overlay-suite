@@ -68,6 +68,9 @@ impl WebSocketState {
     }
 
     /// 複数コメントをキャッシュに追加
+    ///
+    /// Note: 現在は未使用だが、バッチインポート機能で使用予定
+    #[allow(dead_code)]
     pub async fn add_comments_to_cache(&self, comments: Vec<ChatMessage>) {
         let mut cache = self.comment_cache.write().await;
         for comment in comments {

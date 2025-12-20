@@ -74,12 +74,20 @@
       font-weight: bold;
       text-shadow: var(--text-shadow);
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .artist {
       font-size: var(--font-size-artist);
       opacity: 0.8;
       text-shadow: var(--text-shadow);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     @keyframes slide-up {

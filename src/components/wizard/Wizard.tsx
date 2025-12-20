@@ -71,8 +71,9 @@ export default function Wizard({ onComplete }: WizardProps) {
         });
       } catch (err) {
         console.error('Failed to save wizard settings:', err);
-        // 保存失敗時も続行するが、警告を表示
-        setWarning('設定の保存に失敗しましたが、セットアップは完了しました。次回起動時に再設定が必要な場合があります。');
+        // 保存失敗時は警告を表示し、2秒後に完了
+        setWarning('設定の保存に失敗しましたが、セットアップは完了します。次回起動時に再設定が必要な場合があります。');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
     setWizardData({ ...wizardData, setupComplete: true });

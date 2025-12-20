@@ -118,13 +118,16 @@ async fn handle_connection(
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
 
+    // 先にセットリストを取得（DBアクセスが先、ピア登録後に送信）
+    let initial_message = fetch_latest_setlist_message(&db).await;
+
     // ピアIDを取得して登録
     let peer_id = state.read().await.next_id();
     state.read().await.add_peer(peer_id, tx.clone()).await;
 
     // 接続時に最新セットリストを送信
-    if let Some(initial_message) = fetch_latest_setlist_message(&db).await {
-        if let Ok(json) = serde_json::to_string(&initial_message) {
+    if let Some(msg) = initial_message {
+        if let Ok(json) = serde_json::to_string(&msg) {
             if tx.send(Message::Text(json)).is_err() {
                 log::warn!("Failed to send initial setlist to peer {}", peer_id);
             } else {
@@ -176,7 +179,6 @@ async fn handle_connection(
 
     log::info!("WebSocket connection closed for peer {}", peer_id);
 }
-
 
 /// 最新セットリストを取得してWsMessageを生成
 async fn fetch_latest_setlist_message(pool: &SqlitePool) -> Option<WsMessage> {

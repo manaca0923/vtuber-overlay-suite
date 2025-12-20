@@ -312,6 +312,10 @@ pub struct PollingStateData {
     pub live_chat_id: String,
     pub next_page_token: Option<String>,
     pub quota_used: u64,
+    /// ポーリング間隔（ミリ秒）
+    /// 後方互換性のためOption<u64>として定義。
+    /// v0.1.0以前の保存データにはこのフィールドが存在しないため、
+    /// デシリアライズ時にNoneとして扱う。
     #[serde(default)]
     pub polling_interval_millis: Option<u64>,
     pub saved_at: String,

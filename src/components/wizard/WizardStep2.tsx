@@ -22,7 +22,7 @@ export default function WizardStep2({
   const extractVideoId = (input: string): string => {
     // URLの場合は動画IDを抽出
     const urlMatch = input.match(/(?:watch\?v=|youtu\.be\/)([^&\s]+)/);
-    if (urlMatch) {
+    if (urlMatch && urlMatch[1]) {
       return urlMatch[1];
     }
     // そのまま動画IDの場合

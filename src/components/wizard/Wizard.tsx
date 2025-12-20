@@ -28,7 +28,6 @@ export default function Wizard({ onComplete }: WizardProps) {
     selectedTemplate: 'default',
     setupComplete: false,
   });
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const canProceedToNextStep = (): boolean => {
@@ -38,7 +37,7 @@ export default function Wizard({ onComplete }: WizardProps) {
       case 2:
         return wizardData.liveChatId !== null;
       case 3:
-        return wizardData.selectedTemplate !== '';
+        return wizardData.selectedTemplate === 'default';
       case 4:
         return true;
       default:
@@ -168,7 +167,6 @@ export default function Wizard({ onComplete }: WizardProps) {
           onNext={handleNext}
           onPrevious={handlePrevious}
           onComplete={handleComplete}
-          loading={loading}
         />
       </div>
     </div>

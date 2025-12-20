@@ -134,4 +134,48 @@ mod tests {
         assert_eq!(state.estimated_remaining_polls(), 1900); // 9500 / 5
     }
 
+    #[test]
+    fn test_with_saved_state() {
+        // 保存された状態から復元
+        let state = PollingState::with_saved_state(
+            "restored-chat-id".to_string(),
+            Some("saved-token".to_string()),
+            100,
+            Some(8000),
+        );
+
+        assert_eq!(state.live_chat_id, "restored-chat-id");
+        assert_eq!(state.next_page_token, Some("saved-token".to_string()));
+        assert_eq!(state.quota_used, 100);
+        assert_eq!(state.polling_interval_millis, 8000);
+        assert_eq!(state.poll_count, 0); // 復元時はリセット
+    }
+
+    #[test]
+    fn test_with_saved_state_default_polling_interval() {
+        // polling_interval_millisがNoneの場合はデフォルト5000
+        let state = PollingState::with_saved_state(
+            "test-chat-id".to_string(),
+            None,
+            0,
+            None,
+        );
+
+        assert_eq!(state.polling_interval_millis, 5000);
+    }
+
+    #[test]
+    fn test_with_saved_state_minimum_polling_interval() {
+        // polling_interval_millisが5000未満の場合は5000に補正
+        let state = PollingState::with_saved_state(
+            "test-chat-id".to_string(),
+            None,
+            0,
+            Some(1000), // 1秒を指定
+        );
+
+        // 最低5秒が保証される
+        assert_eq!(state.polling_interval_millis, 5000);
+        assert_eq!(state.polling_interval(), Duration::from_secs(5));
+    }
 }

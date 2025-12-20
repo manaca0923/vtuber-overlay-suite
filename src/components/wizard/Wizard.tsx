@@ -30,6 +30,7 @@ export default function Wizard({ onComplete }: WizardProps) {
     setupComplete: false,
   });
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
 
   const canProceedToNextStep = (): boolean => {
     switch (currentStep) {
@@ -70,6 +71,8 @@ export default function Wizard({ onComplete }: WizardProps) {
         });
       } catch (err) {
         console.error('Failed to save wizard settings:', err);
+        // 保存失敗時も続行するが、警告を表示
+        setWarning('設定の保存に失敗しましたが、セットアップは完了しました。次回起動時に再設定が必要な場合があります。');
       }
     }
     setWizardData({ ...wizardData, setupComplete: true });
@@ -131,6 +134,13 @@ export default function Wizard({ onComplete }: WizardProps) {
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
+          </div>
+        )}
+
+        {/* 警告表示 */}
+        {warning && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+            {warning}
           </div>
         )}
 

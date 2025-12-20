@@ -128,7 +128,7 @@ async fn handle_connection(
             if tx.send(Message::Text(json)).is_err() {
                 log::warn!("Failed to send initial setlist to peer {}", peer_id);
             } else {
-                log::info!("Sent initial setlist to peer {}", peer_id);
+                log::debug!("Sent initial setlist to peer {}", peer_id);
             }
         }
     }
@@ -258,6 +258,6 @@ async fn fetch_latest_setlist_message(pool: &SqlitePool) -> Option<WsMessage> {
         songs,
     };
 
-    log::info!("Generated initial setlist message with {} songs", payload.songs.len());
+    log::debug!("Generated initial setlist message with {} songs", payload.songs.len());
     Some(WsMessage::SetlistUpdate { payload })
 }

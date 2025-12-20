@@ -1,4 +1,5 @@
 use reqwest::Client;
+use std::fmt;
 
 use super::{errors::YouTubeError, types::*};
 
@@ -8,6 +9,15 @@ const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
 pub struct YouTubeClient {
     client: Client,
     api_key: String,
+}
+
+impl fmt::Debug for YouTubeClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("YouTubeClient")
+            .field("client", &"<Client>")
+            .field("api_key", &crate::util::mask_api_key(&self.api_key))
+            .finish()
+    }
 }
 
 impl YouTubeClient {

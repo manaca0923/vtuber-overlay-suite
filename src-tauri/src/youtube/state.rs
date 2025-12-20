@@ -33,10 +33,11 @@ impl PollingState {
         live_chat_id: String,
         next_page_token: Option<String>,
         quota_used: u64,
+        polling_interval_millis: Option<u64>,
     ) -> Self {
         Self {
             next_page_token,
-            polling_interval_millis: 5000,
+            polling_interval_millis: polling_interval_millis.unwrap_or(5000).max(5000),
             live_chat_id,
             quota_used,
             poll_count: 0,

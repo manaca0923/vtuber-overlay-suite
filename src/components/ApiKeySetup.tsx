@@ -15,24 +15,38 @@ export function ApiKeySetup() {
   const [showApiKey, setShowApiKey] = useState(false);
   const isMountedRef = useRef(true);
 
-  // 保存済みAPIキーを自動読み込み
+  // 保存済みAPIキーとウィザード設定を自動読み込み
   useEffect(() => {
-    async function loadSavedApiKey() {
+    async function loadSavedSettings() {
       try {
+        // APIキー読み込み
         const hasKey = await invoke<boolean>('has_api_key');
         if (hasKey) {
           const savedKey = await invoke<string>('get_api_key');
           if (isMountedRef.current && savedKey) {
             setApiKey(savedKey);
             setIsApiKeyLoaded(true);
-            setSuccess('保存済みAPIキーを読み込みました');
           }
         }
+
+        // ウィザード設定読み込み
+        const wizardSettings = await invoke<{
+          video_id: string;
+          live_chat_id: string;
+          saved_at: string;
+        } | null>('load_wizard_settings');
+        if (isMountedRef.current && wizardSettings) {
+          setVideoId(wizardSettings.video_id);
+          setLiveChatId(wizardSettings.live_chat_id);
+          setSuccess('保存済み設定を読み込みました');
+        } else if (isMountedRef.current && hasKey) {
+          setSuccess('保存済みAPIキーを読み込みました');
+        }
       } catch (err) {
-        console.error('Failed to load saved API key:', err);
+        console.error('Failed to load saved settings:', err);
       }
     }
-    loadSavedApiKey();
+    loadSavedSettings();
 
     return () => {
       isMountedRef.current = false;

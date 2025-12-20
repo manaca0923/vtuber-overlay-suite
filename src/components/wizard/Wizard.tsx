@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import WizardNavigation from './WizardNavigation';
 import WizardStep1 from './WizardStep1';
 import WizardStep2 from './WizardStep2';
@@ -59,7 +60,18 @@ export default function Wizard({ onComplete }: WizardProps) {
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    // ウィザード設定を保存
+    if (wizardData.videoId && wizardData.liveChatId) {
+      try {
+        await invoke('save_wizard_settings', {
+          video_id: wizardData.videoId,
+          live_chat_id: wizardData.liveChatId,
+        });
+      } catch (err) {
+        console.error('Failed to save wizard settings:', err);
+      }
+    }
     setWizardData({ ...wizardData, setupComplete: true });
     onComplete();
   };

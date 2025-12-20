@@ -295,6 +295,43 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 
 ---
 
+## T10-C: 追加レビュー指摘対応
+**優先度**: P0 | **見積**: 1日 | **依存**: T10-B
+**ステータス**: 🔄 **進行中**
+
+### 背景
+T10-Bマージ後のレビューで指摘された追加修正項目
+
+### チェックリスト
+
+#### 1. pollingIntervalMillis順守の修正（高優先）
+- [ ] poller.rsでレスポンス受信後の新しい間隔でsleepするよう修正
+- [ ] 状態更新後に最新のpolling_intervalを取得して使用
+
+#### 2. ウィザード入力値の引き継ぎ・保存（高優先）
+- [ ] ウィザードで入力したvideoId/liveChatIdをメイン画面に引き継ぎ
+- [ ] 設定をDBまたはsettingsに永続化
+- [ ] App.tsxでwizardDataを受け取り、ApiKeySetupに渡す
+
+#### 3. WebSocket接続時のセットリスト初期送信（高優先）
+- [ ] websocket.rsで接続完了時に最新セットリストを送信
+- [ ] HTTP取得失敗時のフォールバック対応
+
+#### 4. polling_interval_millisの永続化（中優先）
+- [ ] save_polling_stateでpolling_interval_millisを保存
+- [ ] load_polling_stateでpolling_interval_millisを復元
+- [ ] state.rsのwith_saved_stateでpolling_interval_millisを受け取る
+
+### 成果物
+- `src-tauri/src/youtube/poller.rs` - pollingIntervalMillis順守修正
+- `src-tauri/src/youtube/state.rs` - polling_interval_millis復元対応
+- `src-tauri/src/commands/youtube.rs` - 永続化項目追加
+- `src-tauri/src/server/websocket.rs` - 接続時初期データ送信
+- `src/components/wizard/Wizard.tsx` - 入力値引き継ぎ
+- `src/App.tsx` - wizardData受け渡し
+
+---
+
 ## T10: 初回設定ウィザード + テストモード
 **優先度**: P1 | **見積**: 5日 | **依存**: T02, T05
 **ステータス**: ✅ **完了**
@@ -403,6 +440,7 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 | T09 | ⬜ 未着手 | - |
 | T10 | ✅ 完了 | 2025-12-20（Phase 1-4すべて完了） |
 | T10-B | ✅ 完了 | 2025-12-20（レビュー指摘対応完了） |
+| T10-C | 🔄 進行中 | -（追加レビュー指摘対応） |
 | T11 | ✅ 完了 | 2025-12-20 |
 | T12 | ⬜ 未着手 | - |
 | T13 | ⬜ 未着手 | - |

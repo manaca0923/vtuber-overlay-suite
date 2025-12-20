@@ -42,6 +42,8 @@ pub fn run() {
 
   // HTTPサーバー用にdb_poolをclone
   let db_pool_for_http = db_pool.clone();
+  // WebSocketサーバー用にdb_poolをclone
+  let db_pool_for_ws = db_pool.clone();
 
   tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
@@ -65,8 +67,9 @@ pub fn run() {
       // WebSocketサーバーを起動（Tauriのランタイム内で起動）
       {
         let state_clone = Arc::clone(&server_state);
+        let ws_db = db_pool_for_ws.clone();
         tokio::spawn(async move {
-          if let Err(e) = server::start_websocket_server(state_clone).await {
+          if let Err(e) = server::start_websocket_server(state_clone, ws_db).await {
             log::error!("WebSocket server error: {}", e);
           }
         });
@@ -91,6 +94,8 @@ pub fn run() {
       commands::youtube::send_test_comment,
       commands::youtube::save_polling_state,
       commands::youtube::load_polling_state,
+      commands::youtube::save_wizard_settings,
+      commands::youtube::load_wizard_settings,
       commands::setlist::get_songs,
       commands::setlist::create_song,
       commands::setlist::update_song,

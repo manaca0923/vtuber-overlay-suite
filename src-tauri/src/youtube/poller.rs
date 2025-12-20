@@ -80,7 +80,7 @@ impl ChatPoller {
     where
         F: Fn(PollingEvent) + Send + Sync + 'static,
     {
-        self.start_with_state(live_chat_id, None, 0, event_callback)
+        self.start_with_state(live_chat_id, None, 0, None, event_callback)
             .await
     }
 
@@ -90,12 +90,14 @@ impl ChatPoller {
     /// - `live_chat_id`: ライブチャットID
     /// - `next_page_token`: 保存されたページトークン（オプション）
     /// - `quota_used`: 保存されたクォータ使用量
+    /// - `polling_interval_millis`: 保存されたポーリング間隔（オプション）
     /// - `event_callback`: イベント発生時に呼ばれるコールバック
     pub async fn start_with_state<F>(
         &self,
         live_chat_id: String,
         next_page_token: Option<String>,
         quota_used: u64,
+        polling_interval_millis: Option<u64>,
         event_callback: F,
     ) -> Result<(), YouTubeError>
     where
@@ -112,16 +114,18 @@ impl ChatPoller {
                 log::error!("Failed to acquire state lock: {}", e);
                 YouTubeError::ParseError("Failed to initialize poller state".to_string())
             })?;
-            if next_page_token.is_some() || quota_used > 0 {
+            if next_page_token.is_some() || quota_used > 0 || polling_interval_millis.is_some() {
                 log::info!(
-                    "Restoring polling state: page_token={:?}, quota_used={}",
+                    "Restoring polling state: page_token={:?}, quota_used={}, polling_interval_millis={:?}",
                     next_page_token,
-                    quota_used
+                    quota_used,
+                    polling_interval_millis
                 );
                 *state = Some(PollingState::with_saved_state(
                     live_chat_id.clone(),
                     next_page_token,
                     quota_used,
+                    polling_interval_millis,
                 ));
             } else {
                 *state = Some(PollingState::new(live_chat_id.clone()));
@@ -260,8 +264,8 @@ impl ChatPoller {
                         }
                     }
 
-                    // 状態を更新
-                    {
+                    // 状態を更新し、新しいポーリング間隔を取得
+                    let new_polling_interval = {
                         if let Ok(mut state_lock) = state.lock() {
                             if let Some(s) = state_lock.as_mut() {
                                 s.update(
@@ -279,14 +283,20 @@ impl ChatPoller {
                                         polling_interval_millis: s.polling_interval_millis,
                                     });
                                 }
+                                // 更新後の新しいポーリング間隔を返す
+                                Some(s.polling_interval())
+                            } else {
+                                None
                             }
                         } else {
                             log::error!("Failed to acquire state lock for update");
+                            None
                         }
-                    }
+                    };
 
-                    // ポーリング間隔を順守
-                    sleep(polling_interval).await;
+                    // ポーリング間隔を順守（レスポンスの新しい間隔を使用）
+                    let interval = new_polling_interval.unwrap_or(polling_interval);
+                    sleep(interval).await;
                 }
                 Err(e) => {
                     log::error!("Polling error: {}", e);

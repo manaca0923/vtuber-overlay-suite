@@ -1,4 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
+use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -6,7 +7,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, RwLock};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
-use super::types::WsMessage;
+use super::types::{SetlistUpdatePayload, SongItem, SongStatus, WsMessage};
 
 type Tx = mpsc::UnboundedSender<Message>;
 type PeerMap = Arc<RwLock<HashMap<usize, Tx>>>;
@@ -77,22 +78,33 @@ impl Default for WebSocketState {
 ///
 /// # 引数
 /// - `state`: 共有状態
-pub async fn start_websocket_server(state: Arc<RwLock<WebSocketState>>) -> Result<(), Box<dyn std::error::Error>> {
+/// - `db`: データベース接続プール
+pub async fn start_websocket_server(
+    state: Arc<RwLock<WebSocketState>>,
+    db: SqlitePool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let addr = "127.0.0.1:19801";
     let listener = TcpListener::bind(addr).await?;
     log::info!("WebSocket server listening on ws://{}/ws", addr);
 
+    let db = Arc::new(db);
+
     while let Ok((stream, peer_addr)) = listener.accept().await {
         log::info!("New WebSocket connection from: {}", peer_addr);
         let state_clone = Arc::clone(&state);
-        tokio::spawn(handle_connection(state_clone, stream));
+        let db_clone = Arc::clone(&db);
+        tokio::spawn(handle_connection(state_clone, stream, db_clone));
     }
 
     Ok(())
 }
 
 /// WebSocket接続を処理
-async fn handle_connection(state: Arc<RwLock<WebSocketState>>, stream: TcpStream) {
+async fn handle_connection(
+    state: Arc<RwLock<WebSocketState>>,
+    stream: TcpStream,
+    db: Arc<SqlitePool>,
+) {
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,
         Err(e) => {
@@ -108,7 +120,18 @@ async fn handle_connection(state: Arc<RwLock<WebSocketState>>, stream: TcpStream
 
     // ピアIDを取得して登録
     let peer_id = state.read().await.next_id();
-    state.read().await.add_peer(peer_id, tx).await;
+    state.read().await.add_peer(peer_id, tx.clone()).await;
+
+    // 接続時に最新セットリストを送信
+    if let Some(initial_message) = fetch_latest_setlist_message(&db).await {
+        if let Ok(json) = serde_json::to_string(&initial_message) {
+            if tx.send(Message::Text(json)).is_err() {
+                log::warn!("Failed to send initial setlist to peer {}", peer_id);
+            } else {
+                log::info!("Sent initial setlist to peer {}", peer_id);
+            }
+        }
+    }
 
     // 送信タスク: チャネルからメッセージを受信してWebSocketに送信
     let send_task = tokio::spawn(async move {
@@ -152,4 +175,89 @@ async fn handle_connection(state: Arc<RwLock<WebSocketState>>, stream: TcpStream
     }
 
     log::info!("WebSocket connection closed for peer {}", peer_id);
+}
+
+
+/// 最新セットリストを取得してWsMessageを生成
+async fn fetch_latest_setlist_message(pool: &SqlitePool) -> Option<WsMessage> {
+    // 最新のセットリストIDを取得
+    let setlist_result = sqlx::query_as::<_, (String,)>(
+        "SELECT id FROM setlists ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await;
+
+    let setlist_id = match setlist_result {
+        Ok(Some(row)) => row.0,
+        Ok(None) => {
+            log::debug!("No setlists found for initial WebSocket message");
+            return None;
+        }
+        Err(e) => {
+            log::error!("Failed to fetch setlist for initial message: {}", e);
+            return None;
+        }
+    };
+
+    // 楽曲リスト取得
+    let songs_result = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>)>(
+        r#"
+        SELECT
+            ss.id, s.title, s.artist, ss.started_at, ss.ended_at
+        FROM setlist_songs ss
+        JOIN songs s ON ss.song_id = s.id
+        WHERE ss.setlist_id = ?
+        ORDER BY ss.position
+        "#,
+    )
+    .bind(&setlist_id)
+    .fetch_all(pool)
+    .await;
+
+    let rows = match songs_result {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::error!("Failed to fetch songs for initial message: {}", e);
+            return None;
+        }
+    };
+
+    // 現在の曲のインデックスを計算（started_atがあり、ended_atがないものが現在の曲）
+    let current_index = rows
+        .iter()
+        .position(|row| row.3.is_some() && row.4.is_none())
+        .map(|i| i as i32)
+        .unwrap_or(-1);
+
+    // 曲リストを構築
+    let songs: Vec<SongItem> = rows
+        .into_iter()
+        .enumerate()
+        .map(|(idx, row)| {
+            let status = if current_index == -1 {
+                SongStatus::Pending
+            } else if (idx as i32) < current_index {
+                SongStatus::Done
+            } else if (idx as i32) == current_index {
+                SongStatus::Current
+            } else {
+                SongStatus::Pending
+            };
+
+            SongItem {
+                id: row.0,
+                title: row.1,
+                artist: row.2.unwrap_or_default(),
+                status,
+            }
+        })
+        .collect();
+
+    let payload = SetlistUpdatePayload {
+        current_index,
+        songs,
+    };
+
+    log::info!("Generated initial setlist message with {} songs", payload.songs.len());
+    Some(WsMessage::SetlistUpdate { payload })
 }

@@ -107,6 +107,7 @@ pub async fn start_polling(
     live_chat_id: String,
     next_page_token: Option<String>,
     quota_used: Option<u64>,
+    polling_interval_millis: Option<u64>,
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
@@ -164,6 +165,7 @@ pub async fn start_polling(
             live_chat_id,
             next_page_token,
             quota_used.unwrap_or(0),
+            polling_interval_millis,
             event_callback,
         )
         .await
@@ -246,6 +248,7 @@ pub async fn save_polling_state(
     live_chat_id: String,
     next_page_token: Option<String>,
     quota_used: u64,
+    polling_interval_millis: u64,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let pool = &state.db;
@@ -256,6 +259,7 @@ pub async fn save_polling_state(
         "live_chat_id": live_chat_id,
         "next_page_token": next_page_token,
         "quota_used": quota_used,
+        "polling_interval_millis": polling_interval_millis,
         "saved_at": now
     });
     let polling_data_str =
@@ -308,6 +312,8 @@ pub struct PollingStateData {
     pub live_chat_id: String,
     pub next_page_token: Option<String>,
     pub quota_used: u64,
+    #[serde(default)]
+    pub polling_interval_millis: Option<u64>,
     pub saved_at: String,
 }
 
@@ -346,5 +352,73 @@ pub async fn send_test_comment(
         .await;
 
     Ok(())
+}
+
+/// ウィザード設定を保存（videoId, liveChatId）
+#[tauri::command]
+pub async fn save_wizard_settings(
+    video_id: String,
+    live_chat_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // JSON形式でウィザード設定を保存
+    let settings_data = serde_json::json!({
+        "video_id": video_id,
+        "live_chat_id": live_chat_id,
+        "saved_at": now
+    });
+    let settings_str =
+        serde_json::to_string(&settings_data).map_err(|e| format!("JSON serialize error: {}", e))?;
+
+    // settingsテーブルにUPSERT
+    sqlx::query!(
+        r#"
+        INSERT INTO settings (key, value, updated_at)
+        VALUES ('wizard_settings', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        "#,
+        settings_str,
+        now
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+
+    log::info!("Saved wizard settings: video_id={}, live_chat_id={}", video_id, live_chat_id);
+    Ok(())
+}
+
+/// 保存されたウィザード設定を読み込む
+#[tauri::command]
+pub async fn load_wizard_settings(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<WizardSettingsData>, String> {
+    let pool = &state.db;
+
+    let result: Option<String> = sqlx::query_scalar(
+        "SELECT value FROM settings WHERE key = 'wizard_settings'"
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+
+    if let Some(json_str) = result {
+        let data: WizardSettingsData =
+            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+        Ok(Some(data))
+    } else {
+        Ok(None)
+    }
+}
+
+/// ウィザード設定のデータ構造
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WizardSettingsData {
+    pub video_id: String,
+    pub live_chat_id: String,
+    pub saved_at: String,
 }
 

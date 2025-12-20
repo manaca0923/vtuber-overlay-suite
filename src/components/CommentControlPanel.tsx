@@ -40,6 +40,7 @@ interface SavedPollingState {
   live_chat_id: string;
   next_page_token: string | null;
   quota_used: number;
+  polling_interval_millis?: number;
   saved_at: string;
 }
 
@@ -211,6 +212,7 @@ export function CommentControlPanel({
           live_chat_id: liveChatId,
           next_page_token: shouldUseSavedState ? savedState.next_page_token : null,
           quota_used: shouldUseSavedState ? savedState.quota_used : null,
+          polling_interval_millis: shouldUseSavedState ? savedState.polling_interval_millis : null,
         });
         if (isMountedRef.current) {
           setIsPolling(true);
@@ -243,6 +245,7 @@ export function CommentControlPanel({
             live_chat_id: liveChatId,
             next_page_token: latestState.next_page_token,
             quota_used: latestState.quota_used,
+            polling_interval_millis: latestState.polling_interval_millis,
           });
         }
       }

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ApiKeySetup } from './components/ApiKeySetup';
 import { SongList } from './components/SongList';
 import { SetlistList } from './components/SetlistList';
+import { TestModeButton } from './components/TestModeButton';
 import Wizard from './components/wizard/Wizard';
 
 type Tab = 'comment' | 'setlist';
@@ -80,7 +81,14 @@ function App() {
           </nav>
         </div>
 
-        {activeTab === 'comment' && <ApiKeySetup />}
+        {activeTab === 'comment' && (
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <TestModeButton />
+            </div>
+            <ApiKeySetup />
+          </div>
+        )}
         {activeTab === 'setlist' && (
           <div className="space-y-8">
             <SongList />

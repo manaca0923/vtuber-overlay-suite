@@ -233,3 +233,40 @@ pub async fn is_polling_running(state: tauri::State<'_, AppState>) -> Result<boo
     }
 }
 
+/// テストモード: ダミーコメントを送信
+#[tauri::command]
+pub async fn send_test_comment(
+    comment_text: String,
+    author_name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    use crate::youtube::types::MessageType;
+    use chrono::Utc;
+
+    // ダミーコメント作成
+    let test_message = ChatMessage {
+        id: format!("test-{}", Utc::now().timestamp_millis()),
+        message: comment_text,
+        author_name,
+        author_channel_id: "test-channel".to_string(),
+        author_image_url: "https://via.placeholder.com/48".to_string(),
+        published_at: Utc::now(),
+        is_owner: false,
+        is_moderator: false,
+        is_member: false,
+        is_verified: false,
+        message_type: MessageType::Text,
+    };
+
+    // WebSocketでブロードキャスト
+    let server_state = Arc::clone(&state.server);
+    let state_lock = server_state.read().await;
+    state_lock
+        .broadcast(WsMessage::CommentAdd {
+            payload: test_message,
+        })
+        .await;
+
+    Ok(())
+}
+

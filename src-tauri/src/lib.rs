@@ -83,6 +83,7 @@ pub fn run() {
       commands::youtube::get_polling_state,
       commands::youtube::get_quota_info,
       commands::youtube::is_polling_running,
+      commands::youtube::send_test_comment,
       commands::setlist::get_songs,
       commands::setlist::create_song,
       commands::setlist::update_song,

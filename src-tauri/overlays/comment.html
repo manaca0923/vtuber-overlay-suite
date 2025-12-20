@@ -207,12 +207,18 @@
 
     function addComment(comment) {
       const container = document.getElementById('comment-container');
-      
+
+      // comment.idがundefined/nullの場合はスキップ
+      if (!comment || !comment.id) {
+        console.warn('Invalid comment: missing id', comment);
+        return;
+      }
+
       // 重複チェック（再接続時のキャッシュ復元で重要）
       if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
         return; // 既に表示済み
       }
-      
+
       const el = createCommentElement(comment);
       container.appendChild(el);
 

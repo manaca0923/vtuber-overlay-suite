@@ -1,7 +1,27 @@
 use crate::AppState;
 use sqlx::Row;
 
-/// APIキーをDBに保存（開発用：本番ではkeyringを使用すべき）
+// =============================================================================
+// TODO: 本番リリース前の対応事項
+// =============================================================================
+// 現在の実装ではAPIキーをSQLiteに平文で保存しています。
+// 本番リリース前に以下の対応が必要です：
+//
+// 1. src-tauri/src/keyring.rs のkeyringクレートを使用した実装に移行
+//    - macOS: Keychain
+//    - Windows: Credential Manager
+//    - Linux: Secret Service API
+//
+// 2. この実装（DB保存）を削除するか、keyringが使用できない環境用の
+//    フォールバックとして残す場合は暗号化を検討
+//
+// 参照: CLAUDE.md の「セキュリティ」セクション
+// =============================================================================
+
+/// APIキーをDBに保存
+///
+/// ⚠️ 注意: 開発用の実装です。本番ではkeyringクレートを使用してください。
+/// DBファイルは平文で保存されるため、セキュリティリスクがあります。
 #[tauri::command]
 pub async fn save_api_key(api_key: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let pool = &state.db;

@@ -59,10 +59,11 @@ async fn overlay_comment(State(state): State<HttpState>) -> impl IntoResponse {
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => Html(content).into_response(),
         Err(e) => {
-            log::error!("Failed to read comment.html: {}", e);
+            // パス情報をログには記録するがレスポンスには含めない
+            log::error!("Failed to read comment.html from {:?}: {}", path, e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to load overlay: {}", e),
+                "Failed to load overlay".to_string(),
             ).into_response()
         }
     }
@@ -74,10 +75,11 @@ async fn overlay_setlist(State(state): State<HttpState>) -> impl IntoResponse {
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => Html(content).into_response(),
         Err(e) => {
-            log::error!("Failed to read setlist.html: {}", e);
+            // パス情報をログには記録するがレスポンスには含めない
+            log::error!("Failed to read setlist.html from {:?}: {}", path, e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to load overlay: {}", e),
+                "Failed to load overlay".to_string(),
             ).into_response()
         }
     }
@@ -89,10 +91,11 @@ async fn overlay_test(State(state): State<HttpState>) -> impl IntoResponse {
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => Html(content).into_response(),
         Err(e) => {
-            log::error!("Failed to read test.html: {}", e);
+            // パス情報をログには記録するがレスポンスには含めない
+            log::error!("Failed to read test.html from {:?}: {}", path, e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to load test page: {}", e),
+                "Failed to load test page".to_string(),
             ).into_response()
         }
     }

@@ -16,15 +16,18 @@ interface PollingState {
   poll_count: number;
 }
 
+/**
+ * ポーリングイベント型（Rust側のPollingEventと同期）
+ * @see src-tauri/src/youtube/poller.rs
+ */
 type PollingEventType =
-  | { type: 'Started'; live_chat_id: string }
-  | { type: 'Stopped' }
-  | { type: 'Messages'; messages: ChatMessage[] }
-  | { type: 'StateUpdate'; state: PollingState }
-  | { type: 'Error'; message: string }
-  | { type: 'RateLimited'; retry_after_ms: number }
-  | { type: 'QuotaExceeded' }
-  | { type: 'LiveEnded' };
+  | { type: 'started'; live_chat_id: string }
+  | { type: 'stopped'; reason: string }
+  | { type: 'messages'; messages: ChatMessage[] }
+  | { type: 'stateUpdate'; quota_used: number; remaining_quota: number; poll_count: number }
+  | { type: 'error'; message: string; retrying: boolean }
+  | { type: 'quotaExceeded' }
+  | { type: 'streamEnded' };
 
 interface SavedPollingState {
   live_chat_id: string;
@@ -35,9 +38,15 @@ interface SavedPollingState {
 
 /**
  * 保存された状態が有効期限内かどうかを判定
+ * @param savedAt ISO 8601形式の日付文字列
+ * @returns 有効期限内ならtrue、無効な日付や期限切れの場合はfalse
  */
 function isSavedStateValid(savedAt: string): boolean {
   const savedDate = new Date(savedAt);
+  // 無効な日付の場合はfalseを返す
+  if (isNaN(savedDate.getTime())) {
+    return false;
+  }
   const hoursOld = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60);
   return hoursOld < SAVED_STATE_EXPIRY_HOURS;
 }
@@ -72,36 +81,42 @@ export function CommentControlPanel({
 
           const payload = event.payload;
           switch (payload.type) {
-            case 'Started':
+            case 'started':
               setIsPolling(true);
               setError(null);
               setLastEvent('ポーリング開始');
               break;
-            case 'Stopped':
+            case 'stopped':
               setIsPolling(false);
-              setLastEvent('ポーリング停止');
+              setLastEvent(`ポーリング停止: ${payload.reason}`);
               break;
-            case 'Messages':
+            case 'messages':
               setLastEvent(`${payload.messages.length}件のコメントを取得`);
               break;
-            case 'StateUpdate':
-              setPollingState(payload.state);
+            case 'stateUpdate':
+              // Rust側のStateUpdateイベントからPollingStateを構築
+              setPollingState((prev) => ({
+                next_page_token: prev?.next_page_token ?? null,
+                polling_interval_millis: prev?.polling_interval_millis ?? 5000,
+                live_chat_id: prev?.live_chat_id ?? liveChatId,
+                quota_used: payload.quota_used,
+                poll_count: payload.poll_count,
+              }));
               break;
-            case 'Error':
+            case 'error':
               setError(payload.message);
-              setLastEvent(`エラー: ${payload.message}`);
+              if (payload.retrying) {
+                setLastEvent(`エラー: ${payload.message} (再試行中)`);
+              } else {
+                setLastEvent(`エラー: ${payload.message}`);
+              }
               break;
-            case 'RateLimited':
-              setLastEvent(
-                `レート制限中 (${Math.round(payload.retry_after_ms / 1000)}秒後に再試行)`
-              );
-              break;
-            case 'QuotaExceeded':
+            case 'quotaExceeded':
               setError('クォータ超過: 本日のAPI使用量が上限に達しました');
               setIsPolling(false);
               setLastEvent('クォータ超過');
               break;
-            case 'LiveEnded':
+            case 'streamEnded':
               setIsPolling(false);
               setLastEvent('配信が終了しました');
               break;
@@ -120,7 +135,7 @@ export function CommentControlPanel({
         unlisten();
       }
     };
-  }, []);
+  }, [liveChatId]);
 
   // 現在のポーリング状態を確認
   useEffect(() => {
@@ -334,7 +349,14 @@ export function CommentControlPanel({
               {pollingState.quota_used.toLocaleString()} / {DAILY_QUOTA_LIMIT.toLocaleString()} units
             </span>
           </div>
-          <div className="w-full bg-blue-200 rounded-full h-2">
+          <div
+            className="w-full bg-blue-200 rounded-full h-2"
+            role="progressbar"
+            aria-valuenow={pollingState.quota_used}
+            aria-valuemin={0}
+            aria-valuemax={DAILY_QUOTA_LIMIT}
+            aria-label="クォータ使用量"
+          >
             <div
               className={`h-2 rounded-full transition-all ${
                 quotaPercentage > 80

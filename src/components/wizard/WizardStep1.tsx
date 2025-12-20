@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { handleTauriError } from '../../utils/errorMessages';
 
@@ -17,6 +17,15 @@ export default function WizardStep1({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const isMountedRef = useRef(true);
+
+  // マウント状態を追跡（非同期操作後のstate更新を防ぐ）
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleValidate = async () => {
     if (!apiKey.trim()) {
@@ -33,9 +42,13 @@ export default function WizardStep1({
         apiKey: apiKey,
       });
 
+      // アンマウント後はstate更新をスキップ
+      if (!isMountedRef.current) return;
+
       if (isValid) {
         // APIキーを保存
         await invoke('save_api_key', { apiKey: apiKey });
+        if (!isMountedRef.current) return;
         setSuccess('APIキーが有効です。保存しました。');
         onValidationChange(true);
       } else {
@@ -43,12 +56,15 @@ export default function WizardStep1({
         onValidationChange(false);
       }
     } catch (err) {
+      if (!isMountedRef.current) return;
       const errorMessage = handleTauriError(err, 'APIキーの検証に失敗しました');
       setError(errorMessage);
       onValidationChange(false);
       console.error('API key validation error:', err);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 

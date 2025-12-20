@@ -60,6 +60,10 @@ pub struct MessageSnippet {
     pub display_message: String,
     #[serde(rename = "superChatDetails")]
     pub super_chat_details: Option<SuperChatDetails>,
+    #[serde(rename = "superStickerDetails")]
+    pub super_sticker_details: Option<SuperStickerDetails>,
+    #[serde(rename = "membershipGiftingDetails")]
+    pub membership_gifting_details: Option<MembershipGiftingDetails>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +73,33 @@ pub struct SuperChatDetails {
     pub currency: String,
     #[serde(rename = "amountMicros")]
     pub amount_micros: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SuperStickerDetails {
+    #[serde(rename = "superStickerMetadata")]
+    pub super_sticker_metadata: Option<SuperStickerMetadata>,
+    #[serde(rename = "amountDisplayString")]
+    pub amount_display_string: String,
+    pub currency: String,
+    #[serde(rename = "amountMicros")]
+    pub amount_micros: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SuperStickerMetadata {
+    #[serde(rename = "stickerId")]
+    pub sticker_id: String,
+    #[serde(rename = "altText")]
+    pub alt_text: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MembershipGiftingDetails {
+    #[serde(rename = "giftMembershipsCount")]
+    pub gift_memberships_count: Option<u32>,
+    #[serde(rename = "giftMembershipsLevelName")]
+    pub gift_memberships_level_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,15 +154,52 @@ pub fn parse_message_type(snippet: &MessageSnippet) -> MessageType {
                 MessageType::Text
             }
         }
-        "superStickerEvent" => MessageType::SuperSticker {
-            sticker_id: String::new(), // TODO: スーパーステッカーの詳細実装
-        },
-        "newSponsorEvent" => MessageType::Membership {
-            level: String::new(), // TODO: メンバーシップレベル取得
-        },
-        "membershipGiftingEvent" => MessageType::MembershipGift {
-            count: 1, // TODO: ギフト数取得
-        },
+        "superStickerEvent" => {
+            if let Some(details) = &snippet.super_sticker_details {
+                let sticker_id = details
+                    .super_sticker_metadata
+                    .as_ref()
+                    .map(|m| m.sticker_id.clone())
+                    .unwrap_or_default();
+                MessageType::SuperSticker { sticker_id }
+            } else {
+                log::warn!(
+                    "superStickerEvent without superStickerDetails, using empty sticker_id"
+                );
+                MessageType::SuperSticker {
+                    sticker_id: String::new(),
+                }
+            }
+        }
+        "newSponsorEvent" => {
+            // YouTube APIではnewSponsorEventにメンバーシップレベル情報は含まれない
+            // レベル情報は別途memberships APIで取得する必要があるが、
+            // 現時点では空文字列で対応
+            MessageType::Membership {
+                level: String::new(),
+            }
+        }
+        "memberMilestoneChatEvent" => {
+            // メンバー継続のマイルストーンイベント
+            MessageType::Membership {
+                level: "milestone".to_string(),
+            }
+        }
+        "membershipGiftingEvent" => {
+            if let Some(details) = &snippet.membership_gifting_details {
+                let count = details.gift_memberships_count.unwrap_or(1);
+                MessageType::MembershipGift { count }
+            } else {
+                log::warn!(
+                    "membershipGiftingEvent without membershipGiftingDetails, using count=1"
+                );
+                MessageType::MembershipGift { count: 1 }
+            }
+        }
+        "giftMembershipReceivedEvent" => {
+            // ギフトを受け取った通知（受け取り側）
+            MessageType::MembershipGift { count: 1 }
+        }
         _ => {
             log::debug!("Unknown message type: {}", snippet.message_type);
             MessageType::Text

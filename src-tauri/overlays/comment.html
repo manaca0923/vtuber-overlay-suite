@@ -58,6 +58,21 @@
       border: 2px solid var(--sc-color, #ff0000);
     }
 
+    .comment.supersticker {
+      background: linear-gradient(135deg, #f59e0b 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid #f59e0b;
+    }
+
+    .comment.membership {
+      background: linear-gradient(135deg, #10b981 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid #10b981;
+    }
+
+    .comment.membershipgift {
+      background: linear-gradient(135deg, #8b5cf6 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid #8b5cf6;
+    }
+
     .avatar {
       width: var(--avatar-size);
       height: var(--avatar-size);
@@ -211,8 +226,15 @@
       div.dataset.id = comment.id;
 
       // messageTypeはタグ付きenum: { type: "text" | "superChat" | ... }
-      if (comment.messageType?.type === 'superChat') {
+      const messageType = comment.messageType?.type;
+      if (messageType === 'superChat') {
         div.classList.add('superchat');
+      } else if (messageType === 'superSticker') {
+        div.classList.add('supersticker');
+      } else if (messageType === 'membership') {
+        div.classList.add('membership');
+      } else if (messageType === 'membershipGift') {
+        div.classList.add('membershipgift');
       }
 
       const avatar = document.createElement('img');
@@ -253,11 +275,41 @@
       }
 
       // スーパーチャットの金額表示
-      if (comment.messageType?.type === 'superChat' && comment.messageType.amount) {
+      if (messageType === 'superChat' && comment.messageType.amount) {
         const amount = document.createElement('span');
         amount.className = 'amount';
         amount.textContent = comment.messageType.amount;
         header.appendChild(amount);
+      }
+
+      // スーパーステッカーのバッジ
+      if (messageType === 'superSticker') {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.style.background = '#f59e0b';
+        badge.style.color = '#000';
+        badge.textContent = 'Sticker';
+        header.appendChild(badge);
+      }
+
+      // メンバーシップのバッジ
+      if (messageType === 'membership') {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.style.background = '#10b981';
+        badge.style.color = '#fff';
+        badge.textContent = 'New Member';
+        header.appendChild(badge);
+      }
+
+      // メンバーシップギフトのバッジ
+      if (messageType === 'membershipGift' && comment.messageType.count) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.style.background = '#8b5cf6';
+        badge.style.color = '#fff';
+        badge.textContent = `Gift x${comment.messageType.count}`;
+        header.appendChild(badge);
       }
 
       const message = document.createElement('div');

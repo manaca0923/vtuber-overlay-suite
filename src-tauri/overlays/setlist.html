@@ -179,6 +179,30 @@
       const currentSong = document.getElementById('current-song');
       const nextSong = document.getElementById('next-song');
 
+      // 曲がない場合
+      if (!songs || songs.length === 0) {
+        prevSong.style.display = 'none';
+        currentSong.querySelector('.title').textContent = '曲がありません';
+        currentSong.querySelector('.artist').textContent = '';
+        nextSong.style.display = 'none';
+        return;
+      }
+
+      // currentIndex === -1 の場合（曲が選択されていない）
+      if (currentIndex < 0 || currentIndex >= songs.length) {
+        prevSong.style.display = 'none';
+        currentSong.querySelector('.title').textContent = '配信準備中...';
+        currentSong.querySelector('.artist').textContent = '';
+        // 次の曲として最初の曲を表示
+        if (songs.length > 0) {
+          nextSong.querySelector('.title').textContent = songs[0].title;
+          nextSong.style.display = 'flex';
+        } else {
+          nextSong.style.display = 'none';
+        }
+        return;
+      }
+
       // 前の曲
       if (currentIndex > 0 && songs[currentIndex - 1]) {
         const song = songs[currentIndex - 1];
@@ -189,18 +213,16 @@
       }
 
       // 現在の曲
-      if (songs[currentIndex]) {
-        const song = songs[currentIndex];
-        currentSong.querySelector('.title').textContent = song.title;
-        currentSong.querySelector('.artist').textContent = song.artist;
-        currentSong.classList.add('entering');
-        setTimeout(() => currentSong.classList.remove('entering'), 500);
-      }
+      const song = songs[currentIndex];
+      currentSong.querySelector('.title').textContent = song.title;
+      currentSong.querySelector('.artist').textContent = song.artist || '';
+      currentSong.classList.add('entering');
+      setTimeout(() => currentSong.classList.remove('entering'), 500);
 
       // 次の曲
       if (currentIndex < songs.length - 1 && songs[currentIndex + 1]) {
-        const song = songs[currentIndex + 1];
-        nextSong.querySelector('.title').textContent = song.title;
+        const nextSongData = songs[currentIndex + 1];
+        nextSong.querySelector('.title').textContent = nextSongData.title;
         nextSong.style.display = 'flex';
       } else {
         nextSong.style.display = 'none';

@@ -772,6 +772,18 @@ pub async fn reorder_setlist_songs(
     Ok(())
 }
 
+/// セットリスト更新をWebSocketでブロードキャスト（公開コマンド）
+///
+/// オーバーレイを後から開いた場合や、手動でセットリストを再送信したい場合に使用
+#[tauri::command]
+pub async fn broadcast_setlist_update(
+    setlist_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("Broadcasting setlist update for setlist: {}", setlist_id);
+    broadcast_setlist_update_internal(setlist_id, &state).await
+}
+
 /// セットリスト更新をWebSocketでブロードキャスト（内部関数）
 ///
 /// ## 設計ノート

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getSetlistWithSongs, removeSongFromSetlist, getSongs, addSongToSetlist, setCurrentSong, nextSong, previousSong, reorderSetlistSongs } from '../types/commands';
+import { getSetlistWithSongs, removeSongFromSetlist, getSongs, addSongToSetlist, setCurrentSong, nextSong, previousSong, reorderSetlistSongs, broadcastSetlistUpdate } from '../types/commands';
 import type { SetlistWithSongs, SetlistSong } from '../types/setlist';
 import type { Song } from '../types/song';
 import { parseTags } from '../types/song';
@@ -104,6 +104,15 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
     try {
       await previousSong(setlistId);
       await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleBroadcast = async () => {
+    setError('');
+    try {
+      await broadcastSetlistUpdate(setlistId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -229,6 +238,14 @@ export function SetlistEditor({ setlistId, onClose }: SetlistEditorProps) {
                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 次の曲 →
+              </button>
+              <div className="border-l border-gray-300 h-8 mx-2"></div>
+              <button
+                onClick={handleBroadcast}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                title="OBSオーバーレイにセットリストを送信"
+              >
+                オーバーレイに送信
               </button>
             </div>
             <div className="text-sm text-gray-600">

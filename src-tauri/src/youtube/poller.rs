@@ -78,18 +78,52 @@ impl ChatPoller {
     where
         F: Fn(PollingEvent) + Send + Sync + 'static,
     {
+        self.start_with_state(live_chat_id, None, 0, event_callback)
+            .await
+    }
+
+    /// 保存された状態からポーリングを開始
+    ///
+    /// # 引数
+    /// - `live_chat_id`: ライブチャットID
+    /// - `next_page_token`: 保存されたページトークン（オプション）
+    /// - `quota_used`: 保存されたクォータ使用量
+    /// - `event_callback`: イベント発生時に呼ばれるコールバック
+    pub async fn start_with_state<F>(
+        &self,
+        live_chat_id: String,
+        next_page_token: Option<String>,
+        quota_used: u64,
+        event_callback: F,
+    ) -> Result<(), YouTubeError>
+    where
+        F: Fn(PollingEvent) + Send + Sync + 'static,
+    {
         // 既に実行中の場合はエラー
         if self.is_running.load(Ordering::SeqCst) {
             return Err(YouTubeError::PollerAlreadyRunning);
         }
 
-        // 状態を初期化
+        // 状態を初期化（保存された状態がある場合はそれを使用）
         {
             let mut state = self.state.lock().map_err(|e| {
                 log::error!("Failed to acquire state lock: {}", e);
                 YouTubeError::ParseError("Failed to initialize poller state".to_string())
             })?;
-            *state = Some(PollingState::new(live_chat_id.clone()));
+            if next_page_token.is_some() || quota_used > 0 {
+                log::info!(
+                    "Restoring polling state: page_token={:?}, quota_used={}",
+                    next_page_token,
+                    quota_used
+                );
+                *state = Some(PollingState::with_saved_state(
+                    live_chat_id.clone(),
+                    next_page_token,
+                    quota_used,
+                ));
+            } else {
+                *state = Some(PollingState::new(live_chat_id.clone()));
+            }
         }
 
         self.is_running.store(true, Ordering::SeqCst);

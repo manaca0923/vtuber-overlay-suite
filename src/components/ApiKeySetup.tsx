@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { CommentControlPanel } from './CommentControlPanel';
 
 type MessageType =
   | { type: 'text' }
@@ -30,6 +31,33 @@ export function ApiKeySetup() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isApiKeyLoaded, setIsApiKeyLoaded] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const isMountedRef = useRef(true);
+
+  // 保存済みAPIキーを自動読み込み
+  useEffect(() => {
+    async function loadSavedApiKey() {
+      try {
+        const hasKey = await invoke<boolean>('has_api_key');
+        if (hasKey) {
+          const savedKey = await invoke<string>('get_api_key');
+          if (isMountedRef.current && savedKey) {
+            setApiKey(savedKey);
+            setIsApiKeyLoaded(true);
+            setSuccess('保存済みAPIキーを読み込みました');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load saved API key:', err);
+      }
+    }
+    loadSavedApiKey();
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleValidate = async () => {
     setLoading(true);
@@ -41,15 +69,27 @@ export function ApiKeySetup() {
         api_key: apiKey,
       });
 
+      if (!isMountedRef.current) return;
+
       if (isValid) {
-        setSuccess('APIキーが有効です');
+        // APIキーを保存
+        await invoke('save_api_key', { api_key: apiKey });
+        if (isMountedRef.current) {
+          setIsApiKeyLoaded(true);
+          setSuccess('APIキーが有効です。保存しました。');
+        }
       } else {
         setError('APIキーが無効です');
       }
     } catch (err) {
-      setError(`エラー: ${err}`);
+      if (isMountedRef.current) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`エラー: ${errorMessage}`);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -78,13 +118,16 @@ export function ApiKeySetup() {
     setSuccess('');
 
     try {
-      const [newMessages, _nextPageToken, pollingInterval] = await invoke<
-        [ChatMessage[], string | null, number]
-      >('get_chat_messages', {
-        api_key: apiKey,
-        live_chat_id: liveChatId,
-        page_token: null,
-      });
+      const result = await invoke<[ChatMessage[], string | null, number]>(
+        'get_chat_messages',
+        {
+          api_key: apiKey,
+          live_chat_id: liveChatId,
+          page_token: null,
+        }
+      );
+      const newMessages = result[0];
+      const pollingInterval = result[2];
 
       setMessages(newMessages);
       setSuccess(
@@ -103,20 +146,46 @@ export function ApiKeySetup() {
 
       {/* APIキー入力 */}
       <div className="mb-6">
-        <label className="block mb-2 font-semibold">APIキー</label>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="AIza..."
-        />
+        <div className="flex items-center gap-2 mb-2">
+          <label className="font-semibold">APIキー</label>
+          {isApiKeyLoaded && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+              保存済み
+            </span>
+          )}
+        </div>
+        <div className="relative">
+          <input
+            type={showApiKey ? 'text' : 'password'}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            className="w-full p-2 pr-12 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="AIza..."
+          />
+          <button
+            type="button"
+            onClick={() => setShowApiKey(!showApiKey)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+            aria-label={showApiKey ? 'APIキーを隠す' : 'APIキーを表示'}
+          >
+            {showApiKey ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            )}
+          </button>
+        </div>
         <button
           onClick={handleValidate}
           disabled={loading || !apiKey}
           className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          {loading ? '検証中...' : 'APIキーを検証'}
+          {loading ? '検証中...' : 'APIキーを検証・保存'}
         </button>
       </div>
 
@@ -139,20 +208,38 @@ export function ApiKeySetup() {
         </button>
       </div>
 
-      {/* チャットID表示＆メッセージ取得 */}
+      {/* チャットID表示＆コメント制御パネル */}
       {liveChatId && (
-        <div className="mb-6">
-          <label className="block mb-2 font-semibold">Live Chat ID</label>
-          <div className="p-2 bg-gray-100 rounded border border-gray-300 break-all">
-            {liveChatId}
+        <div className="mb-6 space-y-4">
+          <div>
+            <label className="block mb-2 font-semibold">Live Chat ID</label>
+            <div className="p-2 bg-gray-100 rounded border border-gray-300 break-all text-sm">
+              {liveChatId}
+            </div>
           </div>
-          <button
-            onClick={handleGetMessages}
-            disabled={loading || !apiKey}
-            className="mt-2 px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            {loading ? '取得中...' : 'メッセージを取得'}
-          </button>
+
+          {/* コメント取得制御パネル */}
+          <CommentControlPanel
+            apiKey={apiKey}
+            videoId={videoId}
+            liveChatId={liveChatId}
+          />
+
+          {/* 手動メッセージ取得（デバッグ用） */}
+          <details className="bg-gray-50 rounded-lg p-4">
+            <summary className="cursor-pointer font-medium text-gray-700">
+              デバッグ: 手動メッセージ取得
+            </summary>
+            <div className="mt-3">
+              <button
+                onClick={handleGetMessages}
+                disabled={loading || !apiKey}
+                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {loading ? '取得中...' : 'メッセージを取得'}
+              </button>
+            </div>
+          </details>
         </div>
       )}
 

@@ -114,7 +114,7 @@ export function ApiKeySetup() {
       // URLから動画IDを抽出
       let extractedVideoId = videoId;
       const urlMatch = videoId.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-      if (urlMatch) {
+      if (urlMatch && urlMatch[1]) {
         extractedVideoId = urlMatch[1];
       }
 

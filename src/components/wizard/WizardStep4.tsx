@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-shell';
 
 export default function WizardStep4() {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const overlayUrls = [
     {
@@ -21,17 +22,23 @@ export default function WizardStep4() {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedUrl(url);
+      setError(null);
       setTimeout(() => setCopiedUrl(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+      setError('URLのコピーに失敗しました');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
   const handleOpenBrowser = async (url: string) => {
     try {
       await open(url);
+      setError(null);
     } catch (err) {
       console.error('Failed to open URL:', err);
+      setError('ブラウザでURLを開けませんでした。手動でコピーしてください。');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -41,6 +48,13 @@ export default function WizardStep4() {
       <p className="text-gray-600 mb-6">
         OBS Studioでオーバーレイを表示するための設定方法です。
       </p>
+
+      {/* エラー表示 */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* オーバーレイURL一覧 */}
       <div className="space-y-4 mb-6">

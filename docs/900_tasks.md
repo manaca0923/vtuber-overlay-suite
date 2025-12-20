@@ -276,6 +276,12 @@ T10完了後のコードレビューで指摘された未完成箇所の対応
 - [x] nextPageTokenをDBに保存
 - [x] クォータ使用量の永続化
 - [x] アプリ再起動時の復元処理（「続きから開始」ボタン）
+- [x] StateUpdateイベントにnext_page_tokenとpolling_interval_millisを追加
+- [x] 停止時に最新のポーリング状態を取得して保存（10回に1回のstateUpdate問題を解消）
+
+#### 7. セットリストオーバーレイ初期表示改善（追加修正）
+- [x] `/api/setlist/latest`エンドポイント追加（setlist_id未指定時に最新セットリストを返す）
+- [x] オーバーレイでsetlist_id未指定時も自動で最新セットリストを取得
 
 ### 成果物
 - `src/components/CommentControlPanel.tsx` - コメント制御パネル（ポーリング制御、状態表示、クォータ可視化）

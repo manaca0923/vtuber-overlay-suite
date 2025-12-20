@@ -383,9 +383,11 @@ pub async fn get_setlist_with_songs(
         .unwrap_or(-1);
 
     // SetlistSongWithDetailsに変換
+    // Note: current_indexは配列のインデックス（0始まり連続）で、row.positionとは異なる
     let songs: Vec<SetlistSongWithDetails> = rows
         .into_iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(idx, row)| {
             let song = Song {
                 id: row.song_id,
                 title: row.title,
@@ -401,7 +403,7 @@ pub async fn get_setlist_with_songs(
             let status = if current_index == -1 {
                 SongStatus::Pending
             } else {
-                match row.position.cmp(&current_index) {
+                match (idx as i64).cmp(&current_index) {
                     Ordering::Less => SongStatus::Done,
                     Ordering::Equal => SongStatus::Current,
                     Ordering::Greater => SongStatus::Pending,

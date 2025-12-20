@@ -194,6 +194,9 @@ export function CommentControlPanel({
         return;
       }
 
+      // useSavedState=trueでも、savedStateが存在しない場合は新規開始として扱う
+      const shouldUseSavedState = useSavedState && savedState !== null;
+
       setLoading(true);
       setError(null);
 
@@ -201,8 +204,8 @@ export function CommentControlPanel({
         await invoke('start_polling', {
           api_key: apiKey,
           live_chat_id: liveChatId,
-          next_page_token: useSavedState ? savedState?.next_page_token : null,
-          quota_used: useSavedState ? savedState?.quota_used : null,
+          next_page_token: shouldUseSavedState ? savedState.next_page_token : null,
+          quota_used: shouldUseSavedState ? savedState.quota_used : null,
         });
         if (isMountedRef.current) {
           setIsPolling(true);

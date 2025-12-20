@@ -167,14 +167,16 @@ async fn get_setlist_api(
         .unwrap_or(-1);
 
     // レスポンス構築
+    // Note: current_indexは配列のインデックス（0始まり連続）で、row.1のpositionとは異なる
     let songs: Vec<SongInfo> = rows
         .into_iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(idx, row)| {
             let status = if current_index == -1 {
                 "pending".to_string()
-            } else if row.1 < current_index {
+            } else if (idx as i64) < current_index {
                 "done".to_string()
-            } else if row.1 == current_index {
+            } else if (idx as i64) == current_index {
                 "current".to_string()
             } else {
                 "pending".to_string()

@@ -421,6 +421,34 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_continuation_reload() {
+        // reloadContinuationDataからの抽出
+        let long_token = "ReloadContinuationToken123456789012345678901234567890".repeat(2);
+        let html = format!(
+            r#"{{"reloadContinuationData":{{"continuation":"{}"}}}}"#,
+            long_token
+        );
+        let result = InnerTubeClient::extract_continuation(&html);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), long_token);
+    }
+
+    #[test]
+    fn test_extract_continuation_priority_order() {
+        // 複数パターンがある場合、invalidationが優先される
+        let invalidation_token = "InvalidationToken12345678901234567890123456789012345".repeat(2);
+        let reload_token = "ReloadToken12345678901234567890123456789012345678901234".repeat(2);
+        let html = format!(
+            r#"{{"reloadContinuationData":{{"continuation":"{}"}},"invalidationContinuationData":{{"continuation":"{}"}}}}"#,
+            reload_token, invalidation_token
+        );
+        let result = InnerTubeClient::extract_continuation(&html);
+        assert!(result.is_some());
+        // invalidationが優先されるべき
+        assert_eq!(result.unwrap(), invalidation_token);
+    }
+
+    #[test]
     fn test_extract_api_key() {
         let html = r#""INNERTUBE_API_KEY":"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8""#;
         let result = InnerTubeClient::extract_api_key(html);
@@ -452,4 +480,5 @@ mod tests {
         );
     }
 }
+
 

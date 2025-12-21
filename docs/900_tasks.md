@@ -687,13 +687,17 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 - [x] **InnerTubeテストカバレッジの拡充** ✅ 対応済み（2025-12-21）
   - `parse_chat_response`: 空レスポンス、no_continuation、no_actions、empty_actions
   - `parse_author_badges`: 複数バッジ同時存在、unknown_type、verified_not_owner
-  - `extract_continuation`: 複数パターン（invalidation/timed/reload/generic）
+  - `extract_continuation`: 複数パターン（invalidation/timed/reload/generic）＋優先度テスト
   - `extract_api_key`: 複数パターン（標準/camelCase/ytcfg形式）
-  - テスト合計: 45件
+  - `parse_action`: replay複数アクション対応（回帰防止テスト追加）
+  - テスト合計: **50件**
 
 - [x] **continuation抽出の堅牢化** ✅ 対応済み（2025-12-21）
   - ライブチャット専用コンテキスト（invalidationContinuationData, timedContinuationData）を優先
   - 汎用パターンはフォールバックとして使用（警告ログ付き）
+  - **設計判断**: 複数のinvalidationContinuationDataが存在する場合は最初のマッチを使用
+    - 通常のライブチャットページでは1つのみ存在する前提
+    - 複数存在するケースはPoC段階では想定外とする
 
 - [x] **API key抽出のフォールバック** ✅ 対応済み（2025-12-21）
   - 複数パターン対応: "INNERTUBE_API_KEY", "innertubeApiKey", ytcfg.set形式
@@ -701,6 +705,8 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 - [x] **replay_chat_item_action全アクション処理** ✅ 対応済み（2025-12-21）
   - リプレイ時の複数メッセージ取りこぼしを防止
   - parse_actionがVec<ChatMessage>を返すように変更
+  - **回帰防止テスト追加**: 複数メッセージ/空リプレイ/単一メッセージの3ケース
 
 ---
+
 

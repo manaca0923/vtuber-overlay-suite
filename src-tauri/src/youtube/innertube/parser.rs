@@ -824,4 +824,138 @@ mod tests {
         let result = parse_runs(&Some(runs));
         assert!(result.is_none()); // 空なのでNone
     }
+
+    // ========================================
+    // replay_chat_item_action 複数アクションテスト
+    // ========================================
+
+    /// リプレイアクション内の複数メッセージが正しく処理されることを確認
+    #[test]
+    fn test_parse_action_replay_multiple_messages() {
+        // リプレイアクション内に複数のadd_chat_item_actionを含むケース
+        let replay_action = ChatAction {
+            add_chat_item_action: None,
+            replay_chat_item_action: Some(ReplayChatItemAction {
+                actions: Some(vec![
+                    // 1つ目のメッセージ
+                    ChatAction {
+                        add_chat_item_action: Some(AddChatItemAction {
+                            item: ChatItem {
+                                live_chat_text_message_renderer: Some(LiveChatTextMessageRenderer {
+                                    id: "replay-msg-1".to_string(),
+                                    message: Some(MessageContent {
+                                        runs: Some(vec![RunItem {
+                                            text: Some("First message".to_string()),
+                                            emoji: None,
+                                        }]),
+                                    }),
+                                    author_name: Some(SimpleText {
+                                        simple_text: Some("User1".to_string()),
+                                        runs: None,
+                                    }),
+                                    author_photo: None,
+                                    author_external_channel_id: Some("channel-1".to_string()),
+                                    timestamp_usec: Some("1703145600000000".to_string()),
+                                    author_badges: None,
+                                }),
+                                live_chat_paid_message_renderer: None,
+                                live_chat_paid_sticker_renderer: None,
+                                live_chat_membership_item_renderer: None,
+                                live_chat_sponsor_gift_announcement_renderer: None,
+                            },
+                        }),
+                        replay_chat_item_action: None,
+                    },
+                    // 2つ目のメッセージ
+                    ChatAction {
+                        add_chat_item_action: Some(AddChatItemAction {
+                            item: ChatItem {
+                                live_chat_text_message_renderer: Some(LiveChatTextMessageRenderer {
+                                    id: "replay-msg-2".to_string(),
+                                    message: Some(MessageContent {
+                                        runs: Some(vec![RunItem {
+                                            text: Some("Second message".to_string()),
+                                            emoji: None,
+                                        }]),
+                                    }),
+                                    author_name: Some(SimpleText {
+                                        simple_text: Some("User2".to_string()),
+                                        runs: None,
+                                    }),
+                                    author_photo: None,
+                                    author_external_channel_id: Some("channel-2".to_string()),
+                                    timestamp_usec: Some("1703145601000000".to_string()),
+                                    author_badges: None,
+                                }),
+                                live_chat_paid_message_renderer: None,
+                                live_chat_paid_sticker_renderer: None,
+                                live_chat_membership_item_renderer: None,
+                                live_chat_sponsor_gift_announcement_renderer: None,
+                            },
+                        }),
+                        replay_chat_item_action: None,
+                    },
+                ]),
+            }),
+        };
+
+        let messages = parse_action(replay_action);
+
+        // 2つのメッセージが返されるべき
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].id, "replay-msg-1");
+        assert_eq!(messages[0].message, "First message");
+        assert_eq!(messages[1].id, "replay-msg-2");
+        assert_eq!(messages[1].message, "Second message");
+    }
+
+    /// 空のリプレイアクションは空のVecを返す
+    #[test]
+    fn test_parse_action_replay_empty() {
+        let replay_action = ChatAction {
+            add_chat_item_action: None,
+            replay_chat_item_action: Some(ReplayChatItemAction { actions: None }),
+        };
+
+        let messages = parse_action(replay_action);
+        assert!(messages.is_empty());
+    }
+
+    /// 通常のadd_chat_item_actionは1メッセージを返す
+    #[test]
+    fn test_parse_action_single_message() {
+        let action = ChatAction {
+            add_chat_item_action: Some(AddChatItemAction {
+                item: ChatItem {
+                    live_chat_text_message_renderer: Some(LiveChatTextMessageRenderer {
+                        id: "single-msg".to_string(),
+                        message: Some(MessageContent {
+                            runs: Some(vec![RunItem {
+                                text: Some("Single message".to_string()),
+                                emoji: None,
+                            }]),
+                        }),
+                        author_name: Some(SimpleText {
+                            simple_text: Some("User".to_string()),
+                            runs: None,
+                        }),
+                        author_photo: None,
+                        author_external_channel_id: Some("channel".to_string()),
+                        timestamp_usec: Some("1703145600000000".to_string()),
+                        author_badges: None,
+                    }),
+                    live_chat_paid_message_renderer: None,
+                    live_chat_paid_sticker_renderer: None,
+                    live_chat_membership_item_renderer: None,
+                    live_chat_sponsor_gift_announcement_renderer: None,
+                },
+            }),
+            replay_chat_item_action: None,
+        };
+
+        let messages = parse_action(action);
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "single-msg");
+    }
 }
+

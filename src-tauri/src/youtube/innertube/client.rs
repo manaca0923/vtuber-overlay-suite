@@ -21,28 +21,73 @@ const CLIENT_VERSION: &str = "2.20231219.01.00";
 const MIN_CONTINUATION_LENGTH: usize = 50;
 
 // 正規表現のシングルトン（OnceLockで初回のみコンパイル）
-static CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
+// invalidationContinuationData (ライブチャット用の優先度高いトークン)
+static INVALIDATION_CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
+// timedContinuationData (ライブチャット用のタイムアウト付きトークン)
+static TIMED_CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
+// reloadContinuationData (リロード用トークン)
 static RELOAD_CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
-static API_KEY_RE: OnceLock<Regex> = OnceLock::new();
+// 汎用continuation (フォールバック用)
+static GENERIC_CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
+// API key用パターン (複数形式対応)
+static API_KEY_RE_1: OnceLock<Regex> = OnceLock::new();
+static API_KEY_RE_2: OnceLock<Regex> = OnceLock::new();
+static API_KEY_RE_3: OnceLock<Regex> = OnceLock::new();
 
-fn get_continuation_regex() -> &'static Regex {
-    CONTINUATION_RE.get_or_init(|| {
-        Regex::new(r#""continuation"\s*:\s*"([^"]+)""#)
-            .expect("Failed to compile continuation regex")
+/// invalidationContinuationData内のcontinuationを抽出（最優先）
+/// ライブチャット専用のトークンを確実に取得
+fn get_invalidation_continuation_regex() -> &'static Regex {
+    INVALIDATION_CONTINUATION_RE.get_or_init(|| {
+        Regex::new(r#""invalidationContinuationData"\s*:\s*\{[^}]*"continuation"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile invalidationContinuationData regex")
     })
 }
 
+/// timedContinuationData内のcontinuationを抽出（優先度2）
+fn get_timed_continuation_regex() -> &'static Regex {
+    TIMED_CONTINUATION_RE.get_or_init(|| {
+        Regex::new(r#""timedContinuationData"\s*:\s*\{[^}]*"continuation"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile timedContinuationData regex")
+    })
+}
+
+/// reloadContinuationData内のcontinuationを抽出（優先度3）
 fn get_reload_continuation_regex() -> &'static Regex {
     RELOAD_CONTINUATION_RE.get_or_init(|| {
-        Regex::new(r#""reloadContinuationData"\s*:\s*\{\s*"continuation"\s*:\s*"([^"]+)""#)
+        Regex::new(r#""reloadContinuationData"\s*:\s*\{[^}]*"continuation"\s*:\s*"([^"]+)""#)
             .expect("Failed to compile reloadContinuationData regex")
     })
 }
 
-fn get_api_key_regex() -> &'static Regex {
-    API_KEY_RE.get_or_init(|| {
+/// 汎用のcontinuation抽出（フォールバック、優先度最低）
+fn get_generic_continuation_regex() -> &'static Regex {
+    GENERIC_CONTINUATION_RE.get_or_init(|| {
+        Regex::new(r#""continuation"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile generic continuation regex")
+    })
+}
+
+/// API key抽出パターン1: "INNERTUBE_API_KEY": "..."
+fn get_api_key_regex_1() -> &'static Regex {
+    API_KEY_RE_1.get_or_init(|| {
         Regex::new(r#""INNERTUBE_API_KEY"\s*:\s*"([^"]+)""#)
-            .expect("Failed to compile API key regex")
+            .expect("Failed to compile API key regex 1")
+    })
+}
+
+/// API key抽出パターン2: "innertubeApiKey": "..." (camelCase形式)
+fn get_api_key_regex_2() -> &'static Regex {
+    API_KEY_RE_2.get_or_init(|| {
+        Regex::new(r#""innertubeApiKey"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile API key regex 2")
+    })
+}
+
+/// API key抽出パターン3: ytcfg.set({...INNERTUBE_API_KEY: "..."}) 形式
+fn get_api_key_regex_3() -> &'static Regex {
+    API_KEY_RE_3.get_or_init(|| {
+        Regex::new(r#"INNERTUBE_API_KEY\s*[":]\s*"([^"]+)""#)
+            .expect("Failed to compile API key regex 3")
     })
 }
 
@@ -116,33 +161,68 @@ impl InnerTubeClient {
         }
     }
 
-    /// continuationトークンを抽出
+    /// continuationトークンを抽出（ライブチャット専用コンテキストを優先）
+    ///
+    /// 優先順位:
+    /// 1. invalidationContinuationData - ライブチャット用のリアルタイム更新トークン
+    /// 2. timedContinuationData - タイムアウト付きのライブチャットトークン
+    /// 3. reloadContinuationData - リロード用トークン
+    /// 4. 汎用continuation - フォールバック（他のcontinuationと混同するリスクあり）
     fn extract_continuation(html: &str) -> Option<String> {
-        // ytInitialData内のcontinuationを正規表現で抽出
-        // パターン: "continuation":"..." または "reloadContinuationData":{"continuation":"..."}
-
-        // 方法1: invalidationContinuationData（事前コンパイル済み正規表現を使用）
-        let re = get_continuation_regex();
-        if let Some(caps) = re.captures(html) {
+        // 優先度1: invalidationContinuationData（ライブチャット専用、最も確実）
+        let re1 = get_invalidation_continuation_regex();
+        if let Some(caps) = re1.captures(html) {
             if let Some(cont) = caps.get(1) {
                 let continuation = cont.as_str().to_string();
-                // MIN_CONTINUATION_LENGTH以下の短いトークンを除外
-                // （ページネーション以外の用途のトークンを除外するため）
                 if continuation.len() > MIN_CONTINUATION_LENGTH {
-                    log::debug!("Found continuation token (length: {})", continuation.len());
+                    log::info!(
+                        "Found invalidationContinuationData token (length: {}, priority: 1)",
+                        continuation.len()
+                    );
                     return Some(continuation);
                 }
             }
         }
 
-        // 方法2: reloadContinuationData（事前コンパイル済み正規表現を使用）
-        let re2 = get_reload_continuation_regex();
+        // 優先度2: timedContinuationData（タイムアウト付きライブチャットトークン）
+        let re2 = get_timed_continuation_regex();
         if let Some(caps) = re2.captures(html) {
             if let Some(cont) = caps.get(1) {
                 let continuation = cont.as_str().to_string();
                 if continuation.len() > MIN_CONTINUATION_LENGTH {
-                    log::debug!(
-                        "Found continuation token from reloadContinuationData (length: {})",
+                    log::info!(
+                        "Found timedContinuationData token (length: {}, priority: 2)",
+                        continuation.len()
+                    );
+                    return Some(continuation);
+                }
+            }
+        }
+
+        // 優先度3: reloadContinuationData（リロード用）
+        let re3 = get_reload_continuation_regex();
+        if let Some(caps) = re3.captures(html) {
+            if let Some(cont) = caps.get(1) {
+                let continuation = cont.as_str().to_string();
+                if continuation.len() > MIN_CONTINUATION_LENGTH {
+                    log::info!(
+                        "Found reloadContinuationData token (length: {}, priority: 3)",
+                        continuation.len()
+                    );
+                    return Some(continuation);
+                }
+            }
+        }
+
+        // 優先度4: 汎用パターン（フォールバック、他のcontinuationと混同リスクあり）
+        // 警告: このパターンは他の用途のcontinuationにマッチする可能性がある
+        let re4 = get_generic_continuation_regex();
+        if let Some(caps) = re4.captures(html) {
+            if let Some(cont) = caps.get(1) {
+                let continuation = cont.as_str().to_string();
+                if continuation.len() > MIN_CONTINUATION_LENGTH {
+                    log::warn!(
+                        "Using generic continuation token (length: {}, priority: 4) - may not be live chat specific",
                         continuation.len()
                     );
                     return Some(continuation);
@@ -154,12 +234,45 @@ impl InnerTubeClient {
         None
     }
 
-    /// INNERTUBE_API_KEYを抽出（事前コンパイル済み正規表現を使用）
+    /// INNERTUBE_API_KEYを抽出（複数パターンでフォールバック）
+    ///
+    /// 対応パターン:
+    /// 1. "INNERTUBE_API_KEY": "..." (標準JSON形式)
+    /// 2. "innertubeApiKey": "..." (camelCase形式)
+    /// 3. INNERTUBE_API_KEY: "..." (ytcfg.set形式、クォートなしキー)
     fn extract_api_key(html: &str) -> Option<String> {
-        let re = get_api_key_regex();
-        re.captures(html)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string())
+        // パターン1: "INNERTUBE_API_KEY": "..."
+        let re1 = get_api_key_regex_1();
+        if let Some(caps) = re1.captures(html) {
+            if let Some(key) = caps.get(1) {
+                let api_key = key.as_str().to_string();
+                log::debug!("Found INNERTUBE_API_KEY (pattern 1)");
+                return Some(api_key);
+            }
+        }
+
+        // パターン2: "innertubeApiKey": "..."
+        let re2 = get_api_key_regex_2();
+        if let Some(caps) = re2.captures(html) {
+            if let Some(key) = caps.get(1) {
+                let api_key = key.as_str().to_string();
+                log::debug!("Found innertubeApiKey (pattern 2)");
+                return Some(api_key);
+            }
+        }
+
+        // パターン3: INNERTUBE_API_KEY: "..." (ytcfg.set形式)
+        let re3 = get_api_key_regex_3();
+        if let Some(caps) = re3.captures(html) {
+            if let Some(key) = caps.get(1) {
+                let api_key = key.as_str().to_string();
+                log::debug!("Found INNERTUBE_API_KEY (pattern 3, ytcfg format)");
+                return Some(api_key);
+            }
+        }
+
+        log::warn!("No INNERTUBE_API_KEY found - API calls may fail");
+        None
     }
 
     /// チャットメッセージを取得
@@ -283,6 +396,31 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_continuation_invalidation_priority() {
+        // invalidationContinuationDataが最優先
+        let long_token = "Cop4BxoYQ2dncl9jb21tb25fY2hhdF9tZXNzYWdlcw==".repeat(3);
+        let html = format!(
+            r#"{{"invalidationContinuationData":{{"continuation":"{}"}}}}"#,
+            long_token
+        );
+        let result = InnerTubeClient::extract_continuation(&html);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), long_token);
+    }
+
+    #[test]
+    fn test_extract_continuation_timed_priority() {
+        // timedContinuationDataも抽出可能
+        let long_token = "TimedContinuationToken123456789012345678901234567890".repeat(2);
+        let html = format!(
+            r#"{{"timedContinuationData":{{"timeoutMs":5000,"continuation":"{}"}}}}"#,
+            long_token
+        );
+        let result = InnerTubeClient::extract_continuation(&html);
+        assert!(result.is_some());
+    }
+
+    #[test]
     fn test_extract_api_key() {
         let html = r#""INNERTUBE_API_KEY":"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8""#;
         let result = InnerTubeClient::extract_api_key(html);
@@ -291,4 +429,27 @@ mod tests {
             Some("AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8".to_string())
         );
     }
+
+    #[test]
+    fn test_extract_api_key_camel_case() {
+        // camelCase形式もサポート
+        let html = r#""innertubeApiKey":"AIzaSyBBCamelCase123456789""#;
+        let result = InnerTubeClient::extract_api_key(html);
+        assert_eq!(
+            result,
+            Some("AIzaSyBBCamelCase123456789".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_api_key_ytcfg_format() {
+        // ytcfg.set形式もサポート
+        let html = r#"ytcfg.set({INNERTUBE_API_KEY: "AIzaSyYtcfgFormat"})"#;
+        let result = InnerTubeClient::extract_api_key(html);
+        assert_eq!(
+            result,
+            Some("AIzaSyYtcfgFormat".to_string())
+        );
+    }
 }
+

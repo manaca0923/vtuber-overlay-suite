@@ -263,3 +263,4 @@ pub fn parse_message_type(snippet: &MessageSnippet) -> MessageType {
         }
     }
 }
+

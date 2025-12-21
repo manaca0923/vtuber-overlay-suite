@@ -17,31 +17,42 @@ pub fn parse_chat_response(response: InnerTubeChatResponse) -> Vec<ChatMessage> 
         return vec![];
     };
 
+    // flat_mapを使用してparse_actionが返す複数メッセージを統合
     actions
         .into_iter()
-        .filter_map(parse_action)
+        .flat_map(parse_action)
         .collect()
 }
 
-/// 単一のアクションをパース
-fn parse_action(action: ChatAction) -> Option<ChatMessage> {
+/// 単一のアクションをパース（複数メッセージを返す可能性あり）
+///
+/// リプレイアクションには複数のメッセージが含まれる場合があるため、
+/// Vec<ChatMessage>を返す設計に変更。
+fn parse_action(action: ChatAction) -> Vec<ChatMessage> {
     // 通常のメッセージ追加
     if let Some(add_action) = action.add_chat_item_action {
-        return parse_chat_item(add_action.item);
+        if let Some(msg) = parse_chat_item(add_action.item) {
+            return vec![msg];
+        }
+        return vec![];
     }
 
     // リプレイアクション（アーカイブ視聴時）
+    // 複数のadd_chat_item_actionが含まれる場合、すべてを処理
     if let Some(replay_action) = action.replay_chat_item_action {
         if let Some(actions) = replay_action.actions {
-            for inner_action in actions {
-                if let Some(add_action) = inner_action.add_chat_item_action {
-                    return parse_chat_item(add_action.item);
-                }
-            }
+            let messages: Vec<ChatMessage> = actions
+                .into_iter()
+                .filter_map(|inner_action| {
+                    inner_action.add_chat_item_action
+                        .and_then(|add_action| parse_chat_item(add_action.item))
+                })
+                .collect();
+            return messages;
         }
     }
 
-    None
+    vec![]
 }
 
 /// チャットアイテムをパース

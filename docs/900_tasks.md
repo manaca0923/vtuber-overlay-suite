@@ -450,6 +450,12 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 - [x] Feature Flag実装（ApiMode: official/innertube）
 - [x] テストコマンド実装（test_innertube_connection）
 - [x] オーバーレイ絵文字対応（comment.html）
+- [x] **PRレビュー指摘対応（2025-12-21）**
+  - [x] continuation抽出改善（ライブチャット専用コンテキスト優先）
+  - [x] API key抽出フォールバック（複数パターン対応）
+  - [x] replay_chat_item_action全アクション処理（メッセージ取りこぼし防止）
+  - [x] test_innertube_connectionの本番ビルド無効化
+  - [x] ユニットテスト拡充（45件）
 - [ ] 安定性レポート作成（手動テスト必要）
 - [ ] **カスタム絵文字（メンバースタンプ）対応検証**
 
@@ -457,6 +463,17 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 - 接続成功率 > 95%
 - 平均再接続時間 < 5秒
 - HTTP/2プロキシ環境での動作
+
+### 既知の制限事項（InnerTube API）
+
+> **注意**: 以下はInnerTube API固有の制限であり、PoC段階では許容とする。
+
+| 制限事項 | 説明 | 対応方針 |
+|----------|------|----------|
+| **is_verified常にfalse** | InnerTube APIにはVerifiedバッジ情報がない | 公式API統合時に対応 |
+| **sticker_idにサムネURL使用** | InnerTube APIにはsticker_idがなく、サムネイルURLで代用 | 表示には支障なし |
+| **ApiMode未接続** | PoC段階のため本番ポーリングには統合していない | 次フェーズで対応予定 |
+| **CLIENT_VERSIONの古さ** | 2023年12月版を使用（無効化リスクあり） | 設定ファイル化を検討 |
 
 ### 調査結果（2025-12-21）
 
@@ -659,17 +676,31 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 
 ### InnerTube API関連（PR#24）
 
-- [ ] **test_innertube_connectionの本番無効化**
-  - テスト用コマンドのため本番では無効化を検討
-  - `#[cfg(debug_assertions)]`などで制御可能
+- [x] **test_innertube_connectionの本番無効化** ✅ 対応済み（2025-12-21）
+  - `lib.rs`で`#[cfg(debug_assertions)]`による条件付きコンパイル分岐を実装
+  - デバッグビルドのみtest_innertube_connectionコマンドを登録
 
 - [ ] **クライアントバージョンの自動更新機構**
   - `CLIENT_VERSION`（2023年12月）がYouTube側で無効化される可能性
   - 設定ファイルまたはフォールバック機構を検討
 
-- [ ] **InnerTubeテストカバレッジの拡充**
-  - `parse_chat_response`: 空のレスポンス、不正なレスポンス
-  - `parse_author_badges`: 複数バッジ同時存在ケース
-  - `extract_continuation`: 複数continuationトークン存在ケース
+- [x] **InnerTubeテストカバレッジの拡充** ✅ 対応済み（2025-12-21）
+  - `parse_chat_response`: 空レスポンス、no_continuation、no_actions、empty_actions
+  - `parse_author_badges`: 複数バッジ同時存在、unknown_type、verified_not_owner
+  - `extract_continuation`: 複数パターン（invalidation/timed/reload/generic）
+  - `extract_api_key`: 複数パターン（標準/camelCase/ytcfg形式）
+  - テスト合計: 45件
+
+- [x] **continuation抽出の堅牢化** ✅ 対応済み（2025-12-21）
+  - ライブチャット専用コンテキスト（invalidationContinuationData, timedContinuationData）を優先
+  - 汎用パターンはフォールバックとして使用（警告ログ付き）
+
+- [x] **API key抽出のフォールバック** ✅ 対応済み（2025-12-21）
+  - 複数パターン対応: "INNERTUBE_API_KEY", "innertubeApiKey", ytcfg.set形式
+
+- [x] **replay_chat_item_action全アクション処理** ✅ 対応済み（2025-12-21）
+  - リプレイ時の複数メッセージ取りこぼしを防止
+  - parse_actionがVec<ChatMessage>を返すように変更
 
 ---
+

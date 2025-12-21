@@ -240,7 +240,7 @@
       // maxCount
       const maxCount = params.get('maxCount');
       let maxCountChanged = false;
-      if (maxCount && isValidNumber(maxCount, 5, 50)) {
+      if (maxCount && isValidNumber(maxCount, 5, 30)) {
         maxComments = parseInt(maxCount, 10);
         maxCountChanged = true;
       }

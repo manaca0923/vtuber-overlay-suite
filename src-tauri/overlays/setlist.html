@@ -433,15 +433,22 @@
       }
     }
 
+    // 初回接続フラグ（セットリスト初期取得の二重呼び出し防止用）
+    let isFirstConnection = true;
+
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        // 設定取得が未成功の場合は再取得（初回fetch失敗時または再接続時）
-        if (!settingsFetchedSuccessfully) {
+        // 再接続時はセットリストを常に再取得（データが変わっている可能性）
+        if (!isFirstConnection) {
           fetchAndDisplaySetlist();
+        }
+        isFirstConnection = false;
+        // 設定取得が未成功の場合は再取得
+        if (!settingsFetchedSuccessfully) {
           fetchAndApplySettings();
         }
       };

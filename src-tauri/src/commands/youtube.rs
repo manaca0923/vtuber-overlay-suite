@@ -333,14 +333,38 @@ pub struct PollingStateData {
 }
 
 /// テストモード: ダミーコメントを送信
+/// message_type_name: "text" | "superChat" | "superSticker" | "membership" | "membershipGift"
 #[tauri::command]
 pub async fn send_test_comment(
     comment_text: String,
     author_name: String,
+    message_type_name: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     use crate::youtube::types::MessageType;
     use chrono::Utc;
+
+    // メッセージタイプを決定
+    let message_type = match message_type_name.as_deref() {
+        Some("superChat") => MessageType::SuperChat {
+            amount: "¥1,000".to_string(),
+            currency: "JPY".to_string(),
+        },
+        Some("superSticker") => MessageType::SuperSticker {
+            sticker_id: "test-sticker".to_string(),
+        },
+        Some("membership") => MessageType::Membership {
+            level: "New Member".to_string(),
+        },
+        Some("membershipGift") => MessageType::MembershipGift { count: 5 },
+        _ => MessageType::Text,
+    };
+
+    // バッジ設定（メンバーシップ系はis_memberをtrueに）
+    let is_member = matches!(
+        message_type,
+        MessageType::Membership { .. } | MessageType::MembershipGift { .. }
+    );
 
     // ダミーコメント作成
     let test_message = ChatMessage {
@@ -348,13 +372,14 @@ pub async fn send_test_comment(
         message: comment_text,
         author_name,
         author_channel_id: "test-channel".to_string(),
-        author_image_url: "https://via.placeholder.com/48".to_string(),
+        // シンプルなSVGプレースホルダー（オフライン対応）
+        author_image_url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='24' fill='%236366f1'/%3E%3Ctext x='24' y='30' text-anchor='middle' fill='white' font-size='20'%3E%F0%9F%A7%AA%3C/text%3E%3C/svg%3E".to_string(),
         published_at: Utc::now(),
         is_owner: false,
         is_moderator: false,
-        is_member: false,
+        is_member,
         is_verified: false,
-        message_type: MessageType::Text,
+        message_type,
         message_runs: None,
     };
 

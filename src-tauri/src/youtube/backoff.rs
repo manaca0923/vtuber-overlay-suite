@@ -30,6 +30,7 @@ impl ExponentialBackoff {
     }
 
     /// カスタム設定でExponentialBackoffインスタンスを作成
+    #[allow(dead_code)]
     pub fn with_config(base_delay: Duration, max_delay: Duration, max_attempts: u32) -> Self {
         Self {
             base_delay,
@@ -55,6 +56,7 @@ impl ExponentialBackoff {
     }
 
     /// 現在の試行回数を取得
+    #[allow(dead_code)]
     pub fn attempt_count(&self) -> u32 {
         self.current_attempt
     }

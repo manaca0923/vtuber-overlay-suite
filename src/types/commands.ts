@@ -49,5 +49,11 @@ export const broadcastSetlistUpdate = (setlistId: string) =>
   invoke<void>('broadcast_setlist_update', { setlistId });
 
 // Test mode commands
-export const sendTestComment = (commentText: string, authorName: string) =>
-  invoke<void>('send_test_comment', { commentText, authorName });
+export type TestMessageType = 'text' | 'superChat' | 'superSticker' | 'membership' | 'membershipGift';
+
+export const sendTestComment = (
+  commentText: string,
+  authorName: string,
+  messageTypeName?: TestMessageType
+) =>
+  invoke<void>('send_test_comment', { commentText, authorName, messageTypeName });

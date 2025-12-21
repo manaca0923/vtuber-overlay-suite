@@ -381,11 +381,37 @@
       }
     }
 
-    // 古いコメントを削除して上限に収める
+    // フェードアウトアニメーション付きでコメントを削除
+    function removeCommentWithAnimation(element) {
+      if (!element || element.classList.contains('removing')) return;
+
+      element.classList.add('removing');
+      // アニメーション終了後にDOM削除
+      element.addEventListener('animationend', () => {
+        element.remove();
+      }, { once: true });
+
+      // フォールバック: アニメーションが発火しなかった場合のタイムアウト
+      setTimeout(() => {
+        if (element.parentNode) {
+          element.remove();
+        }
+      }, 500); // animation-duration(0.3s)より少し長め
+    }
+
+    // 古いコメントを削除して上限に収める（アニメーション付き）
     function trimOldComments() {
       const container = document.getElementById('comment-container');
-      while (container.children.length > maxComments) {
-        container.firstChild.remove();
+      // 削除対象を先に収集（アニメーション中の要素は除外）
+      const comments = Array.from(container.children).filter(
+        el => !el.classList.contains('removing')
+      );
+      const excess = comments.length - maxComments;
+      if (excess > 0) {
+        // 古い順に削除
+        for (let i = 0; i < excess; i++) {
+          removeCommentWithAnimation(comments[i]);
+        }
       }
     }
 
@@ -486,6 +512,9 @@
           const data = JSON.parse(event.data);
           if (data.type === 'comment:add') {
             addComment(data.payload);
+          } else if (data.type === 'comment:remove') {
+            // コメント削除イベント（フェードアウトアニメーション付き）
+            removeComment(data.payload?.id);
           } else if (data.type === 'settings:update') {
             // WSからの設定更新はバージョンをインクリメント（レース条件対策）
             settingsVersion++;
@@ -528,9 +557,16 @@
       const el = createCommentElement(comment);
       container.appendChild(el);
 
-      // 古いコメントを削除（maxCommentsは設定で動的に変更可能）
-      while (container.children.length > maxComments) {
-        container.firstChild.remove();
+      // 古いコメントを削除（アニメーション付き）
+      trimOldComments();
+    }
+
+    // コメントを削除（IDで指定）
+    function removeComment(commentId) {
+      if (!commentId) return;
+      const el = document.querySelector(`[data-id="${CSS.escape(commentId)}"]`);
+      if (el) {
+        removeCommentWithAnimation(el);
       }
     }
 

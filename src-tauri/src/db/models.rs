@@ -33,6 +33,7 @@ impl Song {
     }
 
     /// タグをVec<String>として取得
+    #[allow(dead_code)]
     pub fn tags_vec(&self) -> Vec<String> {
         self.tags
             .as_ref()

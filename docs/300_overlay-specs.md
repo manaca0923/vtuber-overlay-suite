@@ -10,8 +10,9 @@ OBS Studioのブラウザソースとして動作するオーバーレイの仕�
 
 | URL | 用途 |
 |-----|------|
-| `http://localhost:19800/overlay/comment` | コメント表示 |
-| `http://localhost:19800/overlay/setlist` | セットリスト表示 |
+| `http://localhost:19800/overlay/comment` | コメント表示（個別） |
+| `http://localhost:19800/overlay/setlist` | セットリスト表示（個別） |
+| `http://localhost:19800/overlay/combined` | 統合オーバーレイ（コメント+セットリスト） |
 | `http://localhost:19800/api/overlay/settings` | オーバーレイ設定取得（初期化用） |
 | `ws://localhost:19801/ws` | リアルタイム更新 |
 
@@ -299,16 +300,129 @@ class WebSocketManager {
 
 ---
 
+## 統合オーバーレイ（combined.html）
+
+コメントとセットリストを1つのブラウザソースで表示する統合オーバーレイ。
+
+### 用途
+
+- OBSのブラウザソースを1つで済ませたい場合
+- コメントとセットリストの配置を連動させたい場合
+- レイアウトプリセットを活用したい場合
+
+### レイアウトプリセット
+
+| プリセット | 用途 | コメント位置 | セットリスト位置 |
+|-----------|------|-------------|-----------------|
+| `streaming` | 配信向け | bottom-left | bottom |
+| `talk` | 雑談向け | bottom-right | left |
+| `music` | 歌配信向け | top-right | bottom |
+| `gaming` | ゲーム配信向け | top-left | right |
+| `custom` | カスタム | ユーザー指定 | ユーザー指定 |
+
+### HTML構造
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Combined Overlay</title>
+</head>
+<body>
+  <div id="overlay-root" class="layout-streaming">
+    <!-- コメントエリア -->
+    <div id="comment-area">
+      <div id="comment-container">
+        <!-- コメントが動的に追加される -->
+      </div>
+    </div>
+    <!-- セットリストエリア -->
+    <div id="setlist-area">
+      <div id="setlist-container">
+        <!-- セットリストが動的に追加される -->
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+### CSS Grid レイアウト
+
+```css
+/* レイアウトプリセット: streaming */
+#overlay-root.layout-streaming {
+  grid-template-columns: 1fr 2fr;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    "comment main"
+    "setlist setlist";
+}
+
+/* レイアウトプリセット: talk */
+#overlay-root.layout-talk {
+  grid-template-columns: auto 1fr 1fr;
+  grid-template-rows: 1fr;
+  grid-template-areas: "setlist main comment";
+}
+
+/* レイアウトプリセット: music */
+#overlay-root.layout-music {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "main comment"
+    "setlist setlist";
+}
+
+/* レイアウトプリセット: gaming */
+#overlay-root.layout-gaming {
+  grid-template-columns: 1fr 1fr auto;
+  grid-template-rows: 1fr;
+  grid-template-areas: "comment main setlist";
+}
+```
+
+### URLパラメータ（統合オーバーレイ専用）
+
+```
+http://localhost:19800/overlay/combined?layout=streaming&commentEnabled=true&setlistEnabled=true
+```
+
+| パラメータ | 型 | デフォルト | 説明 |
+|------------|-----|------------|------|
+| layout | string | 'streaming' | レイアウトプリセット |
+| commentEnabled | boolean | true | コメント表示ON/OFF |
+| setlistEnabled | boolean | true | セットリスト表示ON/OFF |
+| primaryColor | string | '#6366f1' | プライマリカラー（#RRGGBB） |
+| commentFontSize | number | 16 | コメントフォントサイズ（px） |
+| setlistFontSize | number | 24 | セットリストフォントサイズ（px） |
+| showAvatar | boolean | true | アバター表示 |
+| showArtist | boolean | true | アーティスト表示 |
+
+### 推奨設定（OBS）
+
+| 項目 | 値 |
+|------|-----|
+| 幅 | 1920px |
+| 高さ | 1080px |
+| FPS | 30 |
+
+統合オーバーレイはOBS画面全体（1920x1080）を前提とした設計。
+
+---
+
 ## OBS設定ガイド
 
 ### 推奨設定
 
-| 項目 | コメント | セットリスト |
-|------|----------|--------------|
-| 幅 | 400px | 350px |
-| 高さ | 600px | 200px |
-| FPS | 30 | 30 |
-| CSS | カスタム可 | カスタム可 |
+| 項目 | コメント | セットリスト | 統合オーバーレイ |
+|------|----------|--------------|------------------|
+| 幅 | 400px | 350px | 1920px |
+| 高さ | 600px | 200px | 1080px |
+| FPS | 30 | 30 | 30 |
+| CSS | カスタム可 | カスタム可 | カスタム可 |
 
 ### カスタムCSS（OBS）
 

@@ -69,15 +69,60 @@
       animation: pulse 1.5s ease-in-out infinite;
     }
 
+    .title-wrapper {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
     .title {
       font-size: var(--font-size-title);
       font-weight: bold;
       text-shadow: var(--text-shadow);
-      flex: 1;
-      min-width: 0;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    /* 前後の曲は省略表示 */
+    .song.previous .title,
+    .song.next .title {
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
+      max-width: 100%;
+    }
+
+    /* 現在の曲のマーキーアニメーション */
+    .song.current .title.marquee {
+      animation: marquee var(--marquee-duration, 10s) linear infinite;
+      animation-delay: 3s;
+    }
+
+    @keyframes marquee {
+      0%, 15% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      20% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      75%, 90% {
+        transform: translateX(var(--marquee-distance, -100px));
+        opacity: 1;
+      }
+      95% {
+        transform: translateX(var(--marquee-distance, -100px));
+        opacity: 0;
+      }
+      97% {
+        transform: translateX(0);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
     }
 
     .artist {
@@ -118,15 +163,21 @@
 <body>
   <div id="setlist-container">
     <div class="song previous" id="prev-song">
-      <span class="title">-</span>
+      <div class="title-wrapper">
+        <span class="title">-</span>
+      </div>
     </div>
     <div class="song current" id="current-song">
       <span class="indicator">♪</span>
-      <span class="title">配信準備中...</span>
+      <div class="title-wrapper">
+        <span class="title">配信準備中...</span>
+      </div>
       <span class="artist"></span>
     </div>
     <div class="song next" id="next-song">
-      <span class="title">-</span>
+      <div class="title-wrapper">
+        <span class="title">-</span>
+      </div>
     </div>
   </div>
 
@@ -228,6 +279,34 @@
       }
     }
 
+    // マーキー設定の定数
+    const MARQUEE_PADDING = 20;      // スクロール時の余白（px）
+    const MARQUEE_MIN_DURATION = 8;  // 最小アニメーション時間（秒）
+    const MARQUEE_SCROLL_SPEED = 30; // スクロール速度（px/秒）
+
+    // マーキー効果を適用（テキストがコンテナより長い場合のみ）
+    function applyMarqueeEffect(titleElement, wrapperElement) {
+      // リセット
+      titleElement.classList.remove('marquee');
+      titleElement.style.removeProperty('--marquee-distance');
+      titleElement.style.removeProperty('--marquee-duration');
+
+      // DOMの更新を待つ
+      requestAnimationFrame(() => {
+        const titleWidth = titleElement.scrollWidth;
+        const wrapperWidth = wrapperElement.clientWidth;
+
+        if (titleWidth > wrapperWidth) {
+          const overflow = titleWidth - wrapperWidth + MARQUEE_PADDING;
+          const duration = Math.max(MARQUEE_MIN_DURATION, overflow / MARQUEE_SCROLL_SPEED);
+
+          titleElement.style.setProperty('--marquee-distance', `-${overflow}px`);
+          titleElement.style.setProperty('--marquee-duration', `${duration}s`);
+          titleElement.classList.add('marquee');
+        }
+      });
+    }
+
     function updateSetlist(payload) {
       const { currentIndex, songs } = payload;
 
@@ -235,10 +314,14 @@
       const currentSong = document.getElementById('current-song');
       const nextSong = document.getElementById('next-song');
 
+      const currentTitle = currentSong.querySelector('.title');
+      const currentWrapper = currentSong.querySelector('.title-wrapper');
+
       // 曲がない場合
       if (!songs || songs.length === 0) {
         prevSong.style.display = 'none';
-        currentSong.querySelector('.title').textContent = '曲がありません';
+        currentTitle.textContent = '曲がありません';
+        currentTitle.classList.remove('marquee');
         currentSong.querySelector('.artist').textContent = '';
         nextSong.style.display = 'none';
         return;
@@ -247,7 +330,8 @@
       // currentIndex === -1 の場合（曲が選択されていない）
       if (currentIndex < 0 || currentIndex >= songs.length) {
         prevSong.style.display = 'none';
-        currentSong.querySelector('.title').textContent = '配信準備中...';
+        currentTitle.textContent = '配信準備中...';
+        currentTitle.classList.remove('marquee');
         currentSong.querySelector('.artist').textContent = '';
         // 次の曲として最初の曲を表示
         if (songs.length > 0) {
@@ -270,10 +354,13 @@
 
       // 現在の曲
       const song = songs[currentIndex];
-      currentSong.querySelector('.title').textContent = song.title;
+      currentTitle.textContent = song.title;
       currentSong.querySelector('.artist').textContent = song.artist || '';
       currentSong.classList.add('entering');
       setTimeout(() => currentSong.classList.remove('entering'), 500);
+
+      // マーキー効果を適用
+      applyMarqueeEffect(currentTitle, currentWrapper);
 
       // 次の曲
       if (currentIndex < songs.length - 1 && songs[currentIndex + 1]) {
@@ -286,6 +373,16 @@
     }
 
     connectWebSocket();
+
+    // ウィンドウリサイズ時にマーキー効果を再計算（OBSソースサイズ変更対応）
+    const resizeObserver = new ResizeObserver(() => {
+      const currentTitle = document.querySelector('#current-song .title');
+      const currentWrapper = document.querySelector('#current-song .title-wrapper');
+      if (currentTitle && currentWrapper && currentTitle.textContent) {
+        applyMarqueeEffect(currentTitle, currentWrapper);
+      }
+    });
+    resizeObserver.observe(document.getElementById('setlist-container'));
   </script>
 </body>
 </html>

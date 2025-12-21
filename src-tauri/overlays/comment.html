@@ -376,6 +376,8 @@
 
     // 設定取得のバージョン管理（レース条件対策）
     let settingsVersion = 0;
+    // 設定取得成功フラグ（初回fetch失敗時のリカバリー用）
+    let settingsFetchSucceeded = false;
     // 初回接続フラグ
     let isFirstConnection = true;
 
@@ -406,6 +408,7 @@
           applySettingsUpdate(settings);
           // URLパラメータを再適用（URL優先）
           applyUrlSettings();
+          settingsFetchSucceeded = true;
         }
       } catch (e) {
         if (e.name === 'AbortError') {
@@ -422,8 +425,8 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        // 再接続時は設定を再取得（接続断中の変更を反映するため）
-        if (!isFirstConnection) {
+        // 再接続時または初回設定取得未成功の場合は設定を再取得
+        if (!isFirstConnection || !settingsFetchSucceeded) {
           fetchAndApplySettings();
         }
         isFirstConnection = false;

@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 /// 指数バックオフの最大試行回数
-/// これを超えるとリトライを停止する
-const MAX_ATTEMPTS: u32 = 10;
+/// u32::MAXで事実上無制限に設定（長時間配信対応）
+/// ユーザーは手動でポーリングを停止可能
+const MAX_ATTEMPTS: u32 = u32::MAX;
 
 /// 指数バックオフを管理する構造体
 /// エラー時のリトライ間隔を指数的に増加させる（1s→2s→4s→8s→16s...）
@@ -19,7 +20,7 @@ impl ExponentialBackoff {
     /// デフォルト設定:
     /// - base_delay: 1秒
     /// - max_delay: 60秒
-    /// - max_attempts: 10回
+    /// - max_attempts: 無制限（u32::MAX）
     pub fn new() -> Self {
         Self {
             base_delay: Duration::from_secs(1),
@@ -45,8 +46,10 @@ impl ExponentialBackoff {
     /// 計算式: base_delay * 2^current_attempt
     /// max_delayを超える場合はmax_delayが返される
     pub fn next_delay(&mut self) -> Duration {
-        let delay = self.base_delay * 2u32.pow(self.current_attempt);
-        self.current_attempt += 1;
+        // saturating_powでオーバーフローを防止
+        let multiplier = 2u32.saturating_pow(self.current_attempt);
+        let delay = self.base_delay.saturating_mul(multiplier);
+        self.current_attempt = self.current_attempt.saturating_add(1);
         delay.min(self.max_delay)
     }
 

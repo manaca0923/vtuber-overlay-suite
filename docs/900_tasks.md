@@ -681,10 +681,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: removeCommentWithAnimation()で.removingクラスを使用
   - comment:removeイベントにも対応
 
-- [ ] **コメントログのDB保存** (PR#23)
-  - スキーマ（`001_initial.sql`の`comment_logs`テーブル）は存在
-  - ポーリング取得時にコメントをDBに保存する処理が未実装
-  - MVP要件か要確認
+- [x] **コメントログのDB保存** (PR#23, PR#32で対応済み)
+  - ~~スキーマ（`001_initial.sql`の`comment_logs`テーブル）は存在~~
+  - 対応済み: ポーリング取得時に`save_comments_to_db`でDBに保存
+  - 公式API/InnerTube API両方に対応、重複はINSERT OR IGNOREで無視
 
 - [x] **バックオフ最大試行回数の見直し** (PR#23, PR#30で対応済み)
   - ~~現在: 最大10回で停止（`backoff.rs`）~~

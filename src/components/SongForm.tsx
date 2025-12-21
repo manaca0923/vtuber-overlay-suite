@@ -56,8 +56,8 @@ export function SongForm({ song, onClose }: SongFormProps) {
 
     try {
       const durationSecondsTotal =
-        (durationMinutes ? parseInt(durationMinutes) * 60 : 0) +
-        (durationSeconds ? parseInt(durationSeconds) : 0);
+        (durationMinutes ? parseInt(durationMinutes, 10) * 60 : 0) +
+        (durationSeconds ? parseInt(durationSeconds, 10) : 0);
 
       const input = {
         title: title.trim(),

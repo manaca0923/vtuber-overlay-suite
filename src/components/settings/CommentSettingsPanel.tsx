@@ -68,7 +68,7 @@ export function CommentSettingsPanel({ settings, onChange }: CommentSettingsPane
           min={5}
           max={30}
           value={settings.maxCount}
-          onChange={(e) => updateSettings({ maxCount: parseInt(e.target.value) })}
+          onChange={(e) => updateSettings({ maxCount: parseInt(e.target.value, 10) })}
           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
         />
         <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -87,7 +87,7 @@ export function CommentSettingsPanel({ settings, onChange }: CommentSettingsPane
           min={12}
           max={24}
           value={settings.fontSize}
-          onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value) })}
+          onChange={(e) => updateSettings({ fontSize: parseInt(e.target.value, 10) })}
           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
         />
         <div className="flex justify-between text-xs text-gray-500 mt-1">

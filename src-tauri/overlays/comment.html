@@ -173,29 +173,42 @@
     let ws = null;
     let reconnectDelay = 1000;
 
+    // バリデーション関数
+    function isValidHexColor(color) {
+      return typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color);
+    }
+
+    function isValidNumber(value, min, max) {
+      const num = parseInt(value, 10);
+      return !isNaN(num) && num >= min && num <= max;
+    }
+
     // URLパラメータから設定を適用
     function applyUrlSettings() {
       const params = new URLSearchParams(window.location.search);
       const root = document.documentElement;
 
-      if (params.get('primaryColor')) {
-        root.style.setProperty('--primary-color', params.get('primaryColor'));
+      const primaryColor = params.get('primaryColor');
+      if (primaryColor && isValidHexColor(primaryColor)) {
+        root.style.setProperty('--primary-color', primaryColor);
       }
-      if (params.get('fontSize')) {
-        root.style.setProperty('--font-size-message', params.get('fontSize') + 'px');
+      const fontSize = params.get('fontSize');
+      if (fontSize && isValidNumber(fontSize, 8, 72)) {
+        root.style.setProperty('--font-size-message', fontSize + 'px');
       }
-      if (params.get('avatarSize')) {
-        root.style.setProperty('--avatar-size', params.get('avatarSize') + 'px');
+      const avatarSize = params.get('avatarSize');
+      if (avatarSize && isValidNumber(avatarSize, 16, 128)) {
+        root.style.setProperty('--avatar-size', avatarSize + 'px');
       }
     }
 
     // WebSocket経由の設定更新を適用
     function applySettingsUpdate(settings) {
       const root = document.documentElement;
-      if (settings.primaryColor) {
+      if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
         root.style.setProperty('--primary-color', settings.primaryColor);
       }
-      if (settings.fontSize) {
+      if (settings.fontSize && isValidNumber(settings.fontSize, 8, 72)) {
         root.style.setProperty('--font-size-message', settings.fontSize + 'px');
       }
     }

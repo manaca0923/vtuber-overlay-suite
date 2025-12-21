@@ -3,7 +3,15 @@ import { useState, useEffect } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { handleTauriError } from '../utils/errorMessages';
 
-export function ApiKeySetup() {
+interface ApiKeySetupProps {
+  onSettingsChange?: (settings: {
+    apiKey?: string;
+    videoId?: string;
+    liveChatId?: string;
+  }) => void;
+}
+
+export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
   const [apiKey, setApiKey] = useState('');
   const [videoId, setVideoId] = useState('');
   const [liveChatId, setLiveChatId] = useState('');
@@ -68,6 +76,8 @@ export function ApiKeySetup() {
         await invoke('save_api_key', { apiKey: apiKey });
         setIsApiKeyLoaded(true);
         setSuccess('APIキーが有効です。保存しました。');
+        // 親コンポーネントに通知
+        onSettingsChange?.({ apiKey });
       } else {
         setError('APIキーが無効です');
       }
@@ -99,14 +109,17 @@ export function ApiKeySetup() {
       });
       setLiveChatId(chatId);
       setVideoId(extractedVideoId); // 抽出したIDに更新
-      
-      // 設定を保存（App.tsxで読み込み直せば反映される）
+
+      // 設定を保存
       await invoke('save_wizard_settings', {
         videoId: extractedVideoId,
         liveChatId: chatId,
       });
-      
-      setSuccess(`設定を保存しました。ページをリロードすると上部のコントロールパネルに反映されます。`);
+
+      // 親コンポーネントに通知（即時反映）
+      onSettingsChange?.({ videoId: extractedVideoId, liveChatId: chatId });
+
+      setSuccess('設定を保存しました。コントロールパネルに反映されました。');
     } catch (err) {
       setError(`エラー: ${err}`);
     } finally {

@@ -106,12 +106,12 @@ pub enum LayoutPreset {
     Custom,
 }
 
+/// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentSettingsPayload {
     pub enabled: bool,
     pub position: CommentPosition,
-    pub max_count: u32,
     pub show_avatar: bool,
     pub font_size: u32,
 }

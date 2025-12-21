@@ -831,10 +831,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `frame-src 'self' http://localhost:19800`
   - `img-src 'self' data: http://localhost:19800 https://*.ggpht.com https://*.googleusercontent.com https://*.ytimg.com`
 
-- [x] **maxCount設定をUIから削除**
+- [x] **maxCount設定を完全削除**
   - 画面高さベースの自動調整に統一
-  - CommentSettingsPanel.tsxからmaxCount UI削除
-  - CommentSettings型からmaxCountフィールド削除
+  - フロントエンド: CommentSettingsPanel.tsx、overlaySettings.ts、OverlayPreview.tsx
+  - バックエンド: overlay.rs、types.rs、http.rsからmax_count削除
 
 #### Medium（対応済み）
 - [x] **InnerTubeを本番機能として正式採用**
@@ -851,14 +851,27 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `commands/youtube.rs`のstart_pollingでstop()後に200ms待機を追加
   - ロック解放→待機→ロック再取得で安全に切り替え
 
+- [x] **WebSocket仕様書を実装に合わせて更新**
+  - `docs/300_overlay-specs.md`: subscribe送信例を削除（未実装機能）
+  - `docs/300_overlay-specs.md`: setlist:updateにsetlistIdフィールド追加
+
+- [x] **YouTube API仕様書をInnerTube優先方針に更新**
+  - `docs/200_youtube-api.md`: InnerTube APIをメイン、公式APIをデバッグ用と明記
+
 ### 成果物
 - `src-tauri/tauri.conf.json` - bundle.resources追加、CSP更新
 - `src/types/overlaySettings.ts` - maxCount削除
 - `src/components/settings/CommentSettingsPanel.tsx` - maxCount UI削除
 - `src/components/settings/OverlayPreview.tsx` - maxCount URLパラメータ削除
-- `src/App.tsx` - デバッグモード条件分岐、InnerTubeボタン名称変更
-- `src-tauri/src/commands/youtube.rs` - 二重ポーリング対策
+- `src/App.tsx` - デバッグモード条件分岐、InnerTubeボタン名称変更、エラーハンドリング改善
+- `src-tauri/src/commands/youtube.rs` - 二重ポーリング対策、定数化
+- `src-tauri/src/commands/overlay.rs` - max_count削除
+- `src-tauri/src/server/types.rs` - CommentSettingsPayloadからmax_count削除
+- `src-tauri/src/server/http.rs` - CommentSettingsApiからmax_count削除
 - `docs/001_requirements.md` - InnerTube正式採用記載
+- `docs/200_youtube-api.md` - InnerTube優先方針追記
+- `docs/300_overlay-specs.md` - subscribe削除、setlistId追加
+- `docs/400_data-models.md` - maxCount削除
 
 ---
 

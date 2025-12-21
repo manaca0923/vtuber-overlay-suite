@@ -29,12 +29,7 @@ fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
     }
 
     // コメント設定の検証
-    if settings.comment.max_count < 5 || settings.comment.max_count > 30 {
-        return Err(format!(
-            "Invalid maxCount: {}. Expected 5-30.",
-            settings.comment.max_count
-        ));
-    }
+    // NOTE: maxCountは画面高さベースの自動調整に統一したため削除
     if settings.comment.font_size < 8 || settings.comment.font_size > 72 {
         return Err(format!(
             "Invalid comment fontSize: {}. Expected 8-72.",
@@ -63,12 +58,12 @@ pub struct CommonSettings {
 }
 
 /// コメントオーバーレイ設定
+/// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentSettings {
     pub enabled: bool,
     pub position: CommentPosition,
-    pub max_count: u32,
     pub show_avatar: bool,
     pub font_size: u32,
 }
@@ -170,7 +165,6 @@ pub async fn broadcast_settings_update(
         comment: CommentSettingsPayload {
             enabled: settings.comment.enabled,
             position: settings.comment.position, // Copy trait実装済みのため.clone()不要
-            max_count: settings.comment.max_count,
             show_avatar: settings.comment.show_avatar,
             font_size: settings.comment.font_size,
         },

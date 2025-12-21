@@ -25,8 +25,9 @@ OBS Studioのブラウザソースとして動作するオーバーレイの仕�
 ```javascript
 const ws = new WebSocket('ws://localhost:19801/ws');
 ws.onopen = () => {
-  // 購読するチャンネルを指定
-  ws.send(JSON.stringify({ type: 'subscribe', channel: 'comments' }));
+  console.log('WebSocket connected');
+  // 接続完了時に自動で全メッセージを受信開始
+  // NOTE: subscribe機能は未実装のため、接続するだけで全種別のメッセージを受信
 };
 ```
 
@@ -61,6 +62,7 @@ ws.onopen = () => {
 {
   type: 'setlist:update',
   payload: {
+    setlistId: string,        // セットリストID（フィルタリング用）
     currentIndex: number,
     songs: Array<{
       id: string,

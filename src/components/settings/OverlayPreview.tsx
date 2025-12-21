@@ -13,13 +13,22 @@ export function OverlayPreview({ settings, activePanel }: OverlayPreviewProps) {
         ? 'http://localhost:19800/overlay/comment'
         : 'http://localhost:19800/overlay/setlist';
 
+    // 共通パラメータ
     const params = new URLSearchParams({
       preview: 'true',
       primaryColor: settings.common.primaryColor,
-      fontSize: String(
-        activePanel === 'comment' ? settings.comment.fontSize : settings.setlist.fontSize
-      ),
+      borderRadius: String(settings.common.borderRadius),
     });
+
+    // パネル固有のパラメータを追加
+    if (activePanel === 'comment') {
+      params.set('fontSize', String(settings.comment.fontSize));
+      params.set('maxCount', String(settings.comment.maxCount));
+      params.set('showAvatar', String(settings.comment.showAvatar));
+    } else {
+      params.set('fontSize', String(settings.setlist.fontSize));
+      params.set('showArtist', String(settings.setlist.showArtist));
+    }
 
     return `${base}?${params.toString()}`;
   }, [settings, activePanel]);

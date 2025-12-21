@@ -25,10 +25,27 @@ export function OverlaySettings() {
       try {
         const saved = await loadOverlaySettings();
         if (saved) {
-          setSettings(saved);
+          // 古い設定と新しいデフォルト値をマージ（マイグレーション対応）
+          const merged: Settings = {
+            theme: saved.theme ?? DEFAULT_OVERLAY_SETTINGS.theme,
+            common: {
+              ...DEFAULT_OVERLAY_SETTINGS.common,
+              ...saved.common,
+            },
+            comment: {
+              ...DEFAULT_OVERLAY_SETTINGS.comment,
+              ...saved.comment,
+            },
+            setlist: {
+              ...DEFAULT_OVERLAY_SETTINGS.setlist,
+              ...saved.setlist,
+            },
+          };
+          setSettings(merged);
         }
       } catch (err) {
         console.error('Failed to load overlay settings:', err);
+        setError('設定の読み込みに失敗しました。デフォルト設定を使用します。');
       } finally {
         setLoading(false);
       }

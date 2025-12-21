@@ -12,6 +12,7 @@ OBS Studioのブラウザソースとして動作するオーバーレイの仕�
 |-----|------|
 | `http://localhost:19800/overlay/comment` | コメント表示 |
 | `http://localhost:19800/overlay/setlist` | セットリスト表示 |
+| `http://localhost:19800/api/overlay/settings` | オーバーレイ設定取得（初期化用） |
 | `ws://localhost:19801/ws` | リアルタイム更新 |
 
 ---
@@ -74,9 +75,22 @@ ws.onopen = () => {
   type: 'settings:update',
   payload: {
     theme: string,
-    primaryColor: string,
-    position: 'top' | 'bottom' | 'left' | 'right',
-    visible: boolean
+    primaryColor: string,      // #RRGGBB形式
+    fontFamily: string,        // フォントファミリー
+    borderRadius: number,      // 角丸（px）
+    comment: {
+      enabled: boolean,        // 表示ON/OFF
+      position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
+      maxCount: number,        // 最大表示件数
+      showAvatar: boolean,     // アバター表示
+      fontSize: number         // フォントサイズ（px）
+    },
+    setlist: {
+      enabled: boolean,        // 表示ON/OFF
+      position: 'top' | 'bottom' | 'left' | 'right',
+      showArtist: boolean,     // アーティスト表示
+      fontSize: number         // フォントサイズ（px）
+    }
   }
 }
 ```
@@ -315,14 +329,14 @@ body {
 オーバーレイはURLパラメータでカスタマイズ可能。
 
 ```
-http://localhost:19800/overlay/comment?theme=dark&maxComments=15
+http://localhost:19800/overlay/comment?theme=dark&maxCount=15
 http://localhost:19800/overlay/setlist?showArtist=false&position=bottom
 ```
 
 | パラメータ | 型 | デフォルト | 説明 |
 |------------|-----|------------|------|
 | theme | string | 'default' | テーマ名 |
-| maxComments | number | 10 | 最大表示件数 |
+| maxCount | number | 10 | 最大表示件数 |
 | showAvatar | boolean | true | アバター表示 |
 | showBadge | boolean | true | バッジ表示 |
 | position | string | 'bottom' | 表示位置 |

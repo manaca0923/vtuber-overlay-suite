@@ -557,6 +557,14 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
     - 未読フィールド: `amount_micros`, `alt_text`, `gift_memberships_level_name`等
   - 対応: 不要なら削除、将来使用予定なら`#[allow(dead_code)]`付与
 
+- [ ] **オーバーレイ設定のposition型をenum化** (PR#23)
+  - 現在: `position: String`（`http.rs`, `types.rs`）
+  - 対応: Rust側でenum型を定義し、不正な値を型レベルで防止
+  - 対象ファイル:
+    - `src-tauri/src/server/http.rs`: `CommentSettingsApi`, `SetlistSettingsApi`
+    - `src-tauri/src/server/types.rs`: `SettingsUpdatePayload`内の設定型
+  - TypeScript側との対応も確認
+
 ### 機能改善（中優先度）
 
 - [ ] **スーパーチャット金額別色分け** (PR#7)
@@ -566,6 +574,31 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 - [ ] **保存状態の有効期限** (PR#17)
   - 古い状態で再開すると取得済みコメントが重複する可能性
   - 有効期限を設定して古い状態を無効化
+
+- [ ] **コメント削除のフェードアウトアニメーション** (PR#23)
+  - comment.htmlにCSSアニメーション（.removing）があるが未使用
+  - 古いコメント削除時にフェードアウトを適用
+  - `comment:remove` WebSocketイベント受信時にも適用
+
+- [ ] **コメントログのDB保存** (PR#23)
+  - スキーマ（`001_initial.sql`の`comment_logs`テーブル）は存在
+  - ポーリング取得時にコメントをDBに保存する処理が未実装
+  - MVP要件か要確認
+
+- [ ] **バックオフ最大試行回数の見直し** (PR#23)
+  - 現在: 最大10回で停止（`backoff.rs`）
+  - 長時間配信（2時間超）で自動復帰しない可能性
+  - 無制限または大きな上限への変更を検討
+
+- [ ] **テストモードでの各種メッセージタイプ送信** (PR#23)
+  - 現在: Textメッセージのみ送信
+  - superChat, superSticker, membership, membershipGiftの検証ができない
+  - テストボタンにメッセージタイプ選択を追加
+
+- [ ] **ApiKeySetup更新後のCommentControlPanel即時反映** (PR#23)
+  - ApiKeySetup.tsxでAPIキー/LiveChatIdを更新しても上部のCommentControlPanelに即時反映されない
+  - 現在はリロードが必要
+  - App.tsx側で設定変更イベントを購読するか、状態を共有する仕組みが必要
 
 ### パフォーマンス
 

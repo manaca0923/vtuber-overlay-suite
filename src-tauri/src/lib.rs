@@ -132,6 +132,9 @@ pub fn run() {
       commands::keyring::get_api_key,
       commands::keyring::delete_api_key,
       commands::keyring::has_api_key,
+      commands::overlay::save_overlay_settings,
+      commands::overlay::load_overlay_settings,
+      commands::overlay::broadcast_settings_update,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

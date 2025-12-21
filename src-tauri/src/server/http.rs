@@ -29,9 +29,9 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         .route("/api/health", get(health_check))
         .route("/api/setlist/latest", get(get_latest_setlist_api))
         .route("/api/setlist/{id}", get(get_setlist_api))
+        .route("/api/overlay/settings", get(get_overlay_settings_api))
         .route("/overlay/comment", get(overlay_comment))
         .route("/overlay/setlist", get(overlay_setlist))
-        .route("/overlay/test", get(overlay_test))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -80,22 +80,6 @@ async fn overlay_setlist(State(state): State<HttpState>) -> impl IntoResponse {
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to load overlay".to_string(),
-            ).into_response()
-        }
-    }
-}
-
-/// WebSocketテストページ
-async fn overlay_test(State(state): State<HttpState>) -> impl IntoResponse {
-    let path = state.overlays_dir.join("test.html");
-    match tokio::fs::read_to_string(&path).await {
-        Ok(content) => Html(content).into_response(),
-        Err(e) => {
-            // パス情報をログには記録するがレスポンスには含めない
-            log::error!("Failed to read test.html from {:?}: {}", path, e);
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to load test page".to_string(),
             ).into_response()
         }
     }
@@ -235,6 +219,122 @@ async fn get_setlist_api(
     match fetch_setlist_by_id(pool, &id).await {
         Ok(response) => Json(response).into_response(),
         Err((status, json)) => (status, json).into_response(),
+    }
+}
+
+/// オーバーレイ設定API（オーバーレイ初期化用）
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverlaySettingsApiResponse {
+    theme: String,
+    primary_color: String,
+    font_family: String,
+    border_radius: u32,
+    comment: CommentSettingsApi,
+    setlist: SetlistSettingsApi,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommentSettingsApi {
+    enabled: bool,
+    position: String,
+    max_count: u32,
+    show_avatar: bool,
+    font_size: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SetlistSettingsApi {
+    enabled: bool,
+    position: String,
+    show_artist: bool,
+    font_size: u32,
+}
+
+/// デフォルトのオーバーレイ設定を生成
+fn default_overlay_settings() -> OverlaySettingsApiResponse {
+    OverlaySettingsApiResponse {
+        theme: "default".to_string(),
+        primary_color: "#6366f1".to_string(),
+        font_family: "'Yu Gothic', 'Meiryo', sans-serif".to_string(),
+        border_radius: 8,
+        comment: CommentSettingsApi {
+            enabled: true,
+            position: "bottom-right".to_string(),
+            max_count: 10,
+            show_avatar: true,
+            font_size: 16,
+        },
+        setlist: SetlistSettingsApi {
+            enabled: true,
+            position: "bottom".to_string(),
+            show_artist: true,
+            font_size: 24,
+        },
+    }
+}
+
+/// 保存されているオーバーレイ設定を取得
+async fn get_overlay_settings_api(
+    State(state): State<HttpState>,
+) -> impl IntoResponse {
+    let pool = state.db.as_ref();
+
+    let result: Result<Option<(String,)>, sqlx::Error> =
+        sqlx::query_as("SELECT value FROM settings WHERE key = 'overlay_settings'")
+            .fetch_optional(pool)
+            .await;
+
+    match result {
+        Ok(Some((json_str,))) => {
+            // JSONをパースして返す
+            match serde_json::from_str::<serde_json::Value>(&json_str) {
+                Ok(settings) => {
+                    // SettingsUpdatePayloadと同じ形式に変換
+                    let response = OverlaySettingsApiResponse {
+                        theme: settings["theme"].as_str().unwrap_or("default").to_string(),
+                        primary_color: settings["common"]["primaryColor"].as_str().unwrap_or("#6366f1").to_string(),
+                        font_family: settings["common"]["fontFamily"].as_str().unwrap_or("'Yu Gothic', 'Meiryo', sans-serif").to_string(),
+                        border_radius: settings["common"]["borderRadius"].as_u64().unwrap_or(8) as u32,
+                        comment: CommentSettingsApi {
+                            enabled: settings["comment"]["enabled"].as_bool().unwrap_or(true),
+                            position: settings["comment"]["position"].as_str().unwrap_or("bottom-right").to_string(),
+                            max_count: settings["comment"]["maxCount"].as_u64().unwrap_or(10) as u32,
+                            show_avatar: settings["comment"]["showAvatar"].as_bool().unwrap_or(true),
+                            font_size: settings["comment"]["fontSize"].as_u64().unwrap_or(16) as u32,
+                        },
+                        setlist: SetlistSettingsApi {
+                            enabled: settings["setlist"]["enabled"].as_bool().unwrap_or(true),
+                            position: settings["setlist"]["position"].as_str().unwrap_or("bottom").to_string(),
+                            show_artist: settings["setlist"]["showArtist"].as_bool().unwrap_or(true),
+                            font_size: settings["setlist"]["fontSize"].as_u64().unwrap_or(24) as u32,
+                        },
+                    };
+                    Json(response).into_response()
+                }
+                Err(e) => {
+                    log::error!("Failed to parse overlay settings: {}", e);
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "error": "Failed to parse settings" })),
+                    ).into_response()
+                }
+            }
+        }
+        Ok(None) => {
+            // 設定が保存されていない場合はデフォルト値を返す
+            let response = default_overlay_settings();
+            Json(response).into_response()
+        }
+        Err(e) => {
+            log::error!("Database error: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Database error" })),
+            ).into_response()
+        }
     }
 }
 

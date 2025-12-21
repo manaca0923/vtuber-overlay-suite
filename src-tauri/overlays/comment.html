@@ -17,6 +17,7 @@
       --max-comments: 30;
       --animation-duration: 0.3s;
       --animation-easing: ease-out;
+      --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
     }
 
     * {
@@ -27,9 +28,11 @@
 
     body {
       background: var(--background-color);
-      font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+      font-family: var(--font-family);
       color: var(--text-color);
       overflow: hidden;
+      width: 100vw;
+      height: 100vh;
     }
 
     #comment-container {
@@ -37,6 +40,22 @@
       flex-direction: column;
       gap: var(--comment-gap);
       padding: 16px;
+      position: absolute;
+      max-width: 100%;
+      max-height: 100%;
+      overflow: hidden;
+    }
+
+    /* 表示位置のスタイル */
+    #comment-container.position-top-left { top: 0; left: 0; }
+    #comment-container.position-top-right { top: 0; right: 0; }
+    #comment-container.position-bottom-left { bottom: 0; left: 0; }
+    #comment-container.position-bottom-right { bottom: 0; right: 0; }
+
+    /* bottom配置時はコメントを下から上に積む */
+    #comment-container.position-bottom-left,
+    #comment-container.position-bottom-right {
+      flex-direction: column-reverse;
     }
 
     .comment {
@@ -168,10 +187,258 @@
   <div id="comment-container"></div>
 
   <script>
-    const MAX_COMMENTS = 30;
+    // 設定状態（動的に変更可能）
+    let maxComments = 30;
+    let showAvatar = true;
+    let overlayEnabled = true;
+    let overlayPosition = 'bottom-right';
+
     const WS_URL = 'ws://localhost:19801/ws';
+    const API_BASE_URL = 'http://localhost:19800/api';
+
+    // 有効なポジション値
+    const VALID_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     let ws = null;
     let reconnectDelay = 1000;
+
+    // バリデーション関数
+    function isValidHexColor(color) {
+      return typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color);
+    }
+
+    function isValidNumber(value, min, max) {
+      const num = parseInt(value, 10);
+      return !isNaN(num) && num >= min && num <= max;
+    }
+
+    // fontFamilyのサニタイズ（XSS対策）
+    function sanitizeFontFamily(fontFamily) {
+      if (typeof fontFamily !== 'string' || fontFamily.length === 0 || fontFamily.length > 200) {
+        return null;
+      }
+      // 危険な文字を除去
+      return fontFamily.replace(/[<>"'`\;{}]/g, '');
+    }
+
+    // URLパラメータから設定を適用
+    function applyUrlSettings() {
+      const params = new URLSearchParams(window.location.search);
+      const root = document.documentElement;
+
+      const primaryColor = params.get('primaryColor');
+      if (primaryColor && isValidHexColor(primaryColor)) {
+        root.style.setProperty('--primary-color', primaryColor);
+      }
+      const fontSize = params.get('fontSize');
+      if (fontSize && isValidNumber(fontSize, 8, 72)) {
+        root.style.setProperty('--font-size-message', fontSize + 'px');
+      }
+      const avatarSize = params.get('avatarSize');
+      if (avatarSize && isValidNumber(avatarSize, 16, 128)) {
+        root.style.setProperty('--avatar-size', avatarSize + 'px');
+      }
+      // maxCount
+      const maxCount = params.get('maxCount');
+      let maxCountChanged = false;
+      if (maxCount && isValidNumber(maxCount, 5, 30)) {
+        maxComments = parseInt(maxCount, 10);
+        maxCountChanged = true;
+      }
+      // showAvatar
+      const showAvatarParam = params.get('showAvatar');
+      let showAvatarChanged = false;
+      if (showAvatarParam !== null) {
+        showAvatar = showAvatarParam === 'true';
+        showAvatarChanged = true;
+      }
+      // borderRadius
+      const borderRadius = params.get('borderRadius');
+      if (borderRadius && isValidNumber(borderRadius, 0, 32)) {
+        root.style.setProperty('--border-radius', borderRadius + 'px');
+        updateCommentBorderRadius(parseInt(borderRadius, 10));
+      }
+      // position
+      const position = params.get('position');
+      if (position && VALID_POSITIONS.includes(position)) {
+        overlayPosition = position;
+        updateContainerPosition();
+      }
+      // enabled
+      const enabled = params.get('enabled');
+      if (enabled !== null) {
+        overlayEnabled = enabled === 'true';
+        updateOverlayVisibility();
+      }
+      // fontFamily
+      const fontFamily = params.get('fontFamily');
+      const sanitizedFont = sanitizeFontFamily(fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
+      }
+
+      // 既存DOMの更新（設定適用後に必要）
+      if (showAvatarChanged) {
+        updateAvatarVisibility();
+      }
+      if (maxCountChanged) {
+        trimOldComments();
+      }
+    }
+
+    // 角丸を更新
+    function updateCommentBorderRadius(radius) {
+      const style = document.querySelector('#dynamic-styles') || document.createElement('style');
+      style.id = 'dynamic-styles';
+      style.textContent = `.comment { border-radius: ${radius}px !important; }`;
+      if (!style.parentNode) {
+        document.head.appendChild(style);
+      }
+    }
+
+    // コンテナの表示位置を更新
+    function updateContainerPosition() {
+      const container = document.getElementById('comment-container');
+      // 既存のpositionクラスを削除
+      VALID_POSITIONS.forEach(pos => {
+        container.classList.remove(`position-${pos}`);
+      });
+      // 新しいpositionクラスを追加
+      container.classList.add(`position-${overlayPosition}`);
+    }
+
+    // オーバーレイの表示/非表示を更新
+    function updateOverlayVisibility() {
+      const container = document.getElementById('comment-container');
+      container.style.display = overlayEnabled ? 'flex' : 'none';
+    }
+
+    // WebSocket経由の設定更新を適用
+    function applySettingsUpdate(settings) {
+      const root = document.documentElement;
+
+      // 共通設定
+      if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
+        root.style.setProperty('--primary-color', settings.primaryColor);
+      }
+      if (settings.borderRadius !== undefined && isValidNumber(settings.borderRadius, 0, 32)) {
+        updateCommentBorderRadius(settings.borderRadius);
+      }
+      const sanitizedFont = sanitizeFontFamily(settings.fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
+      }
+
+      // コメント設定（新しいペイロード構造）
+      if (settings.comment) {
+        if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
+        }
+        if (settings.comment.maxCount && isValidNumber(settings.comment.maxCount, 5, 30)) {
+          maxComments = settings.comment.maxCount;
+          // 現在のコメント数が新しい上限を超えている場合、古いコメントを削除
+          trimOldComments();
+        }
+        if (settings.comment.showAvatar !== undefined) {
+          showAvatar = settings.comment.showAvatar;
+          updateAvatarVisibility();
+        }
+        if (settings.comment.enabled !== undefined) {
+          overlayEnabled = settings.comment.enabled;
+          updateOverlayVisibility();
+        }
+        if (settings.comment.position && VALID_POSITIONS.includes(settings.comment.position)) {
+          overlayPosition = settings.comment.position;
+          updateContainerPosition();
+        }
+      }
+    }
+
+    // 古いコメントを削除して上限に収める
+    function trimOldComments() {
+      const container = document.getElementById('comment-container');
+      while (container.children.length > maxComments) {
+        container.firstChild.remove();
+      }
+    }
+
+    // アバター表示/非表示を更新
+    function updateAvatarVisibility() {
+      const avatars = document.querySelectorAll('.avatar');
+      avatars.forEach(avatar => {
+        avatar.style.display = showAvatar ? 'block' : 'none';
+      });
+    }
+
+    // 初期化時にURLパラメータを適用
+    applyUrlSettings();
+    // デフォルトのポジションを適用
+    updateContainerPosition();
+
+    // 設定取得のバージョン管理（レース条件対策）
+    let settingsVersion = 0;
+    // 設定取得中フラグ（多重リクエスト防止）
+    let fetchInFlight = false;
+    // 再試行待ちフラグ（in-flight中にスキップされた場合の再試行用）
+    let retryPending = false;
+    // 設定取得成功フラグ（初回fetch失敗時のリカバリー用）
+    let settingsFetchSucceeded = false;
+    // 初回接続フラグ
+    let isFirstConnection = true;
+
+    // HTTP APIから初期設定を取得して適用（タイムアウト付き）
+    async function fetchAndApplySettings() {
+      // 既にリクエスト中の場合は再試行フラグを立ててスキップ
+      if (fetchInFlight) {
+        retryPending = true;
+        console.log('Settings fetch already in flight, will retry after');
+        return;
+      }
+      fetchInFlight = true;
+      retryPending = false;
+
+      // リクエスト開始時のバージョンを記録
+      const requestVersion = settingsVersion;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒タイムアウト
+
+        const response = await fetch(`${API_BASE_URL}/overlay/settings`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const settings = await response.json();
+
+          // レース条件チェック: リクエスト中にWSで設定が更新されていたらスキップ
+          if (settingsVersion > requestVersion) {
+            console.log('Skipping HTTP settings (newer WS settings already applied)');
+            return;
+          }
+
+          console.log('Fetched overlay settings:', settings);
+          applySettingsUpdate(settings);
+          // URLパラメータを再適用（URL優先）
+          applyUrlSettings();
+          settingsFetchSucceeded = true;
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          console.log('Settings API timeout, using defaults');
+        } else {
+          console.log('Settings API not available, using defaults');
+        }
+      } finally {
+        fetchInFlight = false;
+        // 再試行が要求されていて、まだ設定取得が成功していない場合は再試行
+        if (retryPending && !settingsFetchSucceeded) {
+          retryPending = false;
+          console.log('Retrying settings fetch');
+          fetchAndApplySettings();
+        }
+      }
+    }
 
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
@@ -179,6 +446,11 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
+        // 再接続時または初回設定取得未成功の場合は設定を再取得
+        if (!isFirstConnection || !settingsFetchSucceeded) {
+          fetchAndApplySettings();
+        }
+        isFirstConnection = false;
       };
 
       ws.onmessage = (event) => {
@@ -186,6 +458,12 @@
           const data = JSON.parse(event.data);
           if (data.type === 'comment:add') {
             addComment(data.payload);
+          } else if (data.type === 'settings:update') {
+            // WSからの設定更新はバージョンをインクリメント（レース条件対策）
+            settingsVersion++;
+            applySettingsUpdate(data.payload);
+            // URLパラメータを再適用（URL優先を維持）
+            applyUrlSettings();
           }
         } catch (e) {
           console.error('Failed to parse message:', e);
@@ -222,8 +500,8 @@
       const el = createCommentElement(comment);
       container.appendChild(el);
 
-      // 古いコメントを削除
-      while (container.children.length > MAX_COMMENTS) {
+      // 古いコメントを削除（maxCommentsは設定で動的に変更可能）
+      while (container.children.length > maxComments) {
         container.firstChild.remove();
       }
     }
@@ -249,6 +527,10 @@
       avatar.className = 'avatar';
       avatar.src = comment.authorImageUrl;
       avatar.alt = comment.authorName;
+      // showAvatar設定を反映
+      if (!showAvatar) {
+        avatar.style.display = 'none';
+      }
 
       const content = document.createElement('div');
       content.className = 'content';
@@ -335,6 +617,8 @@
       return div;
     }
 
+    // 初期化: 設定取得とWebSocket接続を並列実行（HTTP遅延でもWS接続を遅らせない）
+    fetchAndApplySettings();
     connectWebSocket();
   </script>
 </body>

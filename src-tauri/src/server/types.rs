@@ -66,6 +66,29 @@ pub enum SongStatus {
 pub struct SettingsUpdatePayload {
     pub theme: String,
     pub primary_color: String,
+    pub font_family: String,
+    pub border_radius: u32,
+    // コメントオーバーレイ設定
+    pub comment: CommentSettingsPayload,
+    // セットリストオーバーレイ設定
+    pub setlist: SetlistSettingsPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSettingsPayload {
+    pub enabled: bool,
     pub position: String,
-    pub visible: bool,
+    pub max_count: u32,
+    pub show_avatar: bool,
+    pub font_size: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetlistSettingsPayload {
+    pub enabled: bool,
+    pub position: String,
+    pub show_artist: bool,
+    pub font_size: u32,
 }

@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
-import { CommentControlPanel } from './CommentControlPanel';
 import type { ChatMessage } from '../types/chat';
 import { handleTauriError } from '../utils/errorMessages';
 
@@ -211,7 +210,7 @@ export function ApiKeySetup() {
         </button>
       </div>
 
-      {/* チャットID表示＆コメント制御パネル */}
+      {/* チャットID表示 */}
       {liveChatId && (
         <div className="mb-6 space-y-4">
           <div>
@@ -220,13 +219,6 @@ export function ApiKeySetup() {
               {liveChatId}
             </div>
           </div>
-
-          {/* コメント取得制御パネル */}
-          <CommentControlPanel
-            apiKey={apiKey}
-            videoId={videoId}
-            liveChatId={liveChatId}
-          />
 
           {/* 手動メッセージ取得（デバッグ用） */}
           <details className="bg-gray-50 rounded-lg p-4">

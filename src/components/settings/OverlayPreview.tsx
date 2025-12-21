@@ -75,7 +75,6 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
 
     if (activePanel === 'comment') {
       params.set('fontSize', String(settings.comment.fontSize));
-      params.set('maxCount', String(settings.comment.maxCount));
       params.set('showAvatar', String(settings.comment.showAvatar));
       params.set('position', settings.comment.position);
       params.set('enabled', String(settings.comment.enabled));

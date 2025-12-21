@@ -633,6 +633,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T12 | ⬜ 未着手 | - |
 | T13 | ✅ 完了 | 2025-12-21 |
 | T14 | ✅ 完了 | 2025-12-21 |
+| T15 | ✅ 完了 | 2025-12-21 |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
@@ -802,6 +803,56 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - リプレイ時の複数メッセージ取りこぼしを防止
   - parse_actionがVec<ChatMessage>を返すように変更
   - **回帰防止テスト追加**: 複数メッセージ/空リプレイ/単一メッセージの3ケース
+
+---
+
+## T15: 本番リリース準備対応
+**優先度**: P0 | **見積**: 0.5日 | **依存**: T14
+**ステータス**: ✅ **完了**（2025-12-21）
+
+### 背景
+コードレビューで指摘された本番リリース前の必須対応項目
+
+### チェックリスト
+
+#### Critical/High（対応済み）
+- [x] **overlaysフォルダのバンドル設定追加**
+  - `tauri.conf.json`に`bundle.resources: ["overlays"]`を追加
+  - 本番ビルドで`/overlay/*`が404/500にならないよう修正
+
+- [x] **CSPにframe-srcとimg-srcを追加**
+  - iframeプレビュー（OverlayPreview.tsx）がブロックされる問題を修正
+  - `frame-src 'self' http://localhost:19800`
+  - `img-src 'self' data: http://localhost:19800 https://*.ggpht.com https://*.googleusercontent.com https://*.ytimg.com`
+
+- [x] **maxCount設定をUIから削除**
+  - 画面高さベースの自動調整に統一
+  - CommentSettingsPanel.tsxからmaxCount UI削除
+  - CommentSettings型からmaxCountフィールド削除
+
+#### Medium（対応済み）
+- [x] **InnerTubeを本番機能として正式採用**
+  - `docs/001_requirements.md`を更新
+  - 認証不要のInnerTube APIをメインで使用
+  - 公式API（YouTube Data API v3）はデバッグモードで利用可能
+
+- [x] **公式APIをデバッグモードのみに制限**
+  - `App.tsx`で`import.meta.env.DEV`による条件分岐
+  - CommentControlPanel、ApiKeySetupはデバッグ時のみ表示
+  - InnerTubeボタンを「コメント取得開始/停止」としてメイン機能化
+
+- [x] **二重ポーリング対策**
+  - `commands/youtube.rs`のstart_pollingでstop()後に200ms待機を追加
+  - ロック解放→待機→ロック再取得で安全に切り替え
+
+### 成果物
+- `src-tauri/tauri.conf.json` - bundle.resources追加、CSP更新
+- `src/types/overlaySettings.ts` - maxCount削除
+- `src/components/settings/CommentSettingsPanel.tsx` - maxCount UI削除
+- `src/components/settings/OverlayPreview.tsx` - maxCount URLパラメータ削除
+- `src/App.tsx` - デバッグモード条件分岐、InnerTubeボタン名称変更
+- `src-tauri/src/commands/youtube.rs` - 二重ポーリング対策
+- `docs/001_requirements.md` - InnerTube正式採用記載
 
 ---
 

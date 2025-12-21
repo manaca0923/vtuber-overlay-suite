@@ -86,10 +86,10 @@ export interface CommonSettings {
 }
 
 // コメントオーバーレイ設定
+// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
 export interface CommentSettings {
   enabled: boolean;
   position: CommentPosition;
-  maxCount: number;
   showAvatar: boolean;
   fontSize: number;
 }
@@ -123,7 +123,6 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   comment: {
     enabled: true,
     position: 'bottom-right',
-    maxCount: 10,
     showAvatar: true,
     fontSize: 16,
   },

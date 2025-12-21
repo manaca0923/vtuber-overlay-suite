@@ -150,63 +150,68 @@ function App() {
         {activeTab === 'comment' && (
           <div className="space-y-6">
             <div className="flex justify-end gap-2">
-              {/* InnerTubeテスト用ボタン（開発用） */}
+              {/* InnerTube コメント取得（メイン機能） */}
               <button
                 onClick={async () => {
                   try {
                     const videoId = wizardSettings?.video_id || prompt('Video ID:');
                     if (!videoId) return;
                     await invoke('start_polling_innertube', { videoId });
-                    alert('InnerTubeポーリング開始成功！オーバーレイを確認してください。');
+                    alert('コメント取得を開始しました。オーバーレイを確認してください。');
                   } catch (e) {
                     alert('エラー: ' + (e as Error).message);
                   }
                 }}
                 className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
               >
-                InnerTube開始
+                コメント取得開始
               </button>
               <button
                 onClick={async () => {
                   try {
                     await invoke('stop_polling_innertube');
-                    alert('InnerTubeポーリング停止');
+                    alert('コメント取得を停止しました');
                   } catch (e) {
                     alert('エラー: ' + (e as Error).message);
                   }
                 }}
                 className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
               >
-                InnerTube停止
+                コメント取得停止
               </button>
               <TestModeButton />
             </div>
-            <CommentControlPanel
-              apiKey={apiKey}
-              videoId={wizardSettings?.video_id ?? ''}
-              liveChatId={wizardSettings?.live_chat_id ?? ''}
-              onSettingsChange={(settings) => {
-                setWizardSettings((prev) => ({
-                  video_id: settings.videoId ?? prev?.video_id ?? '',
-                  live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
-                  saved_at: new Date().toISOString(),
-                }));
-              }}
-            />
-            <ApiKeySetup
-              onSettingsChange={(settings) => {
-                if (settings.apiKey) {
-                  setApiKey(settings.apiKey);
-                }
-                if (settings.videoId || settings.liveChatId) {
-                  setWizardSettings((prev) => ({
-                    video_id: settings.videoId ?? prev?.video_id ?? '',
-                    live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
-                    saved_at: new Date().toISOString(),
-                  }));
-                }
-              }}
-            />
+            {/* 公式API操作パネル（デバッグモードのみ） */}
+            {import.meta.env.DEV && (
+              <>
+                <CommentControlPanel
+                  apiKey={apiKey}
+                  videoId={wizardSettings?.video_id ?? ''}
+                  liveChatId={wizardSettings?.live_chat_id ?? ''}
+                  onSettingsChange={(settings) => {
+                    setWizardSettings((prev) => ({
+                      video_id: settings.videoId ?? prev?.video_id ?? '',
+                      live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
+                      saved_at: new Date().toISOString(),
+                    }));
+                  }}
+                />
+                <ApiKeySetup
+                  onSettingsChange={(settings) => {
+                    if (settings.apiKey) {
+                      setApiKey(settings.apiKey);
+                    }
+                    if (settings.videoId || settings.liveChatId) {
+                      setWizardSettings((prev) => ({
+                        video_id: settings.videoId ?? prev?.video_id ?? '',
+                        live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
+                        saved_at: new Date().toISOString(),
+                      }));
+                    }
+                  }}
+                />
+              </>
+            )}
           </div>
         )}
         {activeTab === 'setlist' && (

@@ -70,10 +70,12 @@
 
 ## 制約・前提
 
-1. **BYOK必須**: ユーザー自身のYouTube API keyを使用（共有キーはデモ用のみ）
-2. **公式API前提**: 非公式API/スクレイピングは不採用
+1. **InnerTube優先**: 認証不要のInnerTube APIをメインで使用（安定性注意）
+2. **公式API対応**: YouTube Data API v3も利用可能（デバッグモード・API key必須）
 3. **OAuth回避（MVP）**: API key中心、OAuthはPhase 2
 4. **品質優先**: 「多いけど使われない」ではなく少数精鋭
+
+> **Note**: InnerTubeは非公式APIのため、YouTube側の仕様変更で動作しなくなる可能性があります。その場合は公式APIに切り替えてください。
 
 ---
 

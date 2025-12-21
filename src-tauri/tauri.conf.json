@@ -23,12 +23,13 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:19801 http://localhost:19800 https://www.googleapis.com"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:19801 http://localhost:19800 https://www.googleapis.com; frame-src 'self' http://localhost:19800; img-src 'self' data: http://localhost:19800 https://*.ggpht.com https://*.googleusercontent.com https://*.ytimg.com"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": ["overlays"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

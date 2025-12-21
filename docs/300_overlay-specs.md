@@ -12,6 +12,7 @@ OBS Studioのブラウザソースとして動作するオーバーレイの仕�
 |-----|------|
 | `http://localhost:19800/overlay/comment` | コメント表示 |
 | `http://localhost:19800/overlay/setlist` | セットリスト表示 |
+| `http://localhost:19800/api/overlay/settings` | オーバーレイ設定取得（初期化用） |
 | `ws://localhost:19801/ws` | リアルタイム更新 |
 
 ---

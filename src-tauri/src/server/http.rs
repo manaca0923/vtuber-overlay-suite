@@ -253,6 +253,29 @@ struct SetlistSettingsApi {
     font_size: u32,
 }
 
+/// デフォルトのオーバーレイ設定を生成
+fn default_overlay_settings() -> OverlaySettingsApiResponse {
+    OverlaySettingsApiResponse {
+        theme: "default".to_string(),
+        primary_color: "#6366f1".to_string(),
+        font_family: "'Yu Gothic', 'Meiryo', sans-serif".to_string(),
+        border_radius: 8,
+        comment: CommentSettingsApi {
+            enabled: true,
+            position: "bottom-right".to_string(),
+            max_count: 10,
+            show_avatar: true,
+            font_size: 16,
+        },
+        setlist: SetlistSettingsApi {
+            enabled: true,
+            position: "bottom".to_string(),
+            show_artist: true,
+            font_size: 24,
+        },
+    }
+}
+
 /// 保存されているオーバーレイ設定を取得
 async fn get_overlay_settings_api(
     State(state): State<HttpState>,
@@ -301,11 +324,9 @@ async fn get_overlay_settings_api(
             }
         }
         Ok(None) => {
-            // 設定が保存されていない場合は404
-            (
-                axum::http::StatusCode::NOT_FOUND,
-                Json(json!({ "error": "No overlay settings found" })),
-            ).into_response()
+            // 設定が保存されていない場合はデフォルト値を返す
+            let response = default_overlay_settings();
+            Json(response).into_response()
         }
         Err(e) => {
             log::error!("Database error: {}", e);

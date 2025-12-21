@@ -211,6 +211,15 @@
       return !isNaN(num) && num >= min && num <= max;
     }
 
+    // fontFamilyのサニタイズ（XSS対策）
+    function sanitizeFontFamily(fontFamily) {
+      if (typeof fontFamily !== 'string' || fontFamily.length === 0 || fontFamily.length > 200) {
+        return null;
+      }
+      // 危険な文字を除去
+      return fontFamily.replace(/[<>"'`\;{}]/g, '');
+    }
+
     // URLパラメータから設定を適用
     function applyUrlSettings() {
       const params = new URLSearchParams(window.location.search);
@@ -258,8 +267,9 @@
       }
       // fontFamily
       const fontFamily = params.get('fontFamily');
-      if (fontFamily && typeof fontFamily === 'string' && fontFamily.length > 0 && fontFamily.length <= 200) {
-        root.style.setProperty('--font-family', fontFamily);
+      const sanitizedFont = sanitizeFontFamily(fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
       }
     }
 
@@ -301,8 +311,9 @@
       if (settings.borderRadius !== undefined && isValidNumber(settings.borderRadius, 0, 32)) {
         updateCommentBorderRadius(settings.borderRadius);
       }
-      if (settings.fontFamily && typeof settings.fontFamily === 'string' && settings.fontFamily.length > 0 && settings.fontFamily.length <= 200) {
-        root.style.setProperty('--font-family', settings.fontFamily);
+      const sanitizedFont = sanitizeFontFamily(settings.fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
       }
 
       // コメント設定（新しいペイロード構造）
@@ -535,7 +546,10 @@
       return div;
     }
 
-    connectWebSocket();
+    // 初期化: 設定取得を先に実行してからWebSocket接続
+    fetchAndApplySettings().finally(() => {
+      connectWebSocket();
+    });
   </script>
 </body>
 </html>

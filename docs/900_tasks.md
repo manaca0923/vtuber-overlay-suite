@@ -557,6 +557,14 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
     - 未読フィールド: `amount_micros`, `alt_text`, `gift_memberships_level_name`等
   - 対応: 不要なら削除、将来使用予定なら`#[allow(dead_code)]`付与
 
+- [ ] **オーバーレイ設定のposition型をenum化** (PR#23)
+  - 現在: `position: String`（`http.rs`, `types.rs`）
+  - 対応: Rust側でenum型を定義し、不正な値を型レベルで防止
+  - 対象ファイル:
+    - `src-tauri/src/server/http.rs`: `CommentSettingsApi`, `SetlistSettingsApi`
+    - `src-tauri/src/server/types.rs`: `SettingsUpdatePayload`内の設定型
+  - TypeScript側との対応も確認
+
 ### 機能改善（中優先度）
 
 - [ ] **スーパーチャット金額別色分け** (PR#7)

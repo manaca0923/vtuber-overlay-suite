@@ -5,41 +5,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Comment Overlay</title>
+  <!-- 共通スタイル -->
+  <link rel="stylesheet" href="shared/overlay-common.css">
   <style>
-    :root {
-      --primary-color: #6366f1;
-      --background-color: transparent;
-      --text-color: #ffffff;
-      --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-      --avatar-size: 48px;
-      --font-size-name: 14px;
-      --font-size-message: 16px;
-      --comment-gap: 8px;
-      --max-comments: 30;
-      --animation-duration: 0.3s;
-      --animation-easing: ease-out;
-      --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    /* comment.html固有のスタイル */
     body {
-      background: var(--background-color);
-      font-family: var(--font-family);
-      color: var(--text-color);
-      overflow: hidden;
       width: 100vw;
       height: 100vh;
     }
 
     #comment-container {
       display: flex;
-      flex-direction: column; /* 通常の方向（上から下） */
-      justify-content: flex-end; /* 要素を下に詰める */
+      flex-direction: column;
+      justify-content: flex-end;
       gap: var(--comment-gap);
       padding: 16px;
       position: fixed;
@@ -52,166 +30,34 @@
       overflow: hidden;
     }
 
-    /* 表示位置のスタイル - コンテナは常に画面全体、コンテンツの配置で制御 */
+    /* 表示位置のスタイル */
     #comment-container.position-top-left,
     #comment-container.position-top-right {
-      flex-direction: column; /* 上から下へ（上配置時） */
+      flex-direction: column;
       justify-content: flex-start;
     }
 
     #comment-container.position-bottom-left,
     #comment-container.position-bottom-right {
-      flex-direction: column; /* 通常方向 */
-      justify-content: flex-end; /* 下に詰める */
+      flex-direction: column;
+      justify-content: flex-end;
     }
 
     #comment-container.position-top-right,
     #comment-container.position-bottom-right {
-      align-items: flex-end; /* 右寄せ */
+      align-items: flex-end;
     }
 
     #comment-container.position-top-left,
     #comment-container.position-bottom-left {
-      align-items: stretch; /* 横幅いっぱい */
+      align-items: stretch;
     }
 
+    /* comment.html固有: コメント幅 */
     .comment {
-      display: flex;
-      gap: 12px;
-      padding: 12px;
-      background: rgba(0, 0, 0, 0.6);
-      border-radius: 8px;
-      backdrop-filter: blur(8px);
-      animation: comment-enter var(--animation-duration) var(--animation-easing);
-      width: calc(100% - 32px); /* 横幅固定（padding分を引く） */
-      flex-shrink: 0; /* 縮小しない */
-      align-self: stretch; /* 親のalign-itemsを無視して横幅いっぱいに */
+      width: calc(100% - 32px);
+      align-self: stretch;
       box-sizing: border-box;
-    }
-
-    .comment.no-animation {
-      animation: none;
-    }
-
-    .comment.removing {
-      animation: comment-exit var(--animation-duration) var(--animation-easing);
-    }
-
-    .comment.superchat {
-      background: linear-gradient(135deg, var(--sc-color, #ff0000) 0%, rgba(0, 0, 0, 0.8) 100%);
-      border: 2px solid var(--sc-color, #ff0000);
-    }
-
-    .comment.supersticker {
-      background: linear-gradient(135deg, #f59e0b 0%, rgba(0, 0, 0, 0.8) 100%);
-      border: 2px solid #f59e0b;
-    }
-
-    .comment.membership {
-      background: linear-gradient(135deg, #10b981 0%, rgba(0, 0, 0, 0.8) 100%);
-      border: 2px solid #10b981;
-    }
-
-    .comment.membershipgift {
-      background: linear-gradient(135deg, #8b5cf6 0%, rgba(0, 0, 0, 0.8) 100%);
-      border: 2px solid #8b5cf6;
-    }
-
-    .avatar {
-      width: var(--avatar-size);
-      height: var(--avatar-size);
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 4px;
-    }
-
-    .name {
-      font-size: var(--font-size-name);
-      font-weight: bold;
-      text-shadow: var(--text-shadow);
-    }
-
-    .badge {
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-
-    .badge-owner {
-      background: #fbbf24;
-      color: #000;
-    }
-
-    .badge-moderator {
-      background: #3b82f6;
-      color: #fff;
-    }
-
-    .badge-member {
-      background: #10b981;
-      color: #fff;
-    }
-
-    .message {
-      font-size: var(--font-size-message);
-      word-wrap: break-word;
-      text-shadow: var(--text-shadow);
-    }
-
-    .amount {
-      font-size: var(--font-size-name);
-      font-weight: bold;
-      color: #fbbf24;
-    }
-
-    @keyframes comment-enter {
-      from {
-        opacity: 0;
-        transform: translateY(20px); /* 下から上にスライドイン */
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes comment-exit {
-      from {
-        opacity: 1;
-        transform: translateY(0);
-      }
-
-      to {
-        opacity: 0;
-        transform: translateY(-20px); /* 上方向にフェードアウト */
-      }
-    }
-
-    ::-webkit-scrollbar {
-      display: none;
-    }
-
-    /* カスタム絵文字（インライン） */
-    .inline-emoji {
-      width: 24px;
-      height: 24px;
-      vertical-align: middle;
-      display: inline;
-      margin: 0 2px;
     }
   </style>
 </head>
@@ -219,9 +65,20 @@
 <body>
   <div id="comment-container"></div>
 
+  <!-- 共通スクリプト -->
+  <script src="shared/comment-renderer.js"></script>
   <script>
-    // 設定状態（動的に変更可能）
-    // maxCommentsは使用しない（画面高さベースで自動調整）
+    // 共通モジュールから関数を取得
+    const {
+      isValidHexColor,
+      isValidNumber,
+      sanitizeFontFamily,
+      createCommentElement,
+      removeCommentWithAnimation,
+      CommentQueueManager
+    } = window.CommentRenderer;
+
+    // 設定状態
     let showAvatar = true;
     let overlayEnabled = true;
     let overlayPosition = 'bottom-left';
@@ -229,29 +86,9 @@
     const WS_URL = 'ws://localhost:19801/ws';
     const API_BASE_URL = 'http://localhost:19800/api';
 
-    // 有効なポジション値
     const VALID_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     let ws = null;
     let reconnectDelay = 1000;
-
-    // バリデーション関数
-    function isValidHexColor(color) {
-      return typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color);
-    }
-
-    function isValidNumber(value, min, max) {
-      const num = parseInt(value, 10);
-      return !isNaN(num) && num >= min && num <= max;
-    }
-
-    // fontFamilyのサニタイズ（XSS対策）
-    function sanitizeFontFamily(fontFamily) {
-      if (typeof fontFamily !== 'string' || fontFamily.length === 0 || fontFamily.length > 200) {
-        return null;
-      }
-      // 危険な文字を除去
-      return fontFamily.replace(/[<>"'`\;{}]/g, '');
-    }
 
     // URLパラメータから設定を適用
     function applyUrlSettings() {
@@ -270,46 +107,38 @@
       if (avatarSize && isValidNumber(avatarSize, 16, 128)) {
         root.style.setProperty('--avatar-size', avatarSize + 'px');
       }
-      // maxCount - 画面高さベースで自動調整するため無視
-      // showAvatar
       const showAvatarParam = params.get('showAvatar');
       let showAvatarChanged = false;
       if (showAvatarParam !== null) {
         showAvatar = showAvatarParam === 'true';
         showAvatarChanged = true;
       }
-      // borderRadius
       const borderRadius = params.get('borderRadius');
       if (borderRadius && isValidNumber(borderRadius, 0, 32)) {
         root.style.setProperty('--border-radius', borderRadius + 'px');
         updateCommentBorderRadius(parseInt(borderRadius, 10));
       }
-      // position
       const position = params.get('position');
       if (position && VALID_POSITIONS.includes(position)) {
         overlayPosition = position;
         updateContainerPosition();
       }
-      // enabled
       const enabled = params.get('enabled');
       if (enabled !== null) {
         overlayEnabled = enabled === 'true';
         updateOverlayVisibility();
       }
-      // fontFamily
       const fontFamily = params.get('fontFamily');
       const sanitizedFont = sanitizeFontFamily(fontFamily);
       if (sanitizedFont) {
         root.style.setProperty('--font-family', sanitizedFont);
       }
 
-      // 既存DOMの更新（設定適用後に必要）
       if (showAvatarChanged) {
         updateAvatarVisibility();
       }
     }
 
-    // 角丸を更新
     function updateCommentBorderRadius(radius) {
       const style = document.querySelector('#dynamic-styles') || document.createElement('style');
       style.id = 'dynamic-styles';
@@ -319,17 +148,13 @@
       }
     }
 
-    // コンテナの表示位置を更新
     function updateContainerPosition() {
       const container = document.getElementById('comment-container');
-      // 既存のpositionクラスを削除
       VALID_POSITIONS.forEach(pos => {
         container.classList.remove(`position-${pos}`);
       });
-      // 新しいpositionクラスを追加
       container.classList.add(`position-${overlayPosition}`);
 
-      // bottom配置時は下に詰める、top配置時は上から並べる
       if (overlayPosition.startsWith('bottom-')) {
         container.style.flexDirection = 'column';
         container.style.justifyContent = 'flex-end';
@@ -339,17 +164,14 @@
       }
     }
 
-    // オーバーレイの表示/非表示を更新
     function updateOverlayVisibility() {
       const container = document.getElementById('comment-container');
       container.style.display = overlayEnabled ? 'flex' : 'none';
     }
 
-    // WebSocket経由の設定更新を適用
     function applySettingsUpdate(settings) {
       const root = document.documentElement;
 
-      // 共通設定
       if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
         root.style.setProperty('--primary-color', settings.primaryColor);
       }
@@ -361,14 +183,11 @@
         root.style.setProperty('--font-family', sanitizedFont);
       }
 
-      // コメント設定（新しいペイロード構造）
       if (settings.comment) {
         if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
           root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
-          // フォントサイズ変更時は画面外コメントを再チェック
           trimOverflowingComments();
         }
-        // maxCount - 画面高さベースで自動調整するため無視
         if (settings.comment.showAvatar !== undefined) {
           showAvatar = settings.comment.showAvatar;
           updateAvatarVisibility();
@@ -384,54 +203,26 @@
       }
     }
 
-    // フェードアウトアニメーション付きでコメントを削除
-    function removeCommentWithAnimation(element) {
-      if (!element || element.classList.contains('removing')) return;
-
-      element.classList.add('removing');
-      // アニメーション終了後にDOM削除
-      element.addEventListener('animationend', () => {
-        element.remove();
-      }, { once: true });
-
-      // フォールバック: アニメーションが発火しなかった場合のタイムアウト
-      setTimeout(() => {
-        if (element.parentNode) {
-          element.remove();
-        }
-      }, 500); // animation-duration(0.3s)より少し長め
-    }
-
-    // 画面外にはみ出たコメントを削除（画面高さベース）
     function trimOverflowingComments() {
       const container = document.getElementById('comment-container');
       const containerRect = container.getBoundingClientRect();
-
-      // 削除対象を先に収集（アニメーション中の要素は除外、デバッグ要素も除外）
       const comments = Array.from(container.querySelectorAll('.comment:not(.removing)'));
-
-      // bottom配置の場合: 上にはみ出たコメントを削除
-      // top配置の場合: 下にはみ出たコメントを削除
       const isBottomPosition = overlayPosition.startsWith('bottom-');
 
       comments.forEach(comment => {
         const rect = comment.getBoundingClientRect();
-
         if (isBottomPosition) {
-          // bottom配置: コメントの上端がコンテナの上端より上にある場合は削除
-          if (rect.top < containerRect.top - 10) { // 10pxのマージン
+          if (rect.top < containerRect.top - 10) {
             removeCommentWithAnimation(comment);
           }
         } else {
-          // top配置: コメントの下端がコンテナの下端より下にある場合は削除
-          if (rect.bottom > containerRect.bottom + 10) { // 10pxのマージン
+          if (rect.bottom > containerRect.bottom + 10) {
             removeCommentWithAnimation(comment);
           }
         }
       });
     }
 
-    // アバター表示/非表示を更新
     function updateAvatarVisibility() {
       const avatars = document.querySelectorAll('.avatar');
       avatars.forEach(avatar => {
@@ -439,100 +230,18 @@
       });
     }
 
-    // =============================================================================
-    // スーパーチャット金額別色分け
-    // YouTube本家に準拠した色分け（日本円基準、他通貨は相当額に変換）
-    // =============================================================================
-
-    // 金額文字列から数値を抽出（通貨記号を除去）
-    function parseAmount(amountString) {
-      if (!amountString) return 0;
-
-      // カンマが小数点として使われているか判定（欧州形式: "1.000,50"）
-      // 末尾が ",XX" または ",X" の場合は欧州形式
-      const hasCommaDecimal = /\d,\d{1,2}$/.test(amountString);
-
-      let cleaned = amountString.replace(/[^\d.,]/g, '');
-
-      if (hasCommaDecimal) {
-        // 欧州形式: ピリオドを除去（千の区切り）、カンマをピリオドに（小数点）
-        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-      } else {
-        // 英語/日本形式: カンマを除去（千の区切り）
-        // 例: "¥1,000" -> "1000", "$1,000.50" -> "1000.50"
-        cleaned = cleaned.replace(/,/g, '');
-      }
-
-      return parseFloat(cleaned) || 0;
-    }
-
-    // 通貨を日本円相当額に変換
-    // TODO: 将来的に為替レートはAPIから取得することを検討
-    // 現在は2024年時点の概算レートを使用
-    function convertToJPY(amountString) {
-      if (!amountString) return 0;
-      const amount = parseAmount(amountString);
-
-      // 通貨を判定して日本円に換算
-      if (amountString.includes('$') || amountString.includes('USD') || amountString.includes('CA$') || amountString.includes('A$')) {
-        return amount * 150; // USD/CAD/AUD -> JPY
-      } else if (amountString.includes('€') || amountString.includes('EUR')) {
-        return amount * 160; // EUR -> JPY
-      } else if (amountString.includes('£') || amountString.includes('GBP')) {
-        return amount * 190; // GBP -> JPY
-      } else if (amountString.includes('₩') || amountString.includes('KRW')) {
-        return amount * 0.11; // KRW -> JPY (1円≒9ウォン)
-      } else if (amountString.includes('NT$') || amountString.includes('TWD')) {
-        return amount * 4.7; // TWD -> JPY
-      } else if (amountString.includes('¥') || amountString.includes('JPY') || amountString.includes('円')) {
-        return amount; // JPY
-      } else {
-        // その他の通貨は金額をそのまま使用（色分けの目安）
-        return amount;
-      }
-    }
-
-    // 金額に応じたスーパーチャットの色を返す
-    // YouTube公式の色分けに準拠
-    function getSuperChatColor(amountString) {
-      const jpy = convertToJPY(amountString);
-
-      if (jpy >= 10000) {
-        return '#f44336'; // 赤 - ¥10,000以上
-      } else if (jpy >= 5000) {
-        return '#e91e63'; // マゼンタ - ¥5,000-9,999
-      } else if (jpy >= 2000) {
-        return '#e65100'; // オレンジ - ¥2,000-4,999
-      } else if (jpy >= 1000) {
-        return '#ffb300'; // 黄色 - ¥1,000-1,999
-      } else if (jpy >= 500) {
-        return '#00c853'; // 緑 - ¥500-999
-      } else if (jpy >= 200) {
-        return '#00e5ff'; // 水色 - ¥200-499
-      } else {
-        return '#1e88e5'; // 青 - ¥100-199（最低額）
-      }
-    }
-
     // 初期化時にURLパラメータを適用
     applyUrlSettings();
-    // デフォルトのポジションを適用
     updateContainerPosition();
 
-    // 設定取得のバージョン管理（レース条件対策）
+    // 設定取得のバージョン管理
     let settingsVersion = 0;
-    // 設定取得中フラグ（多重リクエスト防止）
     let fetchInFlight = false;
-    // 再試行待ちフラグ（in-flight中にスキップされた場合の再試行用）
     let retryPending = false;
-    // 設定取得成功フラグ（初回fetch失敗時のリカバリー用）
     let settingsFetchSucceeded = false;
-    // 初回接続フラグ
     let isFirstConnection = true;
 
-    // HTTP APIから初期設定を取得して適用（タイムアウト付き）
     async function fetchAndApplySettings() {
-      // 既にリクエスト中の場合は再試行フラグを立ててスキップ
       if (fetchInFlight) {
         retryPending = true;
         console.log('Settings fetch already in flight, will retry after');
@@ -540,13 +249,11 @@
       }
       fetchInFlight = true;
       retryPending = false;
-
-      // リクエスト開始時のバージョンを記録
       const requestVersion = settingsVersion;
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒タイムアウト
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
         const response = await fetch(`${API_BASE_URL}/overlay/settings`, {
           signal: controller.signal
@@ -555,16 +262,12 @@
 
         if (response.ok) {
           const settings = await response.json();
-
-          // レース条件チェック: リクエスト中にWSで設定が更新されていたらスキップ
           if (settingsVersion > requestVersion) {
             console.log('Skipping HTTP settings (newer WS settings already applied)');
             return;
           }
-
           console.log('Fetched overlay settings:', settings);
           applySettingsUpdate(settings);
-          // URLパラメータを再適用（URL優先）
           applyUrlSettings();
           settingsFetchSucceeded = true;
         }
@@ -576,12 +279,34 @@
         }
       } finally {
         fetchInFlight = false;
-        // 再試行が要求されていて、まだ設定取得が成功していない場合は再試行
         if (retryPending && !settingsFetchSucceeded) {
           retryPending = false;
           console.log('Retrying settings fetch');
           fetchAndApplySettings();
         }
+      }
+    }
+
+    // コメントキュー初期化
+    const commentQueue = new CommentQueueManager({
+      onAddComment: (comment) => {
+        const container = document.getElementById('comment-container');
+        if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
+          return;
+        }
+        const el = createCommentElement(comment, showAvatar);
+        container.appendChild(el);
+        requestAnimationFrame(() => {
+          trimOverflowingComments();
+        });
+      }
+    });
+
+    function removeComment(commentId) {
+      if (!commentId) return;
+      const el = document.querySelector(`[data-id="${CSS.escape(commentId)}"]`);
+      if (el) {
+        removeCommentWithAnimation(el);
       }
     }
 
@@ -591,7 +316,6 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        // 再接続時または初回設定取得未成功の場合は設定を再取得
         if (!isFirstConnection || !settingsFetchSucceeded) {
           fetchAndApplySettings();
         }
@@ -602,16 +326,12 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'comment:add') {
-            // コメントをキューに追加（1件ずつ表示するため）
-            queueComment(data.payload);
+            commentQueue.queue(data.payload);
           } else if (data.type === 'comment:remove') {
-            // コメント削除イベント（フェードアウトアニメーション付き）
             removeComment(data.payload?.id);
           } else if (data.type === 'settings:update') {
-            // WSからの設定更新はバージョンをインクリメント（レース条件対策）
             settingsVersion++;
             applySettingsUpdate(data.payload);
-            // URLパラメータを再適用（URL優先を維持）
             applyUrlSettings();
           }
         } catch (e) {
@@ -632,296 +352,6 @@
       };
     }
 
-    // コメントキューシステム（5秒間に溜まったコメントを5秒間で等間隔表示）
-    const commentBuffer = []; // 受信バッファ
-    const displayQueue = []; // 表示キュー
-    let isProcessingQueue = false;
-    let currentDisplayInterval = 300; // 現在の表示間隔（ミリ秒）
-    const BUFFER_INTERVAL = 5000; // バッファ収集間隔（5秒）
-    const MIN_DISPLAY_INTERVAL = 100; // 最小表示間隔（ミリ秒）
-    const MAX_DISPLAY_INTERVAL = 1000; // 最大表示間隔（ミリ秒）
-
-    // コメントをバッファに追加
-    function queueComment(comment) {
-      // comment.idがundefined/nullの場合はスキップ
-      if (!comment || !comment.id) {
-        console.warn('Invalid comment: missing id', comment);
-        return;
-      }
-
-      // 重複チェック（バッファ内、表示キュー内、表示済みの全て）
-      if (commentBuffer.some(c => c.id === comment.id)) {
-        return;
-      }
-      if (displayQueue.some(c => c.id === comment.id)) {
-        return;
-      }
-      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
-        return;
-      }
-
-      commentBuffer.push(comment);
-    }
-
-    // 5秒ごとにバッファを表示キューに移動
-    function flushBuffer() {
-      if (commentBuffer.length > 0) {
-        // バッファ内のコメント数に応じて表示間隔を計算
-        // 5秒間で全て表示する = 5000ms / コメント数
-        const count = commentBuffer.length;
-        currentDisplayInterval = Math.floor(BUFFER_INTERVAL / count);
-        // 間隔を制限
-        currentDisplayInterval = Math.max(MIN_DISPLAY_INTERVAL, Math.min(MAX_DISPLAY_INTERVAL, currentDisplayInterval));
-
-        console.log(`Flushing ${count} comments with ${currentDisplayInterval}ms interval`);
-
-        // バッファから表示キューに移動
-        displayQueue.push(...commentBuffer);
-        commentBuffer.length = 0;
-
-        // 処理開始
-        processQueue();
-      }
-    }
-
-    // 表示キューを処理（1件ずつ表示）
-    function processQueue() {
-      if (isProcessingQueue || displayQueue.length === 0) {
-        return;
-      }
-
-      isProcessingQueue = true;
-      const comment = displayQueue.shift();
-      addComment(comment);
-
-      // 次のコメントを計算された間隔後に処理
-      setTimeout(() => {
-        isProcessingQueue = false;
-        processQueue();
-      }, currentDisplayInterval);
-    }
-
-    // 5秒ごとにバッファをフラッシュ
-    setInterval(flushBuffer, BUFFER_INTERVAL);
-
-    function addComment(comment) {
-      const container = document.getElementById('comment-container');
-
-      // 重複チェック（再接続時のキャッシュ復元で重要）
-      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
-        return; // 既に表示済み
-      }
-
-      const el = createCommentElement(comment);
-      container.appendChild(el); // 末尾に追加（新しいコメントが下に表示される）
-
-      // レイアウト完了後に画面外コメントを削除
-      requestAnimationFrame(() => {
-        trimOverflowingComments();
-      });
-    }
-
-    // コメントを削除（IDで指定）
-    function removeComment(commentId) {
-      if (!commentId) return;
-      const el = document.querySelector(`[data-id="${CSS.escape(commentId)}"]`);
-      if (el) {
-        removeCommentWithAnimation(el);
-      }
-    }
-
-    // URLを正規化（//形式をhttps:に変換）
-    function normalizeUrl(url) {
-      if (!url || typeof url !== 'string') return url;
-      if (url.startsWith('//')) {
-        return 'https:' + url;
-      }
-      return url;
-    }
-
-    // 絵文字URLがYouTubeドメインかどうかを検証
-    function isValidEmojiUrl(url) {
-      if (!url || typeof url !== 'string') return false;
-      try {
-        // normalizeUrlを再利用してURL正規化
-        const parsed = new URL(normalizeUrl(url));
-        const hostname = parsed.hostname;
-        // YouTube関連ドメインのみ許可（ワイルドカードパターン対応）
-        // 完全一致
-        const exactHosts = ['youtube.com', 'www.youtube.com', 'fonts.gstatic.com'];
-        if (exactHosts.includes(hostname)) return true;
-        // サフィックスマッチ（*.ggpht.com, *.googleusercontent.com, *.ytimg.com）
-        const allowedSuffixes = ['.ggpht.com', '.googleusercontent.com', '.ytimg.com', '.gstatic.com'];
-        return allowedSuffixes.some(suffix => hostname.endsWith(suffix));
-      } catch {
-        return false;
-      }
-    }
-
-    // 絵文字を含むメッセージをレンダリング
-    function renderMessageWithEmoji(container, messageRuns) {
-      messageRuns.forEach(run => {
-        if (run.text !== undefined) {
-          // テキスト部分
-          container.appendChild(document.createTextNode(run.text));
-        } else if (run.emoji) {
-          // 絵文字部分
-          // 最適なサイズのサムネイルを選択（24px以上を優先）
-          const thumbnails = run.emoji.image?.thumbnails || [];
-          const thumb = thumbnails.find(t => t.width >= 24) || thumbnails[0];
-
-          // デバッグ: 絵文字データを確認
-          const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
-          if (!thumb) {
-            console.warn('[Emoji] No thumbnail for:', shortcut, run.emoji);
-          } else if (!isValidEmojiUrl(thumb.url)) {
-            console.warn('[Emoji] Invalid URL for:', shortcut, thumb.url);
-          }
-
-          // セキュリティ: YouTubeドメインのURLのみ許可
-          if (thumb && isValidEmojiUrl(thumb.url)) {
-            const img = document.createElement('img');
-            img.className = 'inline-emoji';
-            img.alt = shortcut;
-            img.title = shortcut;
-            img.loading = 'lazy'; // 遅延読み込みでパフォーマンス向上
-            // 画像読み込み失敗時はテキストにフォールバック
-            const normalizedUrl = normalizeUrl(thumb.url);
-            img.onerror = function () {
-              console.warn('[Emoji] Image load failed:', shortcut, normalizedUrl);
-              const text = document.createTextNode(shortcut);
-              this.parentNode?.replaceChild(text, this);
-            };
-            img.src = normalizedUrl;
-            container.appendChild(img);
-          } else {
-            // URLが無効またはサムネイルがない場合はショートカットをテキスト表示
-            container.appendChild(document.createTextNode(shortcut));
-          }
-        }
-      });
-    }
-
-    function createCommentElement(comment) {
-      const div = document.createElement('div');
-      div.className = 'comment';
-      div.dataset.id = comment.id;
-
-      // messageTypeはタグ付きenum: { type: "text" | "superChat" | ... }
-      const messageType = comment.messageType?.type;
-      if (messageType === 'superChat') {
-        div.classList.add('superchat');
-        // 金額に応じた色を設定
-        const scColor = getSuperChatColor(comment.messageType.amount);
-        div.style.setProperty('--sc-color', scColor);
-      } else if (messageType === 'superSticker') {
-        div.classList.add('supersticker');
-      } else if (messageType === 'membership') {
-        div.classList.add('membership');
-      } else if (messageType === 'membershipGift') {
-        div.classList.add('membershipgift');
-      }
-
-      const avatar = document.createElement('img');
-      avatar.className = 'avatar';
-      avatar.src = comment.authorImageUrl;
-      avatar.alt = comment.authorName;
-      // showAvatar設定を反映
-      if (!showAvatar) {
-        avatar.style.display = 'none';
-      }
-
-      const content = document.createElement('div');
-      content.className = 'content';
-
-      const header = document.createElement('div');
-      header.className = 'header';
-
-      const name = document.createElement('span');
-      name.className = 'name';
-      name.textContent = comment.authorName;
-      header.appendChild(name);
-
-      if (comment.isOwner) {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-owner';
-        badge.textContent = 'Owner';
-        header.appendChild(badge);
-      }
-
-      if (comment.isModerator) {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-moderator';
-        badge.textContent = 'Mod';
-        header.appendChild(badge);
-      }
-
-      if (comment.isMember) {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-member';
-        badge.textContent = 'Member';
-        header.appendChild(badge);
-      }
-
-      // スーパーチャットの金額表示
-      if (messageType === 'superChat' && comment.messageType.amount) {
-        const amount = document.createElement('span');
-        amount.className = 'amount';
-        amount.textContent = comment.messageType.amount;
-        header.appendChild(amount);
-      }
-
-      // スーパーステッカーのバッジ
-      if (messageType === 'superSticker') {
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.style.background = '#f59e0b';
-        badge.style.color = '#000';
-        badge.textContent = 'Sticker';
-        header.appendChild(badge);
-      }
-
-      // メンバーシップのバッジ（レベル表示対応）
-      if (messageType === 'membership') {
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.style.background = '#10b981';
-        badge.style.color = '#fff';
-        // levelフィールドがあれば表示、なければデフォルト
-        const level = comment.messageType.level || 'New Member';
-        badge.textContent = level;
-        header.appendChild(badge);
-      }
-
-      // メンバーシップギフトのバッジ
-      if (messageType === 'membershipGift' && comment.messageType.count) {
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.style.background = '#8b5cf6';
-        badge.style.color = '#fff';
-        badge.textContent = `Gift x${comment.messageType.count}`;
-        header.appendChild(badge);
-      }
-
-      const message = document.createElement('div');
-      message.className = 'message';
-
-      // messageRunsがある場合は絵文字を含むレンダリング
-      if (comment.messageRuns && comment.messageRuns.length > 0) {
-        renderMessageWithEmoji(message, comment.messageRuns);
-      } else {
-        message.textContent = comment.message;
-      }
-
-      content.appendChild(header);
-      content.appendChild(message);
-
-      div.appendChild(avatar);
-      div.appendChild(content);
-
-      return div;
-    }
-
     // ウィンドウリサイズ時に画面外コメントを削除
     let resizeTimeout;
     window.addEventListener('resize', () => {
@@ -931,7 +361,7 @@
       }, 100);
     });
 
-    // 初期化: 設定取得とWebSocket接続を並列実行（HTTP遅延でもWS接続を遅らせない）
+    // 初期化
     fetchAndApplySettings();
     connectWebSocket();
   </script>

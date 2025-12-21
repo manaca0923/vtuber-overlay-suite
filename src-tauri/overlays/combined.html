@@ -365,6 +365,7 @@
 
     const WS_URL = 'ws://localhost:19801/ws';
     const API_BASE_URL = 'http://localhost:19800/api';
+    const SETTINGS_FETCH_TIMEOUT = 3000; // 設定取得のタイムアウト（ミリ秒）
 
     const VALID_LAYOUTS = ['streaming', 'talk', 'music', 'gaming', 'custom'];
     const VALID_COMMENT_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
@@ -806,7 +807,7 @@
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), SETTINGS_FETCH_TIMEOUT);
         const response = await fetch(`${API_BASE_URL}/overlay/settings`, { signal: controller.signal });
         clearTimeout(timeoutId);
 

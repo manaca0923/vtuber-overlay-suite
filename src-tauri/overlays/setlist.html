@@ -14,6 +14,7 @@
       --font-size-title: 24px;
       --font-size-artist: 14px;
       --transition-duration: 0.5s;
+      --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
     }
 
     * {
@@ -24,9 +25,11 @@
 
     body {
       background: transparent;
-      font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+      font-family: var(--font-family);
       color: var(--text-color);
       overflow: hidden;
+      width: 100vw;
+      height: 100vh;
     }
 
     #setlist-container {
@@ -34,7 +37,14 @@
       flex-direction: column;
       gap: 8px;
       padding: 16px;
+      position: absolute;
     }
+
+    /* 表示位置のスタイル */
+    #setlist-container.position-top { top: 0; left: 0; right: 0; }
+    #setlist-container.position-bottom { bottom: 0; left: 0; right: 0; }
+    #setlist-container.position-left { top: 0; left: 0; bottom: 0; width: auto; }
+    #setlist-container.position-right { top: 0; right: 0; bottom: 0; width: auto; }
 
     .song {
       padding: 16px 20px;
@@ -190,6 +200,11 @@
 
     // 設定状態（動的に変更可能）
     let showArtist = true;
+    let overlayEnabled = true;
+    let overlayPosition = 'bottom';
+
+    // 有効なポジション値
+    const VALID_POSITIONS = ['top', 'bottom', 'left', 'right'];
 
     // バリデーション関数
     function isValidHexColor(color) {
@@ -236,6 +251,23 @@
       if (borderRadius && isValidNumber(borderRadius, 0, 32)) {
         updateSongBorderRadius(parseInt(borderRadius, 10));
       }
+      // position
+      const position = params.get('position');
+      if (position && VALID_POSITIONS.includes(position)) {
+        overlayPosition = position;
+        updateContainerPosition();
+      }
+      // enabled
+      const enabled = params.get('enabled');
+      if (enabled !== null) {
+        overlayEnabled = enabled === 'true';
+        updateOverlayVisibility();
+      }
+      // fontFamily
+      const fontFamily = params.get('fontFamily');
+      if (fontFamily && typeof fontFamily === 'string' && fontFamily.length > 0 && fontFamily.length <= 200) {
+        root.style.setProperty('--font-family', fontFamily);
+      }
     }
 
     // 角丸を更新
@@ -256,6 +288,23 @@
       });
     }
 
+    // コンテナの表示位置を更新
+    function updateContainerPosition() {
+      const container = document.getElementById('setlist-container');
+      // 既存のpositionクラスを削除
+      VALID_POSITIONS.forEach(pos => {
+        container.classList.remove(`position-${pos}`);
+      });
+      // 新しいpositionクラスを追加
+      container.classList.add(`position-${overlayPosition}`);
+    }
+
+    // オーバーレイの表示/非表示を更新
+    function updateOverlayVisibility() {
+      const container = document.getElementById('setlist-container');
+      container.style.display = overlayEnabled ? 'flex' : 'none';
+    }
+
     // WebSocket経由の設定更新を適用
     function applySettingsUpdate(settings) {
       const root = document.documentElement;
@@ -269,6 +318,9 @@
       if (settings.borderRadius !== undefined && isValidNumber(settings.borderRadius, 0, 32)) {
         updateSongBorderRadius(settings.borderRadius);
       }
+      if (settings.fontFamily && typeof settings.fontFamily === 'string' && settings.fontFamily.length > 0 && settings.fontFamily.length <= 200) {
+        root.style.setProperty('--font-family', settings.fontFamily);
+      }
 
       // セットリスト設定（新しいペイロード構造）
       if (settings.setlist) {
@@ -279,11 +331,35 @@
           showArtist = settings.setlist.showArtist;
           updateArtistVisibility();
         }
+        if (settings.setlist.enabled !== undefined) {
+          overlayEnabled = settings.setlist.enabled;
+          updateOverlayVisibility();
+        }
+        if (settings.setlist.position && VALID_POSITIONS.includes(settings.setlist.position)) {
+          overlayPosition = settings.setlist.position;
+          updateContainerPosition();
+        }
       }
     }
 
     // 初期化時にURLパラメータを適用
     applyUrlSettings();
+    // デフォルトのポジションを適用
+    updateContainerPosition();
+
+    // HTTP APIから初期設定を取得して適用
+    async function fetchAndApplySettings() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/overlay/settings`);
+        if (response.ok) {
+          const settings = await response.json();
+          console.log('Fetched overlay settings:', settings);
+          applySettingsUpdate(settings);
+        }
+      } catch (e) {
+        console.log('Settings API not available, using defaults');
+      }
+    }
 
     // URLパラメータからセットリストIDを取得
     function getSetlistIdFromUrl() {
@@ -336,6 +412,7 @@
         reconnectDelay = 1000;
         // 接続成功後、HTTP APIで初期データを取得
         fetchAndDisplaySetlist();
+        fetchAndApplySettings();
       };
 
       ws.onmessage = (event) => {

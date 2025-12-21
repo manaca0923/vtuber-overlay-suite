@@ -587,6 +587,11 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
   - superChat, superSticker, membership, membershipGiftの検証ができない
   - テストボタンにメッセージタイプ選択を追加
 
+- [ ] **ApiKeySetup更新後のCommentControlPanel即時反映** (PR#23)
+  - ApiKeySetup.tsxでAPIキー/LiveChatIdを更新しても上部のCommentControlPanelに即時反映されない
+  - 現在はリロードが必要
+  - App.tsx側で設定変更イベントを購読するか、状態を共有する仕組みが必要
+
 ### パフォーマンス
 
 - [ ] **オーバーレイパフォーマンステスト** (PR#19)

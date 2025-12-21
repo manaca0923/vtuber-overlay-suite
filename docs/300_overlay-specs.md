@@ -74,9 +74,22 @@ ws.onopen = () => {
   type: 'settings:update',
   payload: {
     theme: string,
-    primaryColor: string,
-    position: 'top' | 'bottom' | 'left' | 'right',
-    visible: boolean
+    primaryColor: string,      // #RRGGBB形式
+    fontFamily: string,        // フォントファミリー
+    borderRadius: number,      // 角丸（px）
+    comment: {
+      enabled: boolean,        // 表示ON/OFF
+      position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
+      maxCount: number,        // 最大表示件数
+      showAvatar: boolean,     // アバター表示
+      fontSize: number         // フォントサイズ（px）
+    },
+    setlist: {
+      enabled: boolean,        // 表示ON/OFF
+      position: 'top' | 'bottom' | 'left' | 'right',
+      showArtist: boolean,     // アーティスト表示
+      fontSize: number         // フォントサイズ（px）
+    }
   }
 }
 ```

@@ -358,17 +358,33 @@
     // デフォルトのポジションを適用
     updateContainerPosition();
 
-    // HTTP APIから初期設定を取得して適用
+    // 初回接続フラグ（二重呼び出し防止用）
+    let isInitialConnection = true;
+
+    // HTTP APIから初期設定を取得して適用（タイムアウト付き）
     async function fetchAndApplySettings() {
       try {
-        const response = await fetch(`${API_BASE_URL}/overlay/settings`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒タイムアウト
+
+        const response = await fetch(`${API_BASE_URL}/overlay/settings`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         if (response.ok) {
           const settings = await response.json();
           console.log('Fetched overlay settings:', settings);
           applySettingsUpdate(settings);
+          // URLパラメータを再適用（URL優先）
+          applyUrlSettings();
         }
       } catch (e) {
-        console.log('Settings API not available, using defaults');
+        if (e.name === 'AbortError') {
+          console.log('Settings API timeout, using defaults');
+        } else {
+          console.log('Settings API not available, using defaults');
+        }
       }
     }
 
@@ -421,9 +437,12 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        // 接続成功後、HTTP APIで初期データを取得
-        fetchAndDisplaySetlist();
-        fetchAndApplySettings();
+        // 再接続時のみデータと設定を再取得（初回は既に取得済み）
+        if (!isInitialConnection) {
+          fetchAndDisplaySetlist();
+          fetchAndApplySettings();
+        }
+        isInitialConnection = false;
       };
 
       ws.onmessage = (event) => {
@@ -559,10 +578,10 @@
       }
     }
 
-    // 初期化: 設定取得を先に実行してからWebSocket接続
-    fetchAndApplySettings().finally(() => {
-      connectWebSocket();
-    });
+    // 初期化: 設定取得・セットリスト取得・WebSocket接続を並列実行（HTTP遅延でもWS接続を遅らせない）
+    fetchAndApplySettings();
+    fetchAndDisplaySetlist();
+    connectWebSocket();
 
     // ウィンドウリサイズ時にマーキー効果を再計算（OBSソースサイズ変更対応）
     const resizeObserver = new ResizeObserver(() => {

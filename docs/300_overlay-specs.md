@@ -329,14 +329,14 @@ body {
 オーバーレイはURLパラメータでカスタマイズ可能。
 
 ```
-http://localhost:19800/overlay/comment?theme=dark&maxComments=15
+http://localhost:19800/overlay/comment?theme=dark&maxCount=15
 http://localhost:19800/overlay/setlist?showArtist=false&position=bottom
 ```
 
 | パラメータ | 型 | デフォルト | 説明 |
 |------------|-----|------------|------|
 | theme | string | 'default' | テーマ名 |
-| maxComments | number | 10 | 最大表示件数 |
+| maxCount | number | 10 | 最大表示件数 |
 | showAvatar | boolean | true | アバター表示 |
 | showBadge | boolean | true | バッジ表示 |
 | position | string | 'bottom' | 表示位置 |

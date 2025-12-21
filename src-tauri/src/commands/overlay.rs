@@ -99,13 +99,28 @@ pub async fn broadcast_settings_update(
     settings: OverlaySettings,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    use crate::server::types::{SettingsUpdatePayload, WsMessage};
+    use crate::server::types::{
+        CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload, WsMessage,
+    };
 
     let payload = SettingsUpdatePayload {
         theme: settings.theme.clone(),
         primary_color: settings.common.primary_color.clone(),
-        position: settings.comment.position.clone(),
-        visible: settings.comment.enabled,
+        font_family: settings.common.font_family.clone(),
+        border_radius: settings.common.border_radius,
+        comment: CommentSettingsPayload {
+            enabled: settings.comment.enabled,
+            position: settings.comment.position.clone(),
+            max_count: settings.comment.max_count,
+            show_avatar: settings.comment.show_avatar,
+            font_size: settings.comment.font_size,
+        },
+        setlist: SetlistSettingsPayload {
+            enabled: settings.setlist.enabled,
+            position: settings.setlist.position.clone(),
+            show_artist: settings.setlist.show_artist,
+            font_size: settings.setlist.font_size,
+        },
     };
 
     let server_state = state.server.read().await;

@@ -168,7 +168,10 @@
   <div id="comment-container"></div>
 
   <script>
-    const MAX_COMMENTS = 30;
+    // 設定状態（動的に変更可能）
+    let maxComments = 30;
+    let showAvatar = true;
+
     const WS_URL = 'ws://localhost:19801/ws';
     let ws = null;
     let reconnectDelay = 1000;
@@ -200,17 +203,77 @@
       if (avatarSize && isValidNumber(avatarSize, 16, 128)) {
         root.style.setProperty('--avatar-size', avatarSize + 'px');
       }
+      // maxCount
+      const maxCount = params.get('maxCount');
+      if (maxCount && isValidNumber(maxCount, 5, 50)) {
+        maxComments = parseInt(maxCount, 10);
+      }
+      // showAvatar
+      const showAvatarParam = params.get('showAvatar');
+      if (showAvatarParam !== null) {
+        showAvatar = showAvatarParam === 'true';
+      }
+      // borderRadius
+      const borderRadius = params.get('borderRadius');
+      if (borderRadius && isValidNumber(borderRadius, 0, 32)) {
+        root.style.setProperty('--border-radius', borderRadius + 'px');
+        updateCommentBorderRadius(parseInt(borderRadius, 10));
+      }
+    }
+
+    // 角丸を更新
+    function updateCommentBorderRadius(radius) {
+      const style = document.querySelector('#dynamic-styles') || document.createElement('style');
+      style.id = 'dynamic-styles';
+      style.textContent = `.comment { border-radius: ${radius}px !important; }`;
+      if (!style.parentNode) {
+        document.head.appendChild(style);
+      }
     }
 
     // WebSocket経由の設定更新を適用
     function applySettingsUpdate(settings) {
       const root = document.documentElement;
+
+      // 共通設定
       if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
         root.style.setProperty('--primary-color', settings.primaryColor);
       }
-      if (settings.fontSize && isValidNumber(settings.fontSize, 8, 72)) {
-        root.style.setProperty('--font-size-message', settings.fontSize + 'px');
+      if (settings.borderRadius !== undefined && isValidNumber(settings.borderRadius, 0, 32)) {
+        updateCommentBorderRadius(settings.borderRadius);
       }
+
+      // コメント設定（新しいペイロード構造）
+      if (settings.comment) {
+        if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
+        }
+        if (settings.comment.maxCount && isValidNumber(settings.comment.maxCount, 5, 50)) {
+          maxComments = settings.comment.maxCount;
+          // 現在のコメント数が新しい上限を超えている場合、古いコメントを削除
+          trimOldComments();
+        }
+        if (settings.comment.showAvatar !== undefined) {
+          showAvatar = settings.comment.showAvatar;
+          updateAvatarVisibility();
+        }
+      }
+    }
+
+    // 古いコメントを削除して上限に収める
+    function trimOldComments() {
+      const container = document.getElementById('comment-container');
+      while (container.children.length > maxComments) {
+        container.firstChild.remove();
+      }
+    }
+
+    // アバター表示/非表示を更新
+    function updateAvatarVisibility() {
+      const avatars = document.querySelectorAll('.avatar');
+      avatars.forEach(avatar => {
+        avatar.style.display = showAvatar ? 'block' : 'none';
+      });
     }
 
     // 初期化時にURLパラメータを適用
@@ -267,8 +330,8 @@
       const el = createCommentElement(comment);
       container.appendChild(el);
 
-      // 古いコメントを削除
-      while (container.children.length > MAX_COMMENTS) {
+      // 古いコメントを削除（maxCommentsは設定で動的に変更可能）
+      while (container.children.length > maxComments) {
         container.firstChild.remove();
       }
     }
@@ -294,6 +357,10 @@
       avatar.className = 'avatar';
       avatar.src = comment.authorImageUrl;
       avatar.alt = comment.authorName;
+      // showAvatar設定を反映
+      if (!showAvatar) {
+        avatar.style.display = 'none';
+      }
 
       const content = document.createElement('div');
       content.className = 'content';

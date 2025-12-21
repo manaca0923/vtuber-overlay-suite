@@ -188,6 +188,9 @@
     let reconnectDelay = 1000;
     const maxDelay = 30000;
 
+    // 設定状態（動的に変更可能）
+    let showArtist = true;
+
     // バリデーション関数
     function isValidHexColor(color) {
       return typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color);
@@ -222,18 +225,60 @@
       if (fontSize && isValidNumber(fontSize, 8, 72)) {
         root.style.setProperty('--font-size-title', fontSize + 'px');
       }
+      // showArtist
+      const showArtistParam = params.get('showArtist');
+      if (showArtistParam !== null) {
+        showArtist = showArtistParam === 'true';
+        updateArtistVisibility();
+      }
+      // borderRadius
+      const borderRadius = params.get('borderRadius');
+      if (borderRadius && isValidNumber(borderRadius, 0, 32)) {
+        updateSongBorderRadius(parseInt(borderRadius, 10));
+      }
+    }
+
+    // 角丸を更新
+    function updateSongBorderRadius(radius) {
+      const style = document.querySelector('#dynamic-styles') || document.createElement('style');
+      style.id = 'dynamic-styles';
+      style.textContent = `.song { border-radius: ${radius}px !important; }`;
+      if (!style.parentNode) {
+        document.head.appendChild(style);
+      }
+    }
+
+    // アーティスト表示/非表示を更新
+    function updateArtistVisibility() {
+      const artists = document.querySelectorAll('.artist');
+      artists.forEach(artist => {
+        artist.style.display = showArtist ? 'block' : 'none';
+      });
     }
 
     // WebSocket経由の設定更新を適用
     function applySettingsUpdate(settings) {
       const root = document.documentElement;
+
+      // 共通設定
       if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
         root.style.setProperty('--primary-color', settings.primaryColor);
         const { r, g, b } = parseHexColor(settings.primaryColor);
         root.style.setProperty('--current-bg', `rgba(${r}, ${g}, ${b}, 0.8)`);
       }
-      if (settings.fontSize && isValidNumber(settings.fontSize, 8, 72)) {
-        root.style.setProperty('--font-size-title', settings.fontSize + 'px');
+      if (settings.borderRadius !== undefined && isValidNumber(settings.borderRadius, 0, 32)) {
+        updateSongBorderRadius(settings.borderRadius);
+      }
+
+      // セットリスト設定（新しいペイロード構造）
+      if (settings.setlist) {
+        if (settings.setlist.fontSize && isValidNumber(settings.setlist.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-title', settings.setlist.fontSize + 'px');
+        }
+        if (settings.setlist.showArtist !== undefined) {
+          showArtist = settings.setlist.showArtist;
+          updateArtistVisibility();
+        }
       }
     }
 

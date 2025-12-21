@@ -43,8 +43,9 @@
     /* 表示位置のスタイル */
     #setlist-container.position-top { top: 0; left: 0; right: 0; }
     #setlist-container.position-bottom { bottom: 0; left: 0; right: 0; }
-    #setlist-container.position-left { top: 0; left: 0; bottom: 0; width: auto; }
-    #setlist-container.position-right { top: 0; right: 0; bottom: 0; width: auto; }
+    /* left/rightは画面幅に収まるように制限（マーキー効果を有効にするため） */
+    #setlist-container.position-left { top: 0; left: 0; bottom: 0; max-width: calc(100vw - 32px); }
+    #setlist-container.position-right { top: 0; right: 0; bottom: 0; max-width: calc(100vw - 32px); }
 
     .song {
       padding: 16px 20px;
@@ -54,6 +55,8 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      max-width: 100%; /* コンテナ幅を超えないように */
+      box-sizing: border-box;
     }
 
     .song.previous,

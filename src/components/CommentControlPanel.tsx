@@ -6,7 +6,7 @@ import type { ChatMessage } from '../types/chat';
 // YouTube API クォータ定数
 const DAILY_QUOTA_LIMIT = 10000; // 1日のクォータ上限
 const QUOTA_PER_REQUEST = 5; // 1リクエストあたりのコスト
-const SAVED_STATE_EXPIRY_HOURS = 6; // 保存状態の有効期限（時間）
+const SAVED_STATE_EXPIRY_HOURS = 24; // 保存状態の有効期限（時間）- バックエンドと同期
 
 interface PollingState {
   next_page_token: string | null;

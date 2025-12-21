@@ -294,7 +294,11 @@ pub async fn save_polling_state(
     Ok(())
 }
 
+/// ポーリング状態の有効期限（24時間）
+const POLLING_STATE_EXPIRY_HOURS: i64 = 24;
+
 /// 保存されたポーリング状態をDBから読み込む
+/// 有効期限（24時間）を超えた状態は無効として削除し、Noneを返す
 #[tauri::command]
 pub async fn load_polling_state(
     state: tauri::State<'_, AppState>,
@@ -311,6 +315,42 @@ pub async fn load_polling_state(
     if let Some(json_str) = result {
         let data: PollingStateData =
             serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+
+        // 有効期限チェック
+        if let Ok(saved_time) = chrono::DateTime::parse_from_rfc3339(&data.saved_at) {
+            let now = chrono::Utc::now();
+            let elapsed = now.signed_duration_since(saved_time);
+
+            if elapsed.num_hours() >= POLLING_STATE_EXPIRY_HOURS {
+                log::info!(
+                    "Polling state expired (saved {} hours ago, limit {} hours). Clearing state.",
+                    elapsed.num_hours(),
+                    POLLING_STATE_EXPIRY_HOURS
+                );
+
+                // 期限切れの状態を削除
+                sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                    .execute(pool)
+                    .await
+                    .map_err(|e| format!("DB error while clearing expired state: {}", e))?;
+
+                return Ok(None);
+            }
+
+            log::debug!(
+                "Polling state is valid (saved {} hours ago)",
+                elapsed.num_hours()
+            );
+        } else {
+            log::warn!("Failed to parse saved_at timestamp: {}", data.saved_at);
+            // パース失敗時は安全のため状態を削除
+            sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                .execute(pool)
+                .await
+                .map_err(|e| format!("DB error while clearing invalid state: {}", e))?;
+            return Ok(None);
+        }
+
         Ok(Some(data))
     } else {
         Ok(None)

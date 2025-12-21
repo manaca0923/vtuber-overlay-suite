@@ -117,7 +117,7 @@ vtuber-overlay-suite/
 ### 1. コメント取得フロー
 
 ```
-[YouTube API] ──(REST)──► [Rust Poller] ──(Channel)──► [WebSocket Server]
+[YouTube InnerTube] ──(HTTP)──► [Rust Poller] ──(Channel)──► [WebSocket Server]
                                │                              │
                                ▼                              ▼
                           [SQLite]                    [OBS Browser Source]

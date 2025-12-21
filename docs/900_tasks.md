@@ -862,6 +862,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] **関連ドキュメントをInnerTube優先方針に整合**
   - `docs/001_requirements.md`: 受け入れ基準をInnerTubeメインに更新
   - `docs/100_architecture.md`: 技術スタック表とシステム構成図をInnerTubeメインに更新
+  - `docs/100_architecture.md`: 通信フロー図を `[YouTube InnerTube] ──(HTTP)──►` に更新（2025-12-22追記）
 
 ### 成果物
 - `src-tauri/tauri.conf.json` - bundle.resources追加、CSP更新

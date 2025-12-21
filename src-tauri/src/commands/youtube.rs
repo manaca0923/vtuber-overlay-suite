@@ -7,6 +7,9 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
+/// ポーラー停止後のグレースフルシャットダウン待機時間（ミリ秒）
+const POLLER_GRACEFUL_SHUTDOWN_MS: u64 = 200;
+
 /// コメントをDBに保存する（重複は無視）
 async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
     for msg in messages {
@@ -200,7 +203,7 @@ pub async fn start_polling(
 
     // ロック解放後に待機（二重ポーリング防止）
     if needs_wait {
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(POLLER_GRACEFUL_SHUTDOWN_MS)).await;
     }
 
     // 新しいポーラーを設定

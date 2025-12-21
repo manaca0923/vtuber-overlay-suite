@@ -159,7 +159,7 @@ function App() {
                     await invoke('start_polling_innertube', { videoId });
                     alert('コメント取得を開始しました。オーバーレイを確認してください。');
                   } catch (e) {
-                    alert('エラー: ' + (e as Error).message);
+                    alert('エラー: ' + String(e));
                   }
                 }}
                 className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
@@ -172,7 +172,7 @@ function App() {
                     await invoke('stop_polling_innertube');
                     alert('コメント取得を停止しました');
                   } catch (e) {
-                    alert('エラー: ' + (e as Error).message);
+                    alert('エラー: ' + String(e));
                   }
                 }}
                 className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"

@@ -726,6 +726,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 座標・サイズの設定保存、combined.html での動的配置対応
   - 優先度: 低（現在はプリセットレイアウトで対応）
 
+- [ ] **prompt()の代替UI実装** (PR#35)
+  - 現在: `App.tsx`でwizardSettings未設定時に`prompt('Video ID:')`を使用
+  - 課題: `prompt()`はブラウザAPIでTauriアプリでは動作が不安定な場合がある
+  - 対応: モーダルダイアログまたはインライン入力フォームへの置き換え
+  - 優先度: 低（wizardSettingsが設定済みなら発生しない）
+
 - [ ] **統合オーバーレイのコード共通化** (PR#33)
   - 現在: `combined.html`と`comment.html`でコード重複
   - 将来: 共通モジュール（`comment-renderer.js`, `overlay-common.css`等）に抽出

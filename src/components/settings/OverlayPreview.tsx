@@ -46,6 +46,7 @@ export function OverlayPreview({ settings, activePanel }: OverlayPreviewProps) {
           src={previewUrl}
           className="w-full h-full border-0"
           title="Overlay Preview"
+          sandbox="allow-scripts allow-same-origin"
         />
       </div>
       <div className="p-3 bg-gray-800 border-t border-gray-700">

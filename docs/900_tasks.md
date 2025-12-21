@@ -428,7 +428,7 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 
 ---
 
-## T13: PoC - streamList（gRPC）
+## T13: PoC - streamList（gRPC / InnerTube API）
 **優先度**: P1 | **見積**: 3日 | **依存**: T02
 
 ### チェックリスト
@@ -439,11 +439,63 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 - [ ] 切断検知・再接続
 - [ ] Feature Flag 実装
 - [ ] 安定性レポート作成
+- [ ] **カスタム絵文字（メンバースタンプ）対応**
 
 ### 判断基準
 - 接続成功率 > 95%
 - 平均再接続時間 < 5秒
 - HTTP/2プロキシ環境での動作
+
+### 調査結果（2025-12-21）
+
+#### 公式YouTube Data API v3の制限
+- `liveChatMessages.list`で取得できるのは`textMessageDetails.messageText`（プレーンテキスト）のみ
+- カスタム絵文字は`:_emoji_name:`形式のテキストとして返される
+- **絵文字の画像URLは公式APIでは取得不可**
+
+#### YouTube InnerTube API（非公式）
+YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメッセージを構造化して取得可能。
+
+**絵文字データ構造:**
+```json
+{
+  "emoji": {
+    "emojiId": "チャンネルID/絵文字ID",
+    "shortcuts": [":_emoji_name:"],
+    "image": {
+      "thumbnails": [
+        {"url": "https://yt3.ggpht.com/...", "width": 24, "height": 24},
+        {"url": "https://yt3.ggpht.com/...", "width": 48, "height": 48}
+      ]
+    },
+    "isCustomEmoji": true
+  }
+}
+```
+
+**メリット:**
+- カスタム絵文字の画像URLを直接取得可能
+- クォータ制限なし
+
+**デメリット:**
+- 非公式APIのため仕様変更リスクあり
+
+#### 参考実装・リソース
+- [YTLiveChat (.NET, InnerTube API)](https://github.com/Agash/YTLiveChat)
+- [YouTubeLiveChat (Java)](https://github.com/kusaanko/YouTubeLiveChat) - `Emoji#getIconURL()`
+- [yt-livechat-grpc (Go)](https://github.com/dipaadipati/yt-livechat-grpc)
+- [YouTube.js (Node.js)](https://github.com/LuanRT/YouTube.js) - InnerTube wrapper
+- [ytc-filter Issue #2](https://github.com/RomainLK/ytc-filter/issues/2) - カスタム絵文字のruns構造
+- [YouTube Live Chat Emoji CSV](https://gist.github.com/brainwo/8ea346ff73ace01aa5b7dd23014246e6) - 標準絵文字一覧
+
+#### わんコメなどのサービスの実装方法
+おそらくInnerTube API（gRPC/WebSocket）を使用してカスタム絵文字情報を取得している。
+一部サービスはローカルファイルベースのマッピング（手動で絵文字画像を配置）を採用。
+
+#### 実装時の選択肢
+1. **InnerTube API追加**: 絵文字画像URL取得可能、クォータ制限なし（推奨）
+2. **ローカルマッピング**: 安定だがユーザーが手動で絵文字画像配置が必要
+3. **ハイブリッド**: 公式API + InnerTubeから絵文字情報のみ取得
 
 ---
 

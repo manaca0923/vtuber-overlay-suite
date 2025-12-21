@@ -11,7 +11,7 @@ interface ApiKeySetupProps {
   }) => void;
 }
 
-export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps = {}) {
+export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
   const [apiKey, setApiKey] = useState('');
   const [videoId, setVideoId] = useState('');
   const [liveChatId, setLiveChatId] = useState('');

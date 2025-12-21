@@ -52,7 +52,6 @@ export default function WizardStep2({
 
     const timer = setTimeout(async () => {
       try {
-        console.log('Fetching live chat ID for:', videoId);
         const chatId = await invoke<string>('get_live_chat_id', {
           apiKey: apiKey,
           videoId: videoId,
@@ -60,7 +59,6 @@ export default function WizardStep2({
         
         // キャンセルされていなければ更新
         if (!currentController.signal.aborted) {
-          console.log('Chat ID received:', chatId);
           onLiveChatIdChange(chatId);
           setSuccess(`チャットIDを取得しました: ${chatId.substring(0, 20)}...`);
           setLoading(false);

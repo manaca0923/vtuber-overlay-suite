@@ -22,10 +22,8 @@ export function ApiKeySetup() {
       try {
         // APIキー読み込み
         const hasKey = await invoke<boolean>('has_api_key');
-        console.log('ApiKeySetup: has_api_key =', hasKey);
         if (hasKey) {
           const savedKey = await invoke<string>('get_api_key');
-          console.log('ApiKeySetup: got key =', savedKey ? 'yes' : 'no');
           if (isMounted && savedKey) {
             setApiKey(savedKey);
             setIsApiKeyLoaded(true);
@@ -38,7 +36,6 @@ export function ApiKeySetup() {
           live_chat_id: string;
           saved_at: string;
         } | null>('load_wizard_settings');
-        console.log('ApiKeySetup: wizard settings =', wizardSettings);
         if (isMounted && wizardSettings) {
           setVideoId(wizardSettings.video_id);
           setLiveChatId(wizardSettings.live_chat_id);

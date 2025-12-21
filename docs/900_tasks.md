@@ -538,6 +538,38 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 
 ---
 
+## T14: InnerTube API 本番統合
+**優先度**: P1 | **見積**: 0.5日 | **依存**: T13
+**ステータス**: 🔄 **進行中**
+
+### 概要
+T13で実装したInnerTubeクライアントを本番ポーリングに統合する。
+ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にする。
+
+### チェックリスト
+- [x] InnerTubeポーラー実装（start_polling_innertube, stop_polling_innertube）
+- [x] 重複排除ロジック実装（メッセージIDベース）
+- [x] WebSocketブロードキャスト対応（カスタム絵文字含む）
+- [x] Tauriコマンド登録（デバッグ/リリース両対応）
+- [ ] フロントエンドからのApiMode切り替えUI対応
+- [ ] カスタム絵文字がオーバーレイに表示されることを確認（手動テスト）
+- [ ] 手動テスト実施
+
+### 設計方針
+- 公式APIとは別に `start_polling_innertube` / `stop_polling_innertube` を提供
+- InnerTubeClient をグローバル状態で管理し、ポーリングループで使用
+- 公式APIとの互換性を維持（ChatMessage型は共通）
+- video_idのみで開始可能（APIキー、live_chat_id不要）
+
+### 成果物
+- `src-tauri/src/commands/youtube.rs` - InnerTubeポーリングコマンド追加
+  - `start_polling_innertube` - InnerTubeポーリング開始
+  - `stop_polling_innertube` - InnerTubeポーリング停止
+  - `is_polling_innertube_running` - ポーリング状態確認
+- `src-tauri/src/lib.rs` - コマンド登録
+
+---
+
 ## 進捗サマリー
 
 | タスク | ステータス | 完了日 |

@@ -1,5 +1,5 @@
 use crate::youtube::{
-    client::YouTubeClient, poller::ChatPoller, poller::PollingEvent, state::PollingState,
+    client::YouTubeClient, innertube, poller::ChatPoller, poller::PollingEvent, state::PollingState,
     types::ChatMessage,
 };
 use crate::{server::types::WsMessage, AppState};
@@ -549,4 +549,186 @@ pub async fn test_innertube_connection(video_id: String) -> Result<String, Strin
     log::info!("{}", result);
     Ok(result)
 }
+
+// ================================
+// InnerTube ポーリング
+// ================================
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::Mutex as TokioMutex;
+
+// グローバルなInnerTubeポーリング状態
+static INNERTUBE_RUNNING: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceLock::new();
+static INNERTUBE_CLIENT: std::sync::OnceLock<Arc<TokioMutex<Option<innertube::InnerTubeClient>>>> =
+    std::sync::OnceLock::new();
+
+fn get_innertube_running() -> &'static Arc<AtomicBool> {
+    INNERTUBE_RUNNING.get_or_init(|| Arc::new(AtomicBool::new(false)))
+}
+
+fn get_innertube_client(
+) -> &'static Arc<TokioMutex<Option<innertube::InnerTubeClient>>> {
+    INNERTUBE_CLIENT.get_or_init(|| Arc::new(TokioMutex::new(None)))
+}
+
+/// InnerTube APIを使用したポーリングを開始
+///
+/// 公式APIとは異なり、video_idのみで開始可能。
+/// カスタム絵文字の画像URLを含むメッセージを取得可能。
+#[tauri::command]
+pub async fn start_polling_innertube(
+    video_id: String,
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!(
+        "Starting InnerTube polling for video: {}",
+        video_id
+    );
+
+    // 既存のポーリングを停止
+    if get_innertube_running().load(Ordering::SeqCst) {
+        log::info!("Stopping existing InnerTube polling");
+        get_innertube_running().store(false, Ordering::SeqCst);
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+
+    // クライアントを初期化
+    let mut client = innertube::InnerTubeClient::new(video_id.clone()).map_err(|e| {
+        log::error!("InnerTube client creation failed: {}", e);
+        format!("InnerTubeクライアント作成に失敗しました: {}", e)
+    })?;
+
+    client.initialize().await.map_err(|e| {
+        log::error!("InnerTube initialization failed: {}", e);
+        format!("InnerTube初期化に失敗しました: {}", e)
+    })?;
+
+    log::info!("InnerTube client initialized successfully");
+
+    // クライアントを保存
+    {
+        let mut client_lock = get_innertube_client().lock().await;
+        *client_lock = Some(client);
+    }
+
+    // ポーリング開始フラグを設定
+    get_innertube_running().store(true, Ordering::SeqCst);
+
+    // WebSocketサーバー状態を取得
+    let server_state = Arc::clone(&state.server);
+
+    // ポーリングループを開始
+    let running = Arc::clone(get_innertube_running());
+    let client_mutex = Arc::clone(get_innertube_client());
+
+    tokio::spawn(async move {
+        log::info!("InnerTube polling loop started");
+
+        // 重複排除用のメッセージIDセット
+        let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        while running.load(Ordering::SeqCst) {
+            let timeout_ms;
+
+            // メッセージ取得
+            let messages = {
+                let mut client_lock = client_mutex.lock().await;
+                if let Some(client) = client_lock.as_mut() {
+                    match client.get_chat_messages().await {
+                        Ok(response) => {
+                            timeout_ms = client.get_timeout_ms();
+                            innertube::parse_chat_response(response)
+                        }
+                        Err(e) => {
+                            log::error!("InnerTube fetch error: {}", e);
+                            timeout_ms = 5000;
+                            vec![]
+                        }
+                    }
+                } else {
+                    log::error!("InnerTube client not initialized");
+                    break;
+                }
+            };
+
+            // 新しいメッセージのみフィルタリング
+            let new_messages: Vec<ChatMessage> = messages
+                .into_iter()
+                .filter(|m| !seen_ids.contains(&m.id))
+                .collect();
+
+            // 見たIDを記録
+            for message in &new_messages {
+                seen_ids.insert(message.id.clone());
+            }
+
+            // メモリリーク防止: 古いIDを削除（10000件を超えたら古い半分を削除）
+            if seen_ids.len() > 10000 {
+                let keep_count = seen_ids.len() / 2;
+                let to_remove: Vec<String> = seen_ids.iter().take(keep_count).cloned().collect();
+                for id in to_remove {
+                    seen_ids.remove(&id);
+                }
+            }
+
+            if !new_messages.is_empty() {
+                log::debug!(
+                    "InnerTube: {} new messages (total seen: {})",
+                    new_messages.len(),
+                    seen_ids.len()
+                );
+
+                // Tauriアプリへのイベント送信
+                let event = PollingEvent::Messages {
+                    messages: new_messages.clone(),
+                };
+                if let Err(e) = app.emit("polling-event", &event) {
+                    log::error!("Failed to emit polling event: {}", e);
+                }
+
+                // WebSocketでブロードキャスト
+                let server_state_clone = Arc::clone(&server_state);
+                for message in new_messages {
+                    let state_lock = server_state_clone.read().await;
+                    state_lock
+                        .broadcast(WsMessage::CommentAdd {
+                            payload: message,
+                        })
+                        .await;
+                }
+            }
+
+            // 次のポーリングまで待機
+            let wait_ms = std::cmp::max(timeout_ms, 3000); // 最低3秒
+            tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms)).await;
+        }
+
+        log::info!("InnerTube polling loop ended");
+    });
+
+    Ok(())
+}
+
+/// InnerTubeポーリングを停止
+#[tauri::command]
+pub async fn stop_polling_innertube() -> Result<(), String> {
+    log::info!("Stopping InnerTube polling");
+    get_innertube_running().store(false, Ordering::SeqCst);
+
+    // クライアントをクリア
+    {
+        let mut client_lock = get_innertube_client().lock().await;
+        *client_lock = None;
+    }
+
+    Ok(())
+}
+
+/// InnerTubeポーリングが実行中かどうかを確認
+#[tauri::command]
+pub async fn is_polling_innertube_running() -> Result<bool, String> {
+    Ok(get_innertube_running().load(Ordering::SeqCst))
+}
+
 

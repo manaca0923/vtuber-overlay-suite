@@ -142,6 +142,9 @@ pub fn run() {
           commands::youtube::save_api_mode,
           commands::youtube::load_api_mode,
           commands::youtube::test_innertube_connection,
+          commands::youtube::start_polling_innertube,
+          commands::youtube::stop_polling_innertube,
+          commands::youtube::is_polling_innertube_running,
         ]
       }
       // リリースビルドではtest_innertube_connectionを除外
@@ -185,6 +188,9 @@ pub fn run() {
           commands::overlay::broadcast_settings_update,
           commands::youtube::save_api_mode,
           commands::youtube::load_api_mode,
+          commands::youtube::start_polling_innertube,
+          commands::youtube::stop_polling_innertube,
+          commands::youtube::is_polling_innertube_running,
         ]
       }
     })

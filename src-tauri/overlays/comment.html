@@ -378,6 +378,8 @@
     let settingsVersion = 0;
     // 設定取得中フラグ（多重リクエスト防止）
     let fetchInFlight = false;
+    // 再試行待ちフラグ（in-flight中にスキップされた場合の再試行用）
+    let retryPending = false;
     // 設定取得成功フラグ（初回fetch失敗時のリカバリー用）
     let settingsFetchSucceeded = false;
     // 初回接続フラグ
@@ -385,12 +387,14 @@
 
     // HTTP APIから初期設定を取得して適用（タイムアウト付き）
     async function fetchAndApplySettings() {
-      // 既にリクエスト中の場合はスキップ（多重リクエスト防止）
+      // 既にリクエスト中の場合は再試行フラグを立ててスキップ
       if (fetchInFlight) {
-        console.log('Settings fetch already in flight, skipping');
+        retryPending = true;
+        console.log('Settings fetch already in flight, will retry after');
         return;
       }
       fetchInFlight = true;
+      retryPending = false;
 
       // リクエスト開始時のバージョンを記録
       const requestVersion = settingsVersion;
@@ -427,6 +431,12 @@
         }
       } finally {
         fetchInFlight = false;
+        // 再試行が要求されていて、まだ設定取得が成功していない場合は再試行
+        if (retryPending && !settingsFetchSucceeded) {
+          retryPending = false;
+          console.log('Retrying settings fetch');
+          fetchAndApplySettings();
+        }
       }
     }
 

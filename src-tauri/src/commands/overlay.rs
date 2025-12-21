@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::server::types::{CommentPosition, SetlistPosition};
 use crate::AppState;
 
 /// HEXカラーコードのバリデーション (#RRGGBB形式)
@@ -66,7 +67,7 @@ pub struct CommonSettings {
 #[serde(rename_all = "camelCase")]
 pub struct CommentSettings {
     pub enabled: bool,
-    pub position: String,
+    pub position: CommentPosition,
     pub max_count: u32,
     pub show_avatar: bool,
     pub font_size: u32,
@@ -77,7 +78,7 @@ pub struct CommentSettings {
 #[serde(rename_all = "camelCase")]
 pub struct SetlistSettings {
     pub enabled: bool,
-    pub position: String,
+    pub position: SetlistPosition,
     pub show_artist: bool,
     pub font_size: u32,
 }
@@ -166,14 +167,14 @@ pub async fn broadcast_settings_update(
         border_radius: settings.common.border_radius,
         comment: CommentSettingsPayload {
             enabled: settings.comment.enabled,
-            position: settings.comment.position.clone(),
+            position: settings.comment.position, // Copy trait実装済みのため.clone()不要
             max_count: settings.comment.max_count,
             show_avatar: settings.comment.show_avatar,
             font_size: settings.comment.font_size,
         },
         setlist: SetlistSettingsPayload {
             enabled: settings.setlist.enabled,
-            position: settings.setlist.position.clone(),
+            position: settings.setlist.position, // Copy trait実装済みのため.clone()不要
             show_artist: settings.setlist.show_artist,
             font_size: settings.setlist.font_size,
         },

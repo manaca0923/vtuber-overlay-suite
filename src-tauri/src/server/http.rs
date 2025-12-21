@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
+use super::types::{CommentPosition, SetlistPosition};
+
 /// HTTPサーバー用の共有状態
 #[derive(Clone)]
 pub struct HttpState {
@@ -238,7 +240,7 @@ struct OverlaySettingsApiResponse {
 #[serde(rename_all = "camelCase")]
 struct CommentSettingsApi {
     enabled: bool,
-    position: String,
+    position: CommentPosition,
     max_count: u32,
     show_avatar: bool,
     font_size: u32,
@@ -248,7 +250,7 @@ struct CommentSettingsApi {
 #[serde(rename_all = "camelCase")]
 struct SetlistSettingsApi {
     enabled: bool,
-    position: String,
+    position: SetlistPosition,
     show_artist: bool,
     font_size: u32,
 }
@@ -262,17 +264,37 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
         border_radius: 8,
         comment: CommentSettingsApi {
             enabled: true,
-            position: "bottom-right".to_string(),
+            position: CommentPosition::BottomRight,
             max_count: 10,
             show_avatar: true,
             font_size: 16,
         },
         setlist: SetlistSettingsApi {
             enabled: true,
-            position: "bottom".to_string(),
+            position: SetlistPosition::Bottom,
             show_artist: true,
             font_size: 24,
         },
+    }
+}
+
+/// 文字列からCommentPositionに変換
+fn parse_comment_position(s: &str) -> CommentPosition {
+    match s {
+        "top-left" => CommentPosition::TopLeft,
+        "top-right" => CommentPosition::TopRight,
+        "bottom-left" => CommentPosition::BottomLeft,
+        _ => CommentPosition::BottomRight, // デフォルト
+    }
+}
+
+/// 文字列からSetlistPositionに変換
+fn parse_setlist_position(s: &str) -> SetlistPosition {
+    match s {
+        "top" => SetlistPosition::Top,
+        "left" => SetlistPosition::Left,
+        "right" => SetlistPosition::Right,
+        _ => SetlistPosition::Bottom, // デフォルト
     }
 }
 
@@ -300,14 +322,18 @@ async fn get_overlay_settings_api(
                         border_radius: settings["common"]["borderRadius"].as_u64().unwrap_or(8) as u32,
                         comment: CommentSettingsApi {
                             enabled: settings["comment"]["enabled"].as_bool().unwrap_or(true),
-                            position: settings["comment"]["position"].as_str().unwrap_or("bottom-right").to_string(),
+                            position: parse_comment_position(
+                                settings["comment"]["position"].as_str().unwrap_or("bottom-right")
+                            ),
                             max_count: settings["comment"]["maxCount"].as_u64().unwrap_or(10) as u32,
                             show_avatar: settings["comment"]["showAvatar"].as_bool().unwrap_or(true),
                             font_size: settings["comment"]["fontSize"].as_u64().unwrap_or(16) as u32,
                         },
                         setlist: SetlistSettingsApi {
                             enabled: settings["setlist"]["enabled"].as_bool().unwrap_or(true),
-                            position: settings["setlist"]["position"].as_str().unwrap_or("bottom").to_string(),
+                            position: parse_setlist_position(
+                                settings["setlist"]["position"].as_str().unwrap_or("bottom")
+                            ),
                             show_artist: settings["setlist"]["showArtist"].as_bool().unwrap_or(true),
                             font_size: settings["setlist"]["fontSize"].as_u64().unwrap_or(24) as u32,
                         },

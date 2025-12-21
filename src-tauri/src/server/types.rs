@@ -74,11 +74,31 @@ pub struct SettingsUpdatePayload {
     pub setlist: SetlistSettingsPayload,
 }
 
+/// コメントオーバーレイの表示位置
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CommentPosition {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// セットリストオーバーレイの表示位置
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SetlistPosition {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentSettingsPayload {
     pub enabled: bool,
-    pub position: String,
+    pub position: CommentPosition,
     pub max_count: u32,
     pub show_avatar: bool,
     pub font_size: u32,
@@ -88,7 +108,7 @@ pub struct CommentSettingsPayload {
 #[serde(rename_all = "camelCase")]
 pub struct SetlistSettingsPayload {
     pub enabled: bool,
-    pub position: String,
+    pub position: SetlistPosition,
     pub show_artist: bool,
     pub font_size: u32,
 }

@@ -167,14 +167,14 @@ pub async fn broadcast_settings_update(
         border_radius: settings.common.border_radius,
         comment: CommentSettingsPayload {
             enabled: settings.comment.enabled,
-            position: settings.comment.position.clone(),
+            position: settings.comment.position, // Copy trait実装済みのため.clone()不要
             max_count: settings.comment.max_count,
             show_avatar: settings.comment.show_avatar,
             font_size: settings.comment.font_size,
         },
         setlist: SetlistSettingsPayload {
             enabled: settings.setlist.enabled,
-            position: settings.setlist.position.clone(),
+            position: settings.setlist.position, // Copy trait実装済みのため.clone()不要
             show_artist: settings.setlist.show_artist,
             font_size: settings.setlist.font_size,
         },

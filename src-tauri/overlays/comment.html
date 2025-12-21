@@ -534,16 +534,21 @@
       }
     }
 
+    // URLを正規化（//形式をhttps:に変換）
+    function normalizeUrl(url) {
+      if (!url || typeof url !== 'string') return url;
+      if (url.startsWith('//')) {
+        return 'https:' + url;
+      }
+      return url;
+    }
+
     // 絵文字URLがYouTubeドメインかどうかを検証
     function isValidEmojiUrl(url) {
       if (!url || typeof url !== 'string') return false;
       try {
-        // //形式のプロトコル相対URLをhttps:に正規化
-        let normalizedUrl = url;
-        if (url.startsWith('//')) {
-          normalizedUrl = 'https:' + url;
-        }
-        const parsed = new URL(normalizedUrl);
+        // normalizeUrlを再利用してURL正規化
+        const parsed = new URL(normalizeUrl(url));
         const hostname = parsed.hostname;
         // YouTube関連ドメインのみ許可（ワイルドカードパターン対応）
         // 完全一致
@@ -555,15 +560,6 @@
       } catch {
         return false;
       }
-    }
-
-    // URLを正規化（//形式をhttps:に変換）
-    function normalizeUrl(url) {
-      if (!url || typeof url !== 'string') return url;
-      if (url.startsWith('//')) {
-        return 'https:' + url;
-      }
-      return url;
     }
 
     // 絵文字を含むメッセージをレンダリング

@@ -136,7 +136,7 @@ GET https://www.googleapis.com/youtube/v3/liveChat/messages
 | videos.list | 1 unit | 1回/配信 | 1 unit |
 | liveChat/messages.list | ~5 units | 720回/時(5秒間隔) | ~3,600 units |
 
-**結論**: 5秒間隔で約2.78時間で枯渇 → BYOK必須
+**結論**: 5秒間隔で約2.78時間で枯渇 → 公式API使用時はBYOK必須（InnerTube APIではクォータ制限なし）
 
 ### 推奨ポーリング戦略
 

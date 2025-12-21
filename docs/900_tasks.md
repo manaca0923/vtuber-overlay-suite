@@ -857,6 +857,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 - [x] **YouTube API仕様書をInnerTube優先方針に更新**
   - `docs/200_youtube-api.md`: InnerTube APIをメイン、公式APIをデバッグ用と明記
+  - `docs/200_youtube-api.md`: BYOK必須表記を「公式API使用時のみ」に修正
+
+- [x] **関連ドキュメントをInnerTube優先方針に整合**
+  - `docs/001_requirements.md`: 受け入れ基準をInnerTubeメインに更新
+  - `docs/100_architecture.md`: 技術スタック表とシステム構成図をInnerTubeメインに更新
 
 ### 成果物
 - `src-tauri/tauri.conf.json` - bundle.resources追加、CSP更新
@@ -868,8 +873,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - `src-tauri/src/commands/overlay.rs` - max_count削除
 - `src-tauri/src/server/types.rs` - CommentSettingsPayloadからmax_count削除
 - `src-tauri/src/server/http.rs` - CommentSettingsApiからmax_count削除
-- `docs/001_requirements.md` - InnerTube正式採用記載
-- `docs/200_youtube-api.md` - InnerTube優先方針追記
+- `docs/001_requirements.md` - InnerTube正式採用記載、受け入れ基準更新
+- `docs/100_architecture.md` - 技術スタック表・システム構成図をInnerTubeメインに更新
+- `docs/200_youtube-api.md` - InnerTube優先方針追記、BYOK必須表記修正
 - `docs/300_overlay-specs.md` - subscribe削除、setlistId追加
 - `docs/400_data-models.md` - maxCount削除
 

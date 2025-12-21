@@ -46,8 +46,10 @@ impl ExponentialBackoff {
     /// 計算式: base_delay * 2^current_attempt
     /// max_delayを超える場合はmax_delayが返される
     pub fn next_delay(&mut self) -> Duration {
-        let delay = self.base_delay * 2u32.pow(self.current_attempt);
-        self.current_attempt += 1;
+        // saturating_powでオーバーフローを防止
+        let multiplier = 2u32.saturating_pow(self.current_attempt);
+        let delay = self.base_delay.saturating_mul(multiplier);
+        self.current_attempt = self.current_attempt.saturating_add(1);
         delay.min(self.max_delay)
     }
 

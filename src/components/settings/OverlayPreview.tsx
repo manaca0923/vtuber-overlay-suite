@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import type { OverlaySettings } from '../../types/overlaySettings';
 
 type PreviewMode = 'combined' | 'individual';
@@ -9,7 +9,41 @@ interface OverlayPreviewProps {
   mode?: PreviewMode;
 }
 
+// OBS推奨サイズ
+const OBS_WIDTH = 1920;
+const OBS_HEIGHT = 1080;
+
 export function OverlayPreview({ settings, activePanel, mode = 'combined' }: OverlayPreviewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.3);
+
+  // コンテナサイズに基づいてスケールを計算
+  useEffect(() => {
+    const updateScale = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.clientWidth;
+        const containerHeight = containerRef.current.clientHeight;
+
+        // 幅と高さの両方に収まるスケールを計算
+        const scaleX = containerWidth / OBS_WIDTH;
+        const scaleY = containerHeight / OBS_HEIGHT;
+        const newScale = Math.min(scaleX, scaleY, 1); // 1を超えないように
+
+        setScale(newScale);
+      }
+    };
+
+    updateScale();
+
+    // ResizeObserverでコンテナサイズの変更を監視
+    const resizeObserver = new ResizeObserver(updateScale);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
   const previewUrl = useMemo(() => {
     if (mode === 'combined') {
       // 統合オーバーレイ
@@ -68,15 +102,31 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
     <div className="bg-gray-900 rounded-lg overflow-hidden h-full flex flex-col">
       <div className="p-2 bg-gray-800 text-white text-sm flex justify-between items-center">
         <span>プレビュー</span>
-        <span className="text-gray-400 text-xs">{displayMode}</span>
+        <span className="text-gray-400 text-xs">{displayMode} ({Math.round(scale * 100)}%)</span>
       </div>
-      <div className="flex-1 bg-gray-800 min-h-0">
-        <iframe
-          src={previewUrl}
-          className="w-full h-full border-0"
-          title="Overlay Preview"
-          sandbox="allow-scripts allow-same-origin"
-        />
+      <div
+        ref={containerRef}
+        className="flex-1 bg-gray-800 min-h-0 flex items-center justify-center overflow-hidden"
+      >
+        <div
+          style={{
+            width: OBS_WIDTH,
+            height: OBS_HEIGHT,
+            transform: `scale(${scale})`,
+            transformOrigin: 'center center',
+          }}
+        >
+          <iframe
+            src={previewUrl}
+            style={{
+              width: OBS_WIDTH,
+              height: OBS_HEIGHT,
+              border: 'none',
+            }}
+            title="Overlay Preview"
+            sandbox="allow-scripts allow-same-origin"
+          />
+        </div>
       </div>
       <div className="p-3 bg-gray-800 border-t border-gray-700">
         <p className="text-xs text-gray-400 mb-1">OBSブラウザソースURL:</p>

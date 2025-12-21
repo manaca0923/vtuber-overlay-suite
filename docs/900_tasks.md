@@ -656,13 +656,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: 将来使用予定のコードに`#[allow(dead_code)]`を付与
   - `src-tauri/src/keyring.rs`: セキュアストレージ移行完了（DB実装からkeyring実装に移行済み）
 
-- [ ] **オーバーレイ設定のposition型をenum化** (PR#23)
-  - 現在: `position: String`（`http.rs`, `types.rs`）
-  - 対応: Rust側でenum型を定義し、不正な値を型レベルで防止
-  - 対象ファイル:
-    - `src-tauri/src/server/http.rs`: `CommentSettingsApi`, `SetlistSettingsApi`
-    - `src-tauri/src/server/types.rs`: `SettingsUpdatePayload`内の設定型
-  - TypeScript側との対応も確認
+- [x] **オーバーレイ設定のposition型をenum化** (PR#23, PR#27で対応済み)
+  - ~~現在: `position: String`~~
+  - 対応済み: Rust側でenum型を定義し、不正な値を型レベルで防止
+  - `CommentPosition`: TopLeft, TopRight, BottomLeft, BottomRight
+  - `SetlistPosition`: Top, Bottom, Left, Right
+  - TypeScript側の型定義と一致（serde rename_allで変換）
 
 ### 機能改善（中優先度）
 

@@ -11,9 +11,10 @@ use crate::youtube::errors::YouTubeError;
 const INNERTUBE_API_URL: &str = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/// InnerTubeクライアントバージョン
-/// YouTube側で定期的に更新されるため、必要に応じて更新すること
-const CLIENT_VERSION: &str = "2.20231219.01.00";
+/// InnerTubeクライアントバージョン（フォールバック用）
+/// YouTube側で定期的に更新されるため、動的取得を優先する
+/// このハードコーディング値は動的取得に失敗した場合のフォールバック
+const FALLBACK_CLIENT_VERSION: &str = "2.20251201.01.00";
 
 /// continuationトークン抽出用の最小長さ
 /// 有効なcontinuationトークンは通常100文字以上のBase64エンコード文字列
@@ -33,6 +34,8 @@ static GENERIC_CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
 static API_KEY_RE_1: OnceLock<Regex> = OnceLock::new();
 static API_KEY_RE_2: OnceLock<Regex> = OnceLock::new();
 static API_KEY_RE_3: OnceLock<Regex> = OnceLock::new();
+// CLIENT_VERSION用パターン
+static CLIENT_VERSION_RE: OnceLock<Regex> = OnceLock::new();
 
 /// invalidationContinuationData内のcontinuationを抽出（最優先）
 /// ライブチャット専用のトークンを確実に取得
@@ -91,6 +94,14 @@ fn get_api_key_regex_3() -> &'static Regex {
     })
 }
 
+/// CLIENT_VERSION抽出パターン: "clientVersion":"2.YYYYMMDD.XX.XX"
+fn get_client_version_regex() -> &'static Regex {
+    CLIENT_VERSION_RE.get_or_init(|| {
+        Regex::new(r#""clientVersion"\s*:\s*"(2\.\d{8}\.\d{2}\.\d{2})""#)
+            .expect("Failed to compile client version regex")
+    })
+}
+
 /// InnerTube APIクライアント
 pub struct InnerTubeClient {
     client: Client,
@@ -98,6 +109,8 @@ pub struct InnerTubeClient {
     continuation: Option<String>,
     timeout_ms: u64,
     api_key: Option<String>,
+    /// 動的に取得したクライアントバージョン（取得失敗時はFALLBACK_CLIENT_VERSIONを使用）
+    client_version: String,
 }
 
 impl InnerTubeClient {
@@ -117,6 +130,7 @@ impl InnerTubeClient {
             continuation: None,
             timeout_ms: 5000,
             api_key: None,
+            client_version: FALLBACK_CLIENT_VERSION.to_string(),
         })
     }
 
@@ -152,6 +166,16 @@ impl InnerTubeClient {
         self.continuation = Self::extract_continuation(&body);
         // INNERTUBE_API_KEYを抽出
         self.api_key = Self::extract_api_key(&body);
+        // CLIENT_VERSIONを抽出（動的取得）
+        if let Some(version) = Self::extract_client_version(&body) {
+            log::info!("Dynamically extracted client version: {}", version);
+            self.client_version = version;
+        } else {
+            log::warn!(
+                "Failed to extract client version, using fallback: {}",
+                FALLBACK_CLIENT_VERSION
+            );
+        }
 
         if self.continuation.is_some() {
             log::info!("InnerTube client initialized successfully");
@@ -275,6 +299,22 @@ impl InnerTubeClient {
         None
     }
 
+    /// CLIENT_VERSIONを抽出（動的取得）
+    ///
+    /// YouTubeのHTMLから現在のクライアントバージョンを抽出
+    /// 形式: "clientVersion":"2.YYYYMMDD.XX.XX"
+    fn extract_client_version(html: &str) -> Option<String> {
+        let re = get_client_version_regex();
+        if let Some(caps) = re.captures(html) {
+            if let Some(version) = caps.get(1) {
+                let version_str = version.as_str().to_string();
+                log::debug!("Found clientVersion: {}", version_str);
+                return Some(version_str);
+            }
+        }
+        None
+    }
+
     /// チャットメッセージを取得
     pub async fn get_chat_messages(&mut self) -> Result<InnerTubeChatResponse, YouTubeError> {
         let continuation = self
@@ -337,7 +377,7 @@ impl InnerTubeClient {
             "context": {
                 "client": {
                     "clientName": "WEB",
-                    "clientVersion": CLIENT_VERSION,
+                    "clientVersion": &self.client_version,
                     "hl": "ja",
                     "gl": "JP",
                     "timeZone": "Asia/Tokyo"
@@ -478,6 +518,38 @@ mod tests {
             result,
             Some("AIzaSyYtcfgFormat".to_string())
         );
+    }
+
+    #[test]
+    fn test_extract_client_version() {
+        // 標準的なclientVersionの抽出
+        let html = r#"{"clientVersion":"2.20251215.01.00"}"#;
+        let result = InnerTubeClient::extract_client_version(html);
+        assert_eq!(result, Some("2.20251215.01.00".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_version_with_spaces() {
+        // スペースを含む形式
+        let html = r#"{"clientVersion" : "2.20251220.02.01"}"#;
+        let result = InnerTubeClient::extract_client_version(html);
+        assert_eq!(result, Some("2.20251220.02.01".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_version_invalid_format() {
+        // 無効な形式（バージョン形式に合わない）
+        let html = r#"{"clientVersion":"invalid_version"}"#;
+        let result = InnerTubeClient::extract_client_version(html);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_client_version_not_found() {
+        // clientVersionが存在しない
+        let html = r#"{"someOtherKey":"value"}"#;
+        let result = InnerTubeClient::extract_client_version(html);
+        assert!(result.is_none());
     }
 }
 

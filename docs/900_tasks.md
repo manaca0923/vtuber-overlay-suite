@@ -786,9 +786,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `lib.rs`で`#[cfg(debug_assertions)]`による条件付きコンパイル分岐を実装
   - デバッグビルドのみtest_innertube_connectionコマンドを登録
 
-- [ ] **クライアントバージョンの自動更新機構**
-  - `CLIENT_VERSION`（2023年12月）がYouTube側で無効化される可能性
-  - 設定ファイルまたはフォールバック機構を検討
+- [x] **クライアントバージョンの自動更新機構** ✅ 対応済み（2025-12-22）
+  - ライブチャットページHTMLから`clientVersion`を動的抽出
+  - 取得失敗時はフォールバック値（2.20251201.01.00）を使用
+  - テストケース4件追加
 
 - [x] **InnerTubeテストカバレッジの拡充** ✅ 対応済み（2025-12-21）
   - `parse_chat_response`: 空レスポンス、no_continuation、no_actions、empty_actions

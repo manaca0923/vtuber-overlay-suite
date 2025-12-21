@@ -28,12 +28,10 @@ function App() {
     async function initialize() {
       try {
         const hasKey = await invoke<boolean>('has_api_key');
-        console.log('has_api_key:', hasKey);
         if (hasKey) {
           // APIキーを読み込む
           try {
             const key = await invoke<string | null>('get_api_key');
-            console.log('API key loaded:', key ? 'yes' : 'no');
             if (key) {
               setApiKey(key);
             }
@@ -43,7 +41,6 @@ function App() {
           // ウィザード設定を読み込む
           try {
             const settings = await invoke<WizardSettings | null>('load_wizard_settings');
-            console.log('Wizard settings loaded:', settings);
             if (settings) {
               setWizardSettings(settings);
             }
@@ -85,7 +82,6 @@ function App() {
         setApiKey(key);
       }
       const settings = await invoke<WizardSettings | null>('load_wizard_settings');
-      console.log('Wizard completed, settings:', settings);
       if (settings) {
         setWizardSettings(settings);
       }

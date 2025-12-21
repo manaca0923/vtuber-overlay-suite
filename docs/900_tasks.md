@@ -732,10 +732,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: モーダルダイアログまたはインライン入力フォームへの置き換え
   - 優先度: 低（wizardSettingsが設定済みなら発生しない）
 
-- [ ] **統合オーバーレイのコード共通化** (PR#33)
-  - 現在: `combined.html`と`comment.html`でコード重複
-  - 将来: 共通モジュール（`comment-renderer.js`, `overlay-common.css`等）に抽出
-  - 優先度: 中
+- [x] **統合オーバーレイのコード共通化** (PR#33, PR#36で対応済み)
+  - ~~現在: `combined.html`と`comment.html`でコード重複~~
+  - 対応済み: 共通モジュールを作成し抽出
+    - `src-tauri/overlays/shared/overlay-common.css` - 共通CSSスタイル
+    - `src-tauri/overlays/shared/comment-renderer.js` - コメントレンダリング関連JavaScript
+  - `comment.html`と`combined.html`を共通モジュール使用に修正
 
 - [ ] **スーパーチャット通貨換算の改善** (PR#33)
   - 現在: ハードコードされた為替レート（USD:150, EUR:160, GBP:190）

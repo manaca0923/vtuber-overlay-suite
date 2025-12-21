@@ -94,10 +94,11 @@ fn get_api_key_regex_3() -> &'static Regex {
     })
 }
 
-/// CLIENT_VERSION抽出パターン: "clientVersion":"2.YYYYMMDD.XX.XX"
+/// CLIENT_VERSION抽出パターン: "clientVersion":"X.YYYYMMDD.XX.XX"
+/// メジャーバージョン変更にも対応できるよう、先頭を\d+にしている
 fn get_client_version_regex() -> &'static Regex {
     CLIENT_VERSION_RE.get_or_init(|| {
-        Regex::new(r#""clientVersion"\s*:\s*"(2\.\d{8}\.\d{2}\.\d{2})""#)
+        Regex::new(r#""clientVersion"\s*:\s*"(\d+\.\d{8}\.\d{2}\.\d{2})""#)
             .expect("Failed to compile client version regex")
     })
 }
@@ -550,6 +551,22 @@ mod tests {
         let html = r#"{"someOtherKey":"value"}"#;
         let result = InnerTubeClient::extract_client_version(html);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_client_version_multiple_occurrences() {
+        // 複数のclientVersionがある場合、最初のものを取得
+        let html = r#"{"clientVersion":"2.20251201.01.00","other":{"clientVersion":"2.20250101.00.00"}}"#;
+        let result = InnerTubeClient::extract_client_version(html);
+        assert_eq!(result, Some("2.20251201.01.00".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_version_future_major_version() {
+        // 将来のメジャーバージョン変更にも対応
+        let html = r#"{"clientVersion":"3.20260101.00.00"}"#;
+        let result = InnerTubeClient::extract_client_version(html);
+        assert_eq!(result, Some("3.20260101.00.00".to_string()));
     }
 }
 

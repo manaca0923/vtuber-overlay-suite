@@ -696,10 +696,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: superChat, superSticker, membership, membershipGiftに対応
   - TestModeButtonにメッセージタイプ選択UIを追加
 
-- [ ] **ApiKeySetup更新後のCommentControlPanel即時反映** (PR#23)
-  - ApiKeySetup.tsxでAPIキー/LiveChatIdを更新しても上部のCommentControlPanelに即時反映されない
-  - 現在はリロードが必要
-  - App.tsx側で設定変更イベントを購読するか、状態を共有する仕組みが必要
+- [x] **ApiKeySetup更新後のCommentControlPanel即時反映** (PR#23, PR#31で対応済み)
+  - ~~ApiKeySetup.tsxでAPIキー/LiveChatIdを更新しても上部のCommentControlPanelに即時反映されない~~
+  - 対応済み: ApiKeySetupにonSettingsChangeコールバックを追加
+  - App.tsx側でコールバックを受け取り、状態を即時更新
 
 ### パフォーマンス
 

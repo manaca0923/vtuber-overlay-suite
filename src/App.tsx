@@ -179,7 +179,20 @@ function App() {
               videoId={wizardSettings?.video_id ?? ''}
               liveChatId={wizardSettings?.live_chat_id ?? ''}
             />
-            <ApiKeySetup />
+            <ApiKeySetup
+              onSettingsChange={(settings) => {
+                if (settings.apiKey) {
+                  setApiKey(settings.apiKey);
+                }
+                if (settings.videoId || settings.liveChatId) {
+                  setWizardSettings((prev) => ({
+                    video_id: settings.videoId ?? prev?.video_id ?? '',
+                    live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
+                    saved_at: new Date().toISOString(),
+                  }));
+                }
+              }}
+            />
           </div>
         )}
         {activeTab === 'setlist' && (

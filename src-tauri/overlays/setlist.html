@@ -99,21 +99,29 @@
     }
 
     @keyframes marquee {
-      0% {
-        transform: translateX(0);
-        opacity: 0;
-      }
-      5%, 20% {
+      0%, 15% {
         transform: translateX(0);
         opacity: 1;
       }
-      75%, 97% {
+      20% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      75%, 90% {
         transform: translateX(var(--marquee-distance, -100px));
         opacity: 1;
       }
-      99%, 100% {
+      95% {
         transform: translateX(var(--marquee-distance, -100px));
         opacity: 0;
+      }
+      97% {
+        transform: translateX(0);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
       }
     }
 
@@ -271,6 +279,11 @@
       }
     }
 
+    // マーキー設定の定数
+    const MARQUEE_PADDING = 20;      // スクロール時の余白（px）
+    const MARQUEE_MIN_DURATION = 8;  // 最小アニメーション時間（秒）
+    const MARQUEE_SCROLL_SPEED = 30; // スクロール速度（px/秒）
+
     // マーキー効果を適用（テキストがコンテナより長い場合のみ）
     function applyMarqueeEffect(titleElement, wrapperElement) {
       // リセット
@@ -284,8 +297,8 @@
         const wrapperWidth = wrapperElement.clientWidth;
 
         if (titleWidth > wrapperWidth) {
-          const overflow = titleWidth - wrapperWidth + 20; // 少し余裕を持たせる
-          const duration = Math.max(8, overflow / 30); // スクロール速度を調整
+          const overflow = titleWidth - wrapperWidth + MARQUEE_PADDING;
+          const duration = Math.max(MARQUEE_MIN_DURATION, overflow / MARQUEE_SCROLL_SPEED);
 
           titleElement.style.setProperty('--marquee-distance', `-${overflow}px`);
           titleElement.style.setProperty('--marquee-duration', `${duration}s`);
@@ -360,6 +373,16 @@
     }
 
     connectWebSocket();
+
+    // ウィンドウリサイズ時にマーキー効果を再計算（OBSソースサイズ変更対応）
+    const resizeObserver = new ResizeObserver(() => {
+      const currentTitle = document.querySelector('#current-song .title');
+      const currentWrapper = document.querySelector('#current-song .title-wrapper');
+      if (currentTitle && currentWrapper && currentTitle.textContent) {
+        applyMarqueeEffect(currentTitle, currentWrapper);
+      }
+    });
+    resizeObserver.observe(document.getElementById('setlist-container'));
   </script>
 </body>
 </html>

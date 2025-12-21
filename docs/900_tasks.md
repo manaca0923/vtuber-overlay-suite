@@ -776,9 +776,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~システム要件~~
   - 特徴、OBS設定、URLパラメータ、トラブルシューティング追加
 
-- [ ] **InnerTube API ドキュメント追記** (PR#24)
+- [x] **InnerTube API ドキュメント追記** (PR#24) ✅ 完了
   - InnerTube APIの制約（rate limit、仕様変更リスク）について
-  - docs/200_youtube-api.mdへの追記を検討
+  - docs/200_youtube-api.mdへ詳細追記済み
 
 ### InnerTube API関連（PR#24）
 

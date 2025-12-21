@@ -25,7 +25,172 @@
 - `src-tauri/src/youtube/innertube/` モジュール
 - コマンド: `start_polling_innertube`, `stop_polling_innertube`
 
-詳細は `docs/900_tasks.md` のT13/T14を参照。
+---
+
+### エンドポイント
+
+```
+POST https://www.youtube.com/youtubei/v1/live_chat/get_live_chat
+```
+
+### リクエスト構造
+
+```json
+{
+  "context": {
+    "client": {
+      "clientName": "WEB",
+      "clientVersion": "2.20250101.00.00"
+    }
+  },
+  "continuation": "0ofMyAO..."
+}
+```
+
+### CLIENT_VERSION管理
+
+> ⚠️ **重要リスク**: `clientVersion` はハードコーディングされており、YouTubeの仕様変更で動作停止の可能性があります。
+
+| 項目 | 値 |
+|------|-----|
+| 現在の値 | `src-tauri/src/youtube/innertube/client.rs` に定義 |
+| 形式 | `2.YYYYMMDD.XX.XX`（日付ベース） |
+| 更新頻度 | YouTube側で不定期に変更 |
+
+**対策**:
+- 初回アクセス時にHTML/JSから動的取得を試行
+- 失敗時はハードコーディング値にフォールバック
+- 将来的にリモート設定サーバーからの取得も検討
+
+### レスポンス構造
+
+```json
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "continuations": [
+        {
+          "invalidationContinuationData": {
+            "continuation": "...",
+            "timeoutMs": 5000
+          }
+        }
+      ],
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "...",
+                "message": { "runs": [...] },
+                "authorName": { "simpleText": "..." },
+                "authorPhoto": { "thumbnails": [...] },
+                "authorBadges": [...]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### メッセージタイプ対応
+
+| レンダラー | 種別 | 対応状況 |
+|-----------|------|----------|
+| `liveChatTextMessageRenderer` | 通常コメント | ✅ |
+| `liveChatPaidMessageRenderer` | スーパーチャット | ✅ |
+| `liveChatPaidStickerRenderer` | スーパーステッカー | ✅ |
+| `liveChatMembershipItemRenderer` | メンバーシップ登録 | ✅ |
+| `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer` | メンバーシップギフト | ✅ |
+| `liveChatViewerEngagementMessageRenderer` | システムメッセージ | ⏭️ スキップ |
+
+### カスタム絵文字処理
+
+メッセージ内のカスタム絵文字は `message.runs` 配列で取得:
+
+```json
+{
+  "runs": [
+    { "text": "こんにちは " },
+    {
+      "emoji": {
+        "emojiId": "UC.../...",
+        "shortcuts": [":member_emoji:"],
+        "image": {
+          "thumbnails": [
+            { "url": "https://yt3.ggpht.com/...", "width": 24, "height": 24 }
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+**セキュリティ**: 絵文字画像URLはYouTubeドメインのみ許可（`isValidEmojiUrl`関数で検証）
+
+### ポーリング間隔
+
+| ソース | 間隔 |
+|--------|------|
+| `timeoutMs`（レスポンス） | 通常 5000ms |
+| 最小間隔（強制） | 3000ms |
+| エラー時 | 指数バックオフ（5s→10s→20s→...→60s） |
+
+```rust
+// 実装例
+let interval = response.timeout_ms.unwrap_or(5000).max(3000);
+tokio::time::sleep(Duration::from_millis(interval as u64)).await;
+```
+
+### エラーハンドリング
+
+| 状況 | HTTP Status | 対処 |
+|------|-------------|------|
+| 正常 | 200 | 次のcontinuationで続行 |
+| レート制限 | 429 | 指数バックオフ |
+| 配信終了 | 200 + 空actions | 終了状態として通知 |
+| 無効なcontinuation | 400 | 配信ページから再取得 |
+| サーバーエラー | 5xx | リトライ（最大5回） |
+| 仕様変更 | パース失敗 | エラー通知、手動対応が必要 |
+
+### 既知の制約
+
+| 制約 | 詳細 | 影響 |
+|------|------|------|
+| 非公式API | YouTube側の仕様変更で動作停止の可能性 | 定期的な動作確認が必要 |
+| CLIENT_VERSION | ハードコーディング値が古くなる可能性 | 動的取得で対策済み |
+| 地域制限 | 一部地域でブロックされる可能性 | VPN使用時に問題報告あり |
+| 限定公開配信 | 視聴権限がないと取得不可 | ユーザーがブラウザでログイン必要 |
+| メンバー限定配信 | 認証なしでは取得不可 | 将来的にOAuth対応を検討 |
+
+### 初回continuation取得
+
+配信開始時、continuation tokenは配信ページのHTMLから抽出:
+
+```rust
+// 配信ページからcontinuationを抽出
+pub async fn get_initial_continuation(video_id: &str) -> Result<String> {
+    let url = format!("https://www.youtube.com/live_chat?v={}", video_id);
+    let html = client.get(&url).send().await?.text().await?;
+
+    // ytInitialDataからcontinuationを抽出
+    let re = Regex::new(r#""continuation":"([^"]+)""#)?;
+    // ...
+}
+```
+
+### デバッグ・トラブルシューティング
+
+| 問題 | 確認方法 | 解決策 |
+|------|----------|--------|
+| コメント取得できない | ブラウザでチャット表示確認 | 配信URLが正しいか確認 |
+| 途中で止まる | ログでHTTPステータス確認 | CLIENT_VERSION更新を試行 |
+| 絵文字が表示されない | コンソールでURL確認 | ドメイン許可リスト確認 |
+| スパチャ色がおかしい | 金額パース確認 | 通貨形式の対応追加 |
 
 ---
 

@@ -543,13 +543,19 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 
 ### コード品質
 
-- [ ] **console.logの整理** (PR#19)
-  - 対象: `App.tsx`, `ApiKeySetup.tsx`, `WizardStep2.tsx`
-  - 対応: デバッグ用console.logを削除、または開発環境のみ出力するよう条件分岐
+- [x] **console.logの整理** (PR#19, PR#22で対応済み)
+  - ~~対象: `App.tsx`, `ApiKeySetup.tsx`, `WizardStep2.tsx`~~
+  - 対応済み: デバッグ用console.logを削除（console.errorは維持）
 
-- [ ] **未使用コードの整理** (PR#19)
+- [ ] **未使用コードの整理** (PR#19, PR#22)
   - `src-tauri/src/keyring.rs`: 本番移行後に`commands/keyring.rs`のDB実装を削除
   - Rustコンパイラ警告の解消（`cargo check`で確認）
+  - Windows CIで16件のdead code警告:
+    - 未使用構造体: `SetlistSong`, `Setting`, `CommentLog`
+    - 未使用関数: `save_api_key`, `get_api_key`, `delete_api_key`, `has_api_key`
+    - 未使用定数: `SERVICE_NAME`, `API_KEY_ENTRY`
+    - 未読フィールド: `amount_micros`, `alt_text`, `gift_memberships_level_name`等
+  - 対応: 不要なら削除、将来使用予定なら`#[allow(dead_code)]`付与
 
 ### 機能改善（中優先度）
 

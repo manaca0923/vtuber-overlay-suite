@@ -3,8 +3,60 @@ use crate::youtube::{
     types::ChatMessage,
 };
 use crate::{server::types::WsMessage, AppState};
+use sqlx::SqlitePool;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
+
+/// コメントをDBに保存する（重複は無視）
+async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
+    for msg in messages {
+        // MessageTypeをJSON文字列に変換
+        let message_type = match &msg.message_type {
+            crate::youtube::types::MessageType::Text => "text".to_string(),
+            crate::youtube::types::MessageType::SuperChat { .. } => "superChat".to_string(),
+            crate::youtube::types::MessageType::SuperSticker { .. } => "superSticker".to_string(),
+            crate::youtube::types::MessageType::Membership { .. } => "membership".to_string(),
+            crate::youtube::types::MessageType::MembershipGift { .. } => "membershipGift".to_string(),
+        };
+
+        // MessageTypeの詳細データをJSONに変換
+        let message_data = match &msg.message_type {
+            crate::youtube::types::MessageType::Text => None,
+            other => serde_json::to_string(other).ok(),
+        };
+
+        // published_atをRFC3339形式に変換
+        let published_at_str = msg.published_at.to_rfc3339();
+
+        let result = sqlx::query(
+            r#"
+            INSERT OR IGNORE INTO comment_logs (
+                id, youtube_id, message, author_name, author_channel_id,
+                author_image_url, is_owner, is_moderator, is_member,
+                message_type, message_data, published_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&msg.id)
+        .bind(&msg.id) // youtube_idとidは同じ
+        .bind(&msg.message)
+        .bind(&msg.author_name)
+        .bind(&msg.author_channel_id)
+        .bind(&msg.author_image_url)
+        .bind(msg.is_owner)
+        .bind(msg.is_moderator)
+        .bind(msg.is_member)
+        .bind(&message_type)
+        .bind(&message_data)
+        .bind(&published_at_str)
+        .execute(pool)
+        .await;
+
+        if let Err(e) = result {
+            log::warn!("Failed to save comment to DB: {}", e);
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn validate_api_key(api_key: String) -> Result<bool, String> {
@@ -145,6 +197,9 @@ pub async fn start_polling(
     // WebSocketサーバー状態を取得
     let server_state = Arc::clone(&state.server);
 
+    // DBプールを取得（コメントログ保存用）
+    let db_pool = state.db.clone();
+
     // イベントコールバックを設定
     let app_clone = app.clone();
     let event_callback = move |event: PollingEvent| {
@@ -153,11 +208,16 @@ pub async fn start_polling(
             log::error!("Failed to emit polling event: {}", e);
         }
 
-        // WebSocketでブロードキャスト
+        // WebSocketでブロードキャスト & DBに保存
         if let PollingEvent::Messages { messages } = event {
             let server_state_clone = Arc::clone(&server_state);
+            let db_pool_clone = db_pool.clone();
             let messages_clone = messages.clone();
             tokio::spawn(async move {
+                // DBに保存
+                save_comments_to_db(&db_pool_clone, &messages_clone).await;
+
+                // WebSocketでブロードキャスト
                 let state_lock = server_state_clone.read().await;
                 for message in messages_clone {
                     state_lock
@@ -727,6 +787,9 @@ pub async fn start_polling_innertube(
     // WebSocketサーバー状態を取得
     let server_state = Arc::clone(&state.server);
 
+    // DBプールを取得（コメントログ保存用）
+    let db_pool = state.db.clone();
+
     // ポーリングループを開始（JoinHandleを保持）
     let running = Arc::clone(get_innertube_running());
     let client_mutex = Arc::clone(get_innertube_client());
@@ -800,6 +863,9 @@ pub async fn start_polling_innertube(
                 if let Err(e) = app.emit("polling-event", &event) {
                     log::error!("Failed to emit polling event: {}", e);
                 }
+
+                // DBに保存
+                save_comments_to_db(&db_pool, &new_messages).await;
 
                 // WebSocketでブロードキャスト
                 let server_state_clone = Arc::clone(&server_state);

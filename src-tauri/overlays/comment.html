@@ -173,6 +173,36 @@
     let ws = null;
     let reconnectDelay = 1000;
 
+    // URLパラメータから設定を適用
+    function applyUrlSettings() {
+      const params = new URLSearchParams(window.location.search);
+      const root = document.documentElement;
+
+      if (params.get('primaryColor')) {
+        root.style.setProperty('--primary-color', params.get('primaryColor'));
+      }
+      if (params.get('fontSize')) {
+        root.style.setProperty('--font-size-message', params.get('fontSize') + 'px');
+      }
+      if (params.get('avatarSize')) {
+        root.style.setProperty('--avatar-size', params.get('avatarSize') + 'px');
+      }
+    }
+
+    // WebSocket経由の設定更新を適用
+    function applySettingsUpdate(settings) {
+      const root = document.documentElement;
+      if (settings.primaryColor) {
+        root.style.setProperty('--primary-color', settings.primaryColor);
+      }
+      if (settings.fontSize) {
+        root.style.setProperty('--font-size-message', settings.fontSize + 'px');
+      }
+    }
+
+    // 初期化時にURLパラメータを適用
+    applyUrlSettings();
+
     function connectWebSocket() {
       ws = new WebSocket(WS_URL);
 
@@ -186,6 +216,8 @@
           const data = JSON.parse(event.data);
           if (data.type === 'comment:add') {
             addComment(data.payload);
+          } else if (data.type === 'settings:update') {
+            applySettingsUpdate(data.payload);
           }
         } catch (e) {
           console.error('Failed to parse message:', e);

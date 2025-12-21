@@ -114,12 +114,15 @@ pub async fn start_polling(
 ) -> Result<(), String> {
     log::info!("Starting polling for live chat ID: {}", live_chat_id);
 
-    // 相互排他: InnerTubeポーリングが動いていたら停止
-    if get_innertube_running().load(Ordering::SeqCst) {
-        log::info!("Stopping InnerTube polling (mutual exclusion)");
-        get_innertube_running().store(false, Ordering::SeqCst);
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    // 相互排他: InnerTubeポーリングが動いていたら即時停止（JoinHandleをabort）
+    {
+        let mut handle_lock = get_innertube_handle().lock().await;
+        if let Some(handle) = handle_lock.take() {
+            log::info!("Aborting InnerTube polling task (mutual exclusion)");
+            handle.abort();
+        }
     }
+    get_innertube_running().store(false, Ordering::SeqCst);
 
     // 新しいポーラーを作成（ロックの外で）
     let poller = ChatPoller::new(api_key);

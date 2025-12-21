@@ -553,11 +553,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] Tauriコマンド登録（デバッグ/リリース両対応）
 - [x] フロントエンドからのApiMode切り替えUI対応（テストボタン追加）
 - [x] URLバリデーション改善（fonts.gstatic.com追加、//形式URL正規化）
-- [x] ポーラー相互排他（公式/InnerTube同時起動防止、Stopped通知付き）
+- [x] ポーラー相互排他（公式/InnerTube双方向でJoinHandle abort、Stopped通知付き）
 - [x] 重複排除のLRU化（HashSet順序問題修正、同一レスポンス内重複対応）
 - [x] 絵文字キャッシュ実装（徐々に解消方式、常に最新を上書き）
 - [x] 動画切替時の絵文字キャッシュクリア
-- [x] JoinHandleによる二重ポーリング防止
+- [x] JoinHandleによる二重ポーリング防止（公式→InnerTube、InnerTube→公式両方対応）
 - [x] **手動テスト実施** ✅ 2025-12-21
   - video_id: DAdj_xOJDg4 でテスト成功
   - 一部のカスタム絵文字が画像として正常に表示

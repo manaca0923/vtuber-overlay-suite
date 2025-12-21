@@ -511,7 +511,10 @@ pub async fn test_innertube_connection(video_id: String) -> Result<String, Strin
     log::info!("Testing InnerTube connection for video: {}", video_id);
 
     // クライアント初期化
-    let mut client = InnerTubeClient::new(video_id.clone());
+    let mut client = InnerTubeClient::new(video_id.clone()).map_err(|e| {
+        log::error!("InnerTube client creation failed: {}", e);
+        format!("クライアント作成に失敗しました: {}", e)
+    })?;
     client.initialize().await.map_err(|e| {
         log::error!("InnerTube initialization failed: {}", e);
         format!("初期化に失敗しました: {}", e)

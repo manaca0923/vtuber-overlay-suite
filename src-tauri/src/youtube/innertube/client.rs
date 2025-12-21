@@ -3,12 +3,48 @@
 use regex::Regex;
 use reqwest::Client;
 use serde_json::json;
+use std::sync::OnceLock;
 
 use super::types::InnerTubeChatResponse;
 use crate::youtube::errors::YouTubeError;
 
 const INNERTUBE_API_URL: &str = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+/// InnerTubeクライアントバージョン
+/// YouTube側で定期的に更新されるため、必要に応じて更新すること
+const CLIENT_VERSION: &str = "2.20231219.01.00";
+
+/// continuationトークン抽出用の最小長さ
+/// 有効なcontinuationトークンは通常100文字以上のBase64エンコード文字列
+/// 短いトークン（ページネーション以外の用途）を除外するための閾値
+const MIN_CONTINUATION_LENGTH: usize = 50;
+
+// 正規表現のシングルトン（OnceLockで初回のみコンパイル）
+static CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
+static RELOAD_CONTINUATION_RE: OnceLock<Regex> = OnceLock::new();
+static API_KEY_RE: OnceLock<Regex> = OnceLock::new();
+
+fn get_continuation_regex() -> &'static Regex {
+    CONTINUATION_RE.get_or_init(|| {
+        Regex::new(r#""continuation"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile continuation regex")
+    })
+}
+
+fn get_reload_continuation_regex() -> &'static Regex {
+    RELOAD_CONTINUATION_RE.get_or_init(|| {
+        Regex::new(r#""reloadContinuationData"\s*:\s*\{\s*"continuation"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile reloadContinuationData regex")
+    })
+}
+
+fn get_api_key_regex() -> &'static Regex {
+    API_KEY_RE.get_or_init(|| {
+        Regex::new(r#""INNERTUBE_API_KEY"\s*:\s*"([^"]+)""#)
+            .expect("Failed to compile API key regex")
+    })
+}
 
 /// InnerTube APIクライアント
 pub struct InnerTubeClient {
@@ -21,19 +57,22 @@ pub struct InnerTubeClient {
 
 impl InnerTubeClient {
     /// 新しいクライアントを作成
-    pub fn new(video_id: String) -> Self {
+    ///
+    /// # Errors
+    /// HTTPクライアントのビルドに失敗した場合にエラーを返す
+    pub fn new(video_id: String) -> Result<Self, YouTubeError> {
         let client = Client::builder()
             .user_agent(USER_AGENT)
             .build()
-            .expect("Failed to build HTTP client");
+            .map_err(|e| YouTubeError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
 
-        Self {
+        Ok(Self {
             client,
             video_id,
             continuation: None,
             timeout_ms: 5000,
             api_key: None,
-        }
+        })
     }
 
     /// 初期化: ライブチャットページからcontinuationトークンを取得
@@ -65,7 +104,7 @@ impl InnerTubeClient {
             .map_err(|e| YouTubeError::NetworkError(e.to_string()))?;
 
         // ytInitialDataからcontinuationを抽出
-        self.continuation = Self::extract_continuation(&body)?;
+        self.continuation = Self::extract_continuation(&body);
         // INNERTUBE_API_KEYを抽出
         self.api_key = Self::extract_api_key(&body);
 
@@ -78,49 +117,46 @@ impl InnerTubeClient {
     }
 
     /// continuationトークンを抽出
-    fn extract_continuation(html: &str) -> Result<Option<String>, YouTubeError> {
+    fn extract_continuation(html: &str) -> Option<String> {
         // ytInitialData内のcontinuationを正規表現で抽出
         // パターン: "continuation":"..." または "reloadContinuationData":{"continuation":"..."}
 
-        // 方法1: invalidationContinuationData
-        let re = Regex::new(r#""continuation"\s*:\s*"([^"]+)""#)
-            .map_err(|e| YouTubeError::ParseError(e.to_string()))?;
-
+        // 方法1: invalidationContinuationData（事前コンパイル済み正規表現を使用）
+        let re = get_continuation_regex();
         if let Some(caps) = re.captures(html) {
             if let Some(cont) = caps.get(1) {
                 let continuation = cont.as_str().to_string();
-                // 無効な短いトークンを除外
-                if continuation.len() > 50 {
+                // MIN_CONTINUATION_LENGTH以下の短いトークンを除外
+                // （ページネーション以外の用途のトークンを除外するため）
+                if continuation.len() > MIN_CONTINUATION_LENGTH {
                     log::debug!("Found continuation token (length: {})", continuation.len());
-                    return Ok(Some(continuation));
+                    return Some(continuation);
                 }
             }
         }
 
-        // 方法2: reloadContinuationData
-        let re2 = Regex::new(r#""reloadContinuationData"\s*:\s*\{\s*"continuation"\s*:\s*"([^"]+)""#)
-            .map_err(|e| YouTubeError::ParseError(e.to_string()))?;
-
+        // 方法2: reloadContinuationData（事前コンパイル済み正規表現を使用）
+        let re2 = get_reload_continuation_regex();
         if let Some(caps) = re2.captures(html) {
             if let Some(cont) = caps.get(1) {
                 let continuation = cont.as_str().to_string();
-                if continuation.len() > 50 {
+                if continuation.len() > MIN_CONTINUATION_LENGTH {
                     log::debug!(
                         "Found continuation token from reloadContinuationData (length: {})",
                         continuation.len()
                     );
-                    return Ok(Some(continuation));
+                    return Some(continuation);
                 }
             }
         }
 
         log::warn!("No valid continuation token found in page");
-        Ok(None)
+        None
     }
 
-    /// INNERTUBE_API_KEYを抽出
+    /// INNERTUBE_API_KEYを抽出（事前コンパイル済み正規表現を使用）
     fn extract_api_key(html: &str) -> Option<String> {
-        let re = Regex::new(r#""INNERTUBE_API_KEY"\s*:\s*"([^"]+)""#).ok()?;
+        let re = get_api_key_regex();
         re.captures(html)
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_string())
@@ -188,7 +224,7 @@ impl InnerTubeClient {
             "context": {
                 "client": {
                     "clientName": "WEB",
-                    "clientVersion": "2.20231219.01.00",
+                    "clientVersion": CLIENT_VERSION,
                     "hl": "ja",
                     "gl": "JP",
                     "timeZone": "Asia/Tokyo"
@@ -231,9 +267,19 @@ mod tests {
 
     #[test]
     fn test_extract_continuation() {
-        let html = r#"{"continuation":"Cop4BxoYQ2dncl9jb21tb25fY2hhdF9tZXNzYWdlcw=="}"#;
-        let result = InnerTubeClient::extract_continuation(html).unwrap();
+        // MIN_CONTINUATION_LENGTHより長いトークンが必要
+        let long_token = "Cop4BxoYQ2dncl9jb21tb25fY2hhdF9tZXNzYWdlcw==".repeat(3);
+        let html = format!(r#"{{"continuation":"{}"}}"#, long_token);
+        let result = InnerTubeClient::extract_continuation(&html);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_extract_continuation_short_token_ignored() {
+        // 短いトークンは無視される
+        let html = r#"{"continuation":"shorttoken"}"#;
+        let result = InnerTubeClient::extract_continuation(html);
+        assert!(result.is_none());
     }
 
     #[test]

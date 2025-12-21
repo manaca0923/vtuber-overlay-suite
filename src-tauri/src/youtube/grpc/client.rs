@@ -10,6 +10,7 @@ use crate::youtube::backoff::ExponentialBackoff;
 use crate::youtube::errors::YouTubeError;
 use crate::youtube::types::{ChatMessage, MessageType};
 use chrono::{DateTime, Utc};
+use std::collections::VecDeque;
 use std::time::Duration;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use tonic::{Request, Status, Streaming};
@@ -22,6 +23,9 @@ const DEFAULT_PROFILE_IMAGE_SIZE: u32 = 64;
 
 /// Default max results per response
 const DEFAULT_MAX_RESULTS: u32 = 500;
+
+/// Maximum number of seen message IDs to keep for deduplication
+const MAX_SEEN_IDS: usize = 10000;
 
 /// gRPC client for YouTube Live Chat
 pub struct GrpcChatClient {
@@ -37,6 +41,8 @@ pub struct GrpcChatClient {
     backoff: ExponentialBackoff,
     /// Seen message IDs for deduplication
     seen_ids: std::collections::HashSet<String>,
+    /// Order of seen message IDs for FIFO eviction
+    seen_order: VecDeque<String>,
 }
 
 impl GrpcChatClient {
@@ -71,6 +77,7 @@ impl GrpcChatClient {
             next_page_token: None,
             backoff: ExponentialBackoff::new(),
             seen_ids: std::collections::HashSet::new(),
+            seen_order: VecDeque::new(),
         })
     }
 
@@ -171,16 +178,25 @@ impl GrpcChatClient {
             if self.seen_ids.contains(&item.id) {
                 continue;
             }
-            self.seen_ids.insert(item.id.clone());
+
+            // Add to seen_ids and maintain order for FIFO eviction
+            if self.seen_ids.insert(item.id.clone()) {
+                self.seen_order.push_back(item.id.clone());
+            }
 
             if let Some(msg) = self.convert_to_chat_message(&item) {
                 messages.push(msg);
             }
         }
 
-        // Limit seen_ids to prevent memory leak
-        if self.seen_ids.len() > 10000 {
-            self.seen_ids.clear();
+        // FIFO eviction: remove oldest IDs when limit exceeded
+        // This prevents memory leak while avoiding duplicate messages after eviction
+        while self.seen_ids.len() > MAX_SEEN_IDS {
+            if let Some(oldest_id) = self.seen_order.pop_front() {
+                self.seen_ids.remove(&oldest_id);
+            } else {
+                break;
+            }
         }
 
         messages
@@ -304,9 +320,11 @@ impl GrpcChatClient {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
+    #[ignore = "TODO: Phase 6でgRPCレスポンスのモックを使ったテストを実装"]
     fn test_parse_message_type() {
         // This test validates the message type parsing logic
         // In real usage, this would be tested with actual gRPC responses

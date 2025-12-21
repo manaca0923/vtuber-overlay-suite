@@ -363,6 +363,8 @@
 
     // 設定取得のバージョン管理（レース条件対策）
     let settingsVersion = 0;
+    // HTTPリクエストID（HTTP同士のレース条件対策）
+    let httpRequestId = 0;
     // 設定取得成功フラグ（初回fetch失敗時のリカバリー用）
     let settingsFetchSucceeded = false;
     // 初回設定取得フラグ
@@ -372,6 +374,8 @@
     async function fetchAndApplySettings() {
       // リクエスト開始時のバージョンを記録
       const requestVersion = settingsVersion;
+      // このリクエストのIDを記録（HTTP同士のレース条件対策）
+      const myRequestId = ++httpRequestId;
 
       try {
         const controller = new AbortController();
@@ -385,6 +389,11 @@
         if (response.ok) {
           const settings = await response.json();
 
+          // レース条件チェック: より新しいリクエストが発行されていたらスキップ
+          if (myRequestId !== httpRequestId) {
+            console.log('Skipping HTTP settings (newer HTTP request in flight)');
+            return;
+          }
           // レース条件チェック: リクエスト中にWSで設定が更新されていたらスキップ
           if (settingsVersion > requestVersion) {
             console.log('Skipping HTTP settings (newer WS settings already applied)');

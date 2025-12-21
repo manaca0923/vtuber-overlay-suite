@@ -38,40 +38,41 @@
 
     #comment-container {
       display: flex;
-      flex-direction: column;
+      flex-direction: column; /* 通常の方向（上から下） */
+      justify-content: flex-end; /* 要素を下に詰める */
       gap: var(--comment-gap);
       padding: 16px;
-      position: absolute;
-      max-width: 100%;
-      max-height: 100%;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
     }
 
-    /* 表示位置のスタイル */
-    #comment-container.position-top-left {
-      top: 0;
-      left: 0;
-    }
-
+    /* 表示位置のスタイル - コンテナは常に画面全体、コンテンツの配置で制御 */
+    #comment-container.position-top-left,
     #comment-container.position-top-right {
-      top: 0;
-      right: 0;
+      flex-direction: column; /* 上から下へ（上配置時） */
+      justify-content: flex-start;
     }
 
-    #comment-container.position-bottom-left {
-      bottom: 0;
-      left: 0;
-    }
-
-    #comment-container.position-bottom-right {
-      bottom: 0;
-      right: 0;
-    }
-
-    /* bottom配置時はコメントを下から上に積む */
     #comment-container.position-bottom-left,
     #comment-container.position-bottom-right {
-      flex-direction: column-reverse;
+      flex-direction: column; /* 通常方向 */
+      justify-content: flex-end; /* 下に詰める */
+    }
+
+    #comment-container.position-top-right,
+    #comment-container.position-bottom-right {
+      align-items: flex-end; /* 右寄せ */
+    }
+
+    #comment-container.position-top-left,
+    #comment-container.position-bottom-left {
+      align-items: stretch; /* 横幅いっぱい */
     }
 
     .comment {
@@ -82,6 +83,10 @@
       border-radius: 8px;
       backdrop-filter: blur(8px);
       animation: comment-enter var(--animation-duration) var(--animation-easing);
+      width: calc(100% - 32px); /* 横幅固定（padding分を引く） */
+      flex-shrink: 0; /* 縮小しない */
+      align-self: stretch; /* 親のalign-itemsを無視して横幅いっぱいに */
+      box-sizing: border-box;
     }
 
     .comment.no-animation {
@@ -175,7 +180,7 @@
     @keyframes comment-enter {
       from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(20px); /* 下から上にスライドイン */
       }
 
       to {
@@ -192,7 +197,7 @@
 
       to {
         opacity: 0;
-        transform: translateY(-20px);
+        transform: translateY(-20px); /* 上方向にフェードアウト */
       }
     }
 
@@ -216,10 +221,10 @@
 
   <script>
     // 設定状態（動的に変更可能）
-    let maxComments = 30;
+    // maxCommentsは使用しない（画面高さベースで自動調整）
     let showAvatar = true;
     let overlayEnabled = true;
-    let overlayPosition = 'bottom-right';
+    let overlayPosition = 'bottom-left';
 
     const WS_URL = 'ws://localhost:19801/ws';
     const API_BASE_URL = 'http://localhost:19800/api';
@@ -265,13 +270,7 @@
       if (avatarSize && isValidNumber(avatarSize, 16, 128)) {
         root.style.setProperty('--avatar-size', avatarSize + 'px');
       }
-      // maxCount
-      const maxCount = params.get('maxCount');
-      let maxCountChanged = false;
-      if (maxCount && isValidNumber(maxCount, 5, 30)) {
-        maxComments = parseInt(maxCount, 10);
-        maxCountChanged = true;
-      }
+      // maxCount - 画面高さベースで自動調整するため無視
       // showAvatar
       const showAvatarParam = params.get('showAvatar');
       let showAvatarChanged = false;
@@ -308,9 +307,6 @@
       if (showAvatarChanged) {
         updateAvatarVisibility();
       }
-      if (maxCountChanged) {
-        trimOldComments();
-      }
     }
 
     // 角丸を更新
@@ -332,6 +328,15 @@
       });
       // 新しいpositionクラスを追加
       container.classList.add(`position-${overlayPosition}`);
+
+      // bottom配置時は下に詰める、top配置時は上から並べる
+      if (overlayPosition.startsWith('bottom-')) {
+        container.style.flexDirection = 'column';
+        container.style.justifyContent = 'flex-end';
+      } else {
+        container.style.flexDirection = 'column';
+        container.style.justifyContent = 'flex-start';
+      }
     }
 
     // オーバーレイの表示/非表示を更新
@@ -360,12 +365,10 @@
       if (settings.comment) {
         if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
           root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
+          // フォントサイズ変更時は画面外コメントを再チェック
+          trimOverflowingComments();
         }
-        if (settings.comment.maxCount && isValidNumber(settings.comment.maxCount, 5, 30)) {
-          maxComments = settings.comment.maxCount;
-          // 現在のコメント数が新しい上限を超えている場合、古いコメントを削除
-          trimOldComments();
-        }
+        // maxCount - 画面高さベースで自動調整するため無視
         if (settings.comment.showAvatar !== undefined) {
           showAvatar = settings.comment.showAvatar;
           updateAvatarVisibility();
@@ -399,20 +402,33 @@
       }, 500); // animation-duration(0.3s)より少し長め
     }
 
-    // 古いコメントを削除して上限に収める（アニメーション付き）
-    function trimOldComments() {
+    // 画面外にはみ出たコメントを削除（画面高さベース）
+    function trimOverflowingComments() {
       const container = document.getElementById('comment-container');
-      // 削除対象を先に収集（アニメーション中の要素は除外）
-      const comments = Array.from(container.children).filter(
-        el => !el.classList.contains('removing')
-      );
-      const excess = comments.length - maxComments;
-      if (excess > 0) {
-        // 古い順に削除
-        for (let i = 0; i < excess; i++) {
-          removeCommentWithAnimation(comments[i]);
+      const containerRect = container.getBoundingClientRect();
+
+      // 削除対象を先に収集（アニメーション中の要素は除外、デバッグ要素も除外）
+      const comments = Array.from(container.querySelectorAll('.comment:not(.removing)'));
+
+      // bottom配置の場合: 上にはみ出たコメントを削除
+      // top配置の場合: 下にはみ出たコメントを削除
+      const isBottomPosition = overlayPosition.startsWith('bottom-');
+
+      comments.forEach(comment => {
+        const rect = comment.getBoundingClientRect();
+
+        if (isBottomPosition) {
+          // bottom配置: コメントの上端がコンテナの上端より上にある場合は削除
+          if (rect.top < containerRect.top - 10) { // 10pxのマージン
+            removeCommentWithAnimation(comment);
+          }
+        } else {
+          // top配置: コメントの下端がコンテナの下端より下にある場合は削除
+          if (rect.bottom > containerRect.bottom + 10) { // 10pxのマージン
+            removeCommentWithAnimation(comment);
+          }
         }
-      }
+      });
     }
 
     // アバター表示/非表示を更新
@@ -586,7 +602,8 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'comment:add') {
-            addComment(data.payload);
+            // コメントをキューに追加（1件ずつ表示するため）
+            queueComment(data.payload);
           } else if (data.type === 'comment:remove') {
             // コメント削除イベント（フェードアウトアニメーション付き）
             removeComment(data.payload?.id);
@@ -615,14 +632,80 @@
       };
     }
 
-    function addComment(comment) {
-      const container = document.getElementById('comment-container');
+    // コメントキューシステム（5秒間に溜まったコメントを5秒間で等間隔表示）
+    const commentBuffer = []; // 受信バッファ
+    const displayQueue = []; // 表示キュー
+    let isProcessingQueue = false;
+    let currentDisplayInterval = 300; // 現在の表示間隔（ミリ秒）
+    const BUFFER_INTERVAL = 5000; // バッファ収集間隔（5秒）
+    const MIN_DISPLAY_INTERVAL = 100; // 最小表示間隔（ミリ秒）
+    const MAX_DISPLAY_INTERVAL = 1000; // 最大表示間隔（ミリ秒）
 
+    // コメントをバッファに追加
+    function queueComment(comment) {
       // comment.idがundefined/nullの場合はスキップ
       if (!comment || !comment.id) {
         console.warn('Invalid comment: missing id', comment);
         return;
       }
+
+      // 重複チェック（バッファ内、表示キュー内、表示済みの全て）
+      if (commentBuffer.some(c => c.id === comment.id)) {
+        return;
+      }
+      if (displayQueue.some(c => c.id === comment.id)) {
+        return;
+      }
+      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
+        return;
+      }
+
+      commentBuffer.push(comment);
+    }
+
+    // 5秒ごとにバッファを表示キューに移動
+    function flushBuffer() {
+      if (commentBuffer.length > 0) {
+        // バッファ内のコメント数に応じて表示間隔を計算
+        // 5秒間で全て表示する = 5000ms / コメント数
+        const count = commentBuffer.length;
+        currentDisplayInterval = Math.floor(BUFFER_INTERVAL / count);
+        // 間隔を制限
+        currentDisplayInterval = Math.max(MIN_DISPLAY_INTERVAL, Math.min(MAX_DISPLAY_INTERVAL, currentDisplayInterval));
+
+        console.log(`Flushing ${count} comments with ${currentDisplayInterval}ms interval`);
+
+        // バッファから表示キューに移動
+        displayQueue.push(...commentBuffer);
+        commentBuffer.length = 0;
+
+        // 処理開始
+        processQueue();
+      }
+    }
+
+    // 表示キューを処理（1件ずつ表示）
+    function processQueue() {
+      if (isProcessingQueue || displayQueue.length === 0) {
+        return;
+      }
+
+      isProcessingQueue = true;
+      const comment = displayQueue.shift();
+      addComment(comment);
+
+      // 次のコメントを計算された間隔後に処理
+      setTimeout(() => {
+        isProcessingQueue = false;
+        processQueue();
+      }, currentDisplayInterval);
+    }
+
+    // 5秒ごとにバッファをフラッシュ
+    setInterval(flushBuffer, BUFFER_INTERVAL);
+
+    function addComment(comment) {
+      const container = document.getElementById('comment-container');
 
       // 重複チェック（再接続時のキャッシュ復元で重要）
       if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) {
@@ -630,10 +713,12 @@
       }
 
       const el = createCommentElement(comment);
-      container.appendChild(el);
+      container.appendChild(el); // 末尾に追加（新しいコメントが下に表示される）
 
-      // 古いコメントを削除（アニメーション付き）
-      trimOldComments();
+      // レイアウト完了後に画面外コメントを削除
+      requestAnimationFrame(() => {
+        trimOverflowingComments();
+      });
     }
 
     // コメントを削除（IDで指定）
@@ -836,6 +921,15 @@
 
       return div;
     }
+
+    // ウィンドウリサイズ時に画面外コメントを削除
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        trimOverflowingComments();
+      }, 100);
+    });
 
     // 初期化: 設定取得とWebSocket接続を並列実行（HTTP遅延でもWS接続を遅らせない）
     fetchAndApplySettings();

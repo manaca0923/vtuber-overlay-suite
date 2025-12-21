@@ -96,9 +96,9 @@ export function CommentSettingsPanel({ settings, onChange }: CommentSettingsPane
         </div>
       </div>
 
-      {/* アバター表示 */}
+      {/* アイコン表示 */}
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-gray-700">アバター表示</label>
+        <label className="text-sm font-medium text-gray-700">アイコン表示</label>
         <button
           type="button"
           onClick={() => updateSettings({ showAvatar: !settings.showAvatar })}

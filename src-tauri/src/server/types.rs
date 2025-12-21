@@ -65,6 +65,7 @@ pub enum SongStatus {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsUpdatePayload {
     pub theme: String,
+    pub layout: LayoutPreset,
     pub primary_color: String,
     pub font_family: String,
     pub border_radius: u32,
@@ -92,6 +93,17 @@ pub enum SetlistPosition {
     Bottom,
     Left,
     Right,
+}
+
+/// レイアウトプリセット
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LayoutPreset {
+    Streaming,
+    Talk,
+    Music,
+    Gaming,
+    Custom,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

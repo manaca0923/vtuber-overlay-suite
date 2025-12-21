@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
-use super::types::{CommentPosition, SetlistPosition};
+use super::types::{CommentPosition, LayoutPreset, SetlistPosition};
 
 /// HTTPサーバー用の共有状態
 #[derive(Clone)]
@@ -34,6 +34,7 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         .route("/api/overlay/settings", get(get_overlay_settings_api))
         .route("/overlay/comment", get(overlay_comment))
         .route("/overlay/setlist", get(overlay_setlist))
+        .route("/overlay/combined", get(overlay_combined))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -79,6 +80,21 @@ async fn overlay_setlist(State(state): State<HttpState>) -> impl IntoResponse {
         Err(e) => {
             // パス情報をログには記録するがレスポンスには含めない
             log::error!("Failed to read setlist.html from {:?}: {}", path, e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load overlay".to_string(),
+            ).into_response()
+        }
+    }
+}
+
+/// 統合オーバーレイHTML（コメント＋セットリスト）
+async fn overlay_combined(State(state): State<HttpState>) -> impl IntoResponse {
+    let path = state.overlays_dir.join("combined.html");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Html(content).into_response(),
+        Err(e) => {
+            log::error!("Failed to read combined.html from {:?}: {}", path, e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to load overlay".to_string(),
@@ -229,6 +245,7 @@ async fn get_setlist_api(
 #[serde(rename_all = "camelCase")]
 struct OverlaySettingsApiResponse {
     theme: String,
+    layout: LayoutPreset,
     primary_color: String,
     font_family: String,
     border_radius: u32,
@@ -259,6 +276,7 @@ struct SetlistSettingsApi {
 fn default_overlay_settings() -> OverlaySettingsApiResponse {
     OverlaySettingsApiResponse {
         theme: "default".to_string(),
+        layout: LayoutPreset::Streaming,
         primary_color: "#6366f1".to_string(),
         font_family: "'Yu Gothic', 'Meiryo', sans-serif".to_string(),
         border_radius: 8,
@@ -298,6 +316,18 @@ fn parse_setlist_position(s: &str) -> SetlistPosition {
     }
 }
 
+/// 文字列からLayoutPresetに変換
+fn parse_layout_preset(s: &str) -> LayoutPreset {
+    match s {
+        "streaming" => LayoutPreset::Streaming,
+        "talk" => LayoutPreset::Talk,
+        "music" => LayoutPreset::Music,
+        "gaming" => LayoutPreset::Gaming,
+        "custom" => LayoutPreset::Custom,
+        _ => LayoutPreset::Streaming, // デフォルト
+    }
+}
+
 /// 保存されているオーバーレイ設定を取得
 async fn get_overlay_settings_api(
     State(state): State<HttpState>,
@@ -317,6 +347,9 @@ async fn get_overlay_settings_api(
                     // SettingsUpdatePayloadと同じ形式に変換
                     let response = OverlaySettingsApiResponse {
                         theme: settings["theme"].as_str().unwrap_or("default").to_string(),
+                        layout: parse_layout_preset(
+                            settings["layout"].as_str().unwrap_or("streaming")
+                        ),
                         primary_color: settings["common"]["primaryColor"].as_str().unwrap_or("#6366f1").to_string(),
                         font_family: settings["common"]["fontFamily"].as_str().unwrap_or("'Yu Gothic', 'Meiryo', sans-serif").to_string(),
                         border_radius: settings["common"]["borderRadius"].as_u64().unwrap_or(8) as u32,

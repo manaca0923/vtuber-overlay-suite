@@ -64,12 +64,14 @@ interface CommentControlPanelProps {
   apiKey: string;
   videoId: string;
   liveChatId: string;
+  onSettingsChange?: (settings: { videoId: string; liveChatId: string }) => void;
 }
 
 export function CommentControlPanel({
   apiKey,
   videoId,
   liveChatId,
+  onSettingsChange,
 }: CommentControlPanelProps) {
   const [isPolling, setIsPolling] = useState(false);
   const [pollingState, setPollingState] = useState<PollingState | null>(null);
@@ -79,6 +81,10 @@ export function CommentControlPanel({
   const [lastEvent, setLastEvent] = useState<string>('');
   const isMountedRef = useRef(true);
   const unlistenRef = useRef<UnlistenFn | null>(null);
+
+  // 編集用の動画ID/URL入力
+  const [editVideoInput, setEditVideoInput] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // コンポーネントのマウント状態を管理
   useEffect(() => {
@@ -266,6 +272,71 @@ export function CommentControlPanel({
     }
   }, [liveChatId]);
 
+  // 動画ID/URLから動画IDを抽出
+  const extractVideoId = (input: string): string => {
+    const urlMatch = input.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (urlMatch && urlMatch[1]) {
+      return urlMatch[1];
+    }
+    // 11文字の動画IDとして扱う
+    if (/^[a-zA-Z0-9_-]{11}$/.test(input)) {
+      return input;
+    }
+    return input;
+  };
+
+  // 動画ID変更処理
+  const handleUpdateVideoId = useCallback(async () => {
+    const newVideoId = extractVideoId(editVideoInput.trim());
+    if (!newVideoId) {
+      setError('動画IDまたはURLを入力してください');
+      return;
+    }
+
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      // InnerTube経由でChat IDを取得（APIキー不要）
+      // または公式API経由で取得
+      let newLiveChatId: string;
+
+      if (apiKey) {
+        // 公式API経由
+        newLiveChatId = await invoke<string>('get_live_chat_id', {
+          apiKey: apiKey,
+          videoId: newVideoId,
+        });
+      } else {
+        // InnerTube経由（APIキー不要）
+        // InnerTubeClientはstart_polling_innertube内で使われる
+        // ここでは公式APIが使えない場合のフォールバックとして空文字を設定
+        newLiveChatId = '';
+      }
+
+      // 設定を保存
+      await invoke('save_wizard_settings', {
+        videoId: newVideoId,
+        liveChatId: newLiveChatId,
+      });
+
+      // 親コンポーネントに通知
+      onSettingsChange?.({ videoId: newVideoId, liveChatId: newLiveChatId });
+
+      setEditVideoInput('');
+      setLastEvent('動画IDを更新しました');
+    } catch (err) {
+      if (isMountedRef.current) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`動画ID更新エラー: ${errorMessage}`);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsUpdating(false);
+      }
+    }
+  }, [apiKey, editVideoInput, onSettingsChange]);
+
   // クォータ情報を計算
   const estimatedRemainingQuota = pollingState
     ? DAILY_QUOTA_LIMIT - pollingState.quota_used
@@ -281,7 +352,7 @@ export function CommentControlPanel({
 
       {/* 接続情報 */}
       <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
             <span className="text-gray-500">動画ID:</span>{' '}
             <span className="font-mono">{videoId || '-'}</span>
@@ -293,6 +364,38 @@ export function CommentControlPanel({
             </span>
           </div>
         </div>
+        {/* 動画ID変更フォーム */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={editVideoInput}
+            onChange={(e) => setEditVideoInput(e.target.value)}
+            placeholder="新しい動画ID または URL"
+            disabled={isPolling || isUpdating}
+            className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && editVideoInput.trim()) {
+                handleUpdateVideoId();
+              }
+            }}
+          />
+          <button
+            onClick={handleUpdateVideoId}
+            disabled={isPolling || isUpdating || !editVideoInput.trim()}
+            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+              isPolling || isUpdating || !editVideoInput.trim()
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {isUpdating ? '更新中...' : '変更'}
+          </button>
+        </div>
+        {isPolling && (
+          <p className="mt-1 text-xs text-orange-600">
+            ※ポーリング中は変更できません。停止してから変更してください。
+          </p>
+        )}
       </div>
 
       {/* ポーリング状態 */}

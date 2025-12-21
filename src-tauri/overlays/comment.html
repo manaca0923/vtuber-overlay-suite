@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -47,10 +48,25 @@
     }
 
     /* 表示位置のスタイル */
-    #comment-container.position-top-left { top: 0; left: 0; }
-    #comment-container.position-top-right { top: 0; right: 0; }
-    #comment-container.position-bottom-left { bottom: 0; left: 0; }
-    #comment-container.position-bottom-right { bottom: 0; right: 0; }
+    #comment-container.position-top-left {
+      top: 0;
+      left: 0;
+    }
+
+    #comment-container.position-top-right {
+      top: 0;
+      right: 0;
+    }
+
+    #comment-container.position-bottom-left {
+      bottom: 0;
+      left: 0;
+    }
+
+    #comment-container.position-bottom-right {
+      bottom: 0;
+      right: 0;
+    }
 
     /* bottom配置時はコメントを下から上に積む */
     #comment-container.position-bottom-left,
@@ -161,6 +177,7 @@
         opacity: 0;
         transform: translateY(20px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -172,6 +189,7 @@
         opacity: 1;
         transform: translateY(0);
       }
+
       to {
         opacity: 0;
         transform: translateY(-20px);
@@ -192,6 +210,7 @@
     }
   </style>
 </head>
+
 <body>
   <div id="comment-container"></div>
 
@@ -523,10 +542,10 @@
         const hostname = parsed.hostname;
         // YouTube関連ドメインのみ許可（ワイルドカードパターン対応）
         // 完全一致
-        const exactHosts = ['youtube.com', 'www.youtube.com'];
+        const exactHosts = ['youtube.com', 'www.youtube.com', 'fonts.gstatic.com'];
         if (exactHosts.includes(hostname)) return true;
         // サフィックスマッチ（*.ggpht.com, *.googleusercontent.com, *.ytimg.com）
-        const allowedSuffixes = ['.ggpht.com', '.googleusercontent.com', '.ytimg.com'];
+        const allowedSuffixes = ['.ggpht.com', '.googleusercontent.com', '.ytimg.com', '.gstatic.com'];
         return allowedSuffixes.some(suffix => hostname.endsWith(suffix));
       } catch {
         return false;
@@ -545,16 +564,24 @@
           const thumbnails = run.emoji.image?.thumbnails || [];
           const thumb = thumbnails.find(t => t.width >= 24) || thumbnails[0];
 
+          // デバッグ: 絵文字データを確認
+          const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
+          if (!thumb) {
+            console.warn('[Emoji] No thumbnail for:', shortcut, run.emoji);
+          } else if (!isValidEmojiUrl(thumb.url)) {
+            console.warn('[Emoji] Invalid URL for:', shortcut, thumb.url);
+          }
+
           // セキュリティ: YouTubeドメインのURLのみ許可
           if (thumb && isValidEmojiUrl(thumb.url)) {
             const img = document.createElement('img');
             img.className = 'inline-emoji';
-            const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
             img.alt = shortcut;
             img.title = shortcut;
             img.loading = 'lazy'; // 遅延読み込みでパフォーマンス向上
             // 画像読み込み失敗時はテキストにフォールバック
-            img.onerror = function() {
+            img.onerror = function () {
+              console.warn('[Emoji] Image load failed:', shortcut, thumb.url);
               const text = document.createTextNode(shortcut);
               this.parentNode?.replaceChild(text, this);
             };
@@ -562,7 +589,6 @@
             container.appendChild(img);
           } else {
             // URLが無効またはサムネイルがない場合はショートカットをテキスト表示
-            const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
             container.appendChild(document.createTextNode(shortcut));
           }
         }
@@ -691,4 +717,5 @@
     connectWebSocket();
   </script>
 </body>
+
 </html>

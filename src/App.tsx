@@ -142,7 +142,36 @@ function App() {
 
         {activeTab === 'comment' && (
           <div className="space-y-6">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              {/* InnerTubeテスト用ボタン（開発用） */}
+              <button
+                onClick={async () => {
+                  try {
+                    const videoId = wizardSettings?.video_id || prompt('Video ID:');
+                    if (!videoId) return;
+                    await invoke('start_polling_innertube', { videoId });
+                    alert('InnerTubeポーリング開始成功！オーバーレイを確認してください。');
+                  } catch (e) {
+                    alert('エラー: ' + (e as Error).message);
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                InnerTube開始
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await invoke('stop_polling_innertube');
+                    alert('InnerTubeポーリング停止');
+                  } catch (e) {
+                    alert('エラー: ' + (e as Error).message);
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                InnerTube停止
+              </button>
               <TestModeButton />
             </div>
             <CommentControlPanel

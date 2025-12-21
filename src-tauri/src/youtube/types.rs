@@ -123,6 +123,8 @@ pub struct MessageSnippet {
     pub membership_gifting_details: Option<MembershipGiftingDetails>,
 }
 
+// YouTube APIレスポンスの全フィールドをパースするため、一部未使用フィールドあり
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct SuperChatDetails {
     #[serde(rename = "amountDisplayString")]
@@ -132,6 +134,7 @@ pub struct SuperChatDetails {
     pub amount_micros: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct SuperStickerDetails {
     #[serde(rename = "superStickerMetadata")]
@@ -143,6 +146,7 @@ pub struct SuperStickerDetails {
     pub amount_micros: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct SuperStickerMetadata {
     #[serde(rename = "stickerId")]
@@ -151,6 +155,7 @@ pub struct SuperStickerMetadata {
     pub alt_text: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct MembershipGiftingDetails {
     #[serde(rename = "giftMembershipsCount")]

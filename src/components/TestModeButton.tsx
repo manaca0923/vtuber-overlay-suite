@@ -1,15 +1,31 @@
 import { useState } from 'react';
 import { sendTestComment } from '../types/commands';
+import type { TestMessageType } from '../types/commands';
+
+const MESSAGE_TYPES: { value: TestMessageType; label: string; color: string }[] = [
+  { value: 'text', label: '通常コメント', color: 'bg-gray-100 text-gray-700' },
+  { value: 'superChat', label: 'スーパーチャット', color: 'bg-red-100 text-red-700' },
+  { value: 'superSticker', label: 'スーパーステッカー', color: 'bg-orange-100 text-orange-700' },
+  { value: 'membership', label: 'メンバーシップ', color: 'bg-green-100 text-green-700' },
+  { value: 'membershipGift', label: 'メンバーシップギフト', color: 'bg-purple-100 text-purple-700' },
+];
 
 const PRESETS = {
-  short: { text: 'こんにちは！', author: 'テストユーザー' },
+  short: { text: 'こんにちは！', author: 'テストユーザー', messageType: 'text' as TestMessageType },
   long: {
     text: 'これは長文コメントのテストです。'.repeat(10),
     author: '長文太郎',
+    messageType: 'text' as TestMessageType,
   },
   superchat: {
     text: 'スパチャありがとうございます！',
     author: 'スパチャ太郎',
+    messageType: 'superChat' as TestMessageType,
+  },
+  membership: {
+    text: 'メンバーになりました！',
+    author: 'メンバー太郎',
+    messageType: 'membership' as TestMessageType,
   },
 } as const;
 
@@ -17,6 +33,7 @@ export function TestModeButton() {
   const [showDialog, setShowDialog] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [authorName, setAuthorName] = useState('テストユーザー');
+  const [messageType, setMessageType] = useState<TestMessageType>('text');
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -30,8 +47,9 @@ export function TestModeButton() {
     setMessage('');
 
     try {
-      await sendTestComment(commentText, authorName || 'テストユーザー');
-      setMessage('✓ テストコメントを送信しました');
+      await sendTestComment(commentText, authorName || 'テストユーザー', messageType);
+      const typeLabel = MESSAGE_TYPES.find(t => t.value === messageType)?.label || 'コメント';
+      setMessage(`✓ ${typeLabel}を送信しました`);
       setTimeout(() => {
         setMessage('');
         setCommentText('');
@@ -45,9 +63,10 @@ export function TestModeButton() {
   };
 
   const handlePreset = (preset: keyof typeof PRESETS) => {
-    const { text, author } = PRESETS[preset];
+    const { text, author, messageType: presetType } = PRESETS[preset];
     setCommentText(text);
     setAuthorName(author);
+    setMessageType(presetType);
   };
 
   return (
@@ -73,25 +92,53 @@ export function TestModeButton() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   プリセット
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handlePreset('short')}
-                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors text-sm"
+                    className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors text-sm"
                   >
-                    通常コメント
+                    通常
                   </button>
                   <button
                     onClick={() => handlePreset('long')}
-                    className="px-4 py-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors text-sm"
+                    className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors text-sm"
                   >
-                    長文テスト
+                    長文
                   </button>
                   <button
                     onClick={() => handlePreset('superchat')}
-                    className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition-colors text-sm"
+                    className="px-3 py-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors text-sm"
                   >
-                    スーパーチャット風
+                    スパチャ
                   </button>
+                  <button
+                    onClick={() => handlePreset('membership')}
+                    className="px-3 py-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors text-sm"
+                  >
+                    メンバー
+                  </button>
+                </div>
+              </div>
+
+              {/* メッセージタイプ選択 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  メッセージタイプ
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {MESSAGE_TYPES.map((type) => (
+                    <button
+                      key={type.value}
+                      onClick={() => setMessageType(type.value)}
+                      className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                        messageType === type.value
+                          ? `${type.color} ring-2 ring-offset-1 ring-gray-400 font-medium`
+                          : `${type.color} opacity-60 hover:opacity-100`
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 

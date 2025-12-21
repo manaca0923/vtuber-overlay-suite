@@ -333,14 +333,38 @@ pub struct PollingStateData {
 }
 
 /// テストモード: ダミーコメントを送信
+/// message_type_name: "text" | "superChat" | "superSticker" | "membership" | "membershipGift"
 #[tauri::command]
 pub async fn send_test_comment(
     comment_text: String,
     author_name: String,
+    message_type_name: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     use crate::youtube::types::MessageType;
     use chrono::Utc;
+
+    // メッセージタイプを決定
+    let message_type = match message_type_name.as_deref() {
+        Some("superChat") => MessageType::SuperChat {
+            amount: "¥1,000".to_string(),
+            currency: "JPY".to_string(),
+        },
+        Some("superSticker") => MessageType::SuperSticker {
+            sticker_id: "test-sticker".to_string(),
+        },
+        Some("membership") => MessageType::Membership {
+            level: "New Member".to_string(),
+        },
+        Some("membershipGift") => MessageType::MembershipGift { count: 5 },
+        _ => MessageType::Text,
+    };
+
+    // バッジ設定（メンバーシップ系はis_memberをtrueに）
+    let is_member = matches!(
+        message_type,
+        MessageType::Membership { .. } | MessageType::MembershipGift { .. }
+    );
 
     // ダミーコメント作成
     let test_message = ChatMessage {
@@ -352,9 +376,9 @@ pub async fn send_test_comment(
         published_at: Utc::now(),
         is_owner: false,
         is_moderator: false,
-        is_member: false,
+        is_member,
         is_verified: false,
-        message_type: MessageType::Text,
+        message_type,
         message_runs: None,
     };
 

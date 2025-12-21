@@ -24,4 +24,7 @@ pub mod types;
 
 pub use client::InnerTubeClient;
 pub use parser::{parse_chat_response, clear_emoji_cache};
+// types::*は現在InnerTubeポーリングでのみ内部使用されるため、
+// 外部からの使用はない。将来のフル統合に向けて保持。
+#[allow(unused_imports)]
 pub use types::*;

@@ -72,11 +72,11 @@ pub fn delete_api_key() -> Result<(), KeyringError> {
 pub fn has_api_key() -> Result<bool, KeyringError> {
     match get_api_key() {
         Ok(_) => {
-            log::info!("has_api_key: true (API key found in keyring)");
+            log::debug!("has_api_key: true (API key found in keyring)");
             Ok(true)
         }
         Err(KeyringError::NotFound) => {
-            log::info!("has_api_key: false (API key not found in keyring)");
+            log::debug!("has_api_key: false (API key not found in keyring)");
             Ok(false)
         }
         Err(e) => {

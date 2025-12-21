@@ -333,7 +333,7 @@
         if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
           root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
         }
-        if (settings.comment.maxCount && isValidNumber(settings.comment.maxCount, 5, 50)) {
+        if (settings.comment.maxCount && isValidNumber(settings.comment.maxCount, 5, 30)) {
           maxComments = settings.comment.maxCount;
           // 現在のコメント数が新しい上限を超えている場合、古いコメントを削除
           trimOldComments();
@@ -374,11 +374,16 @@
     // デフォルトのポジションを適用
     updateContainerPosition();
 
-    // 設定取得成功フラグ（fetch失敗時のリカバリー用）
-    let settingsFetchedSuccessfully = false;
+    // 設定取得のバージョン管理（レース条件対策）
+    let settingsVersion = 0;
+    // 初回接続フラグ
+    let isFirstConnection = true;
 
     // HTTP APIから初期設定を取得して適用（タイムアウト付き）
     async function fetchAndApplySettings() {
+      // リクエスト開始時のバージョンを記録
+      const requestVersion = settingsVersion;
+
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒タイムアウト
@@ -390,11 +395,17 @@
 
         if (response.ok) {
           const settings = await response.json();
+
+          // レース条件チェック: リクエスト中にWSで設定が更新されていたらスキップ
+          if (settingsVersion > requestVersion) {
+            console.log('Skipping HTTP settings (newer WS settings already applied)');
+            return;
+          }
+
           console.log('Fetched overlay settings:', settings);
           applySettingsUpdate(settings);
           // URLパラメータを再適用（URL優先）
           applyUrlSettings();
-          settingsFetchedSuccessfully = true;
         }
       } catch (e) {
         if (e.name === 'AbortError') {
@@ -402,7 +413,6 @@
         } else {
           console.log('Settings API not available, using defaults');
         }
-        // 失敗時はフラグをfalseのままにして、ws.onopenでリトライ可能にする
       }
     }
 
@@ -412,10 +422,11 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        // 設定取得が未成功の場合は再取得（初回fetch失敗時または再接続時）
-        if (!settingsFetchedSuccessfully) {
+        // 再接続時は設定を再取得（接続断中の変更を反映するため）
+        if (!isFirstConnection) {
           fetchAndApplySettings();
         }
+        isFirstConnection = false;
       };
 
       ws.onmessage = (event) => {
@@ -424,6 +435,8 @@
           if (data.type === 'comment:add') {
             addComment(data.payload);
           } else if (data.type === 'settings:update') {
+            // WSからの設定更新はバージョンをインクリメント（レース条件対策）
+            settingsVersion++;
             applySettingsUpdate(data.payload);
             // URLパラメータを再適用（URL優先を維持）
             applyUrlSettings();

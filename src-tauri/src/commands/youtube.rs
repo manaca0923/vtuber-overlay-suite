@@ -563,10 +563,13 @@ pub async fn test_innertube_connection(video_id: String) -> Result<String, Strin
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex as TokioMutex;
+use tokio::task::JoinHandle;
 
 // グローバルなInnerTubeポーリング状態
 static INNERTUBE_RUNNING: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceLock::new();
 static INNERTUBE_CLIENT: std::sync::OnceLock<Arc<TokioMutex<Option<innertube::InnerTubeClient>>>> =
+    std::sync::OnceLock::new();
+static INNERTUBE_HANDLE: std::sync::OnceLock<Arc<TokioMutex<Option<JoinHandle<()>>>>> =
     std::sync::OnceLock::new();
 
 fn get_innertube_running() -> &'static Arc<AtomicBool> {
@@ -576,6 +579,10 @@ fn get_innertube_running() -> &'static Arc<AtomicBool> {
 fn get_innertube_client(
 ) -> &'static Arc<TokioMutex<Option<innertube::InnerTubeClient>>> {
     INNERTUBE_CLIENT.get_or_init(|| Arc::new(TokioMutex::new(None)))
+}
+
+fn get_innertube_handle() -> &'static Arc<TokioMutex<Option<JoinHandle<()>>>> {
+    INNERTUBE_HANDLE.get_or_init(|| Arc::new(TokioMutex::new(None)))
 }
 
 /// InnerTube APIを使用したポーリングを開始
@@ -593,7 +600,7 @@ pub async fn start_polling_innertube(
         video_id
     );
 
-    // 相互排他: 公式ポーリングが動いていたら停止
+    // 相互排他: 公式ポーリングが動いていたら停止してUI通知
     {
         let poller_lock = state
             .poller
@@ -603,16 +610,29 @@ pub async fn start_polling_innertube(
             if poller.is_running() {
                 log::info!("Stopping official polling (mutual exclusion)");
                 poller.stop();
+                // UI更新のためStopped通知を送信
+                if let Err(e) = app.emit("polling-event", PollingEvent::Stopped {
+                    reason: "InnerTubeポーリングに切り替え".to_string(),
+                }) {
+                    log::error!("Failed to emit stopped event: {}", e);
+                }
             }
         }
     }
 
-    // 既存のInnerTubeポーリングを停止
-    if get_innertube_running().load(Ordering::SeqCst) {
-        log::info!("Stopping existing InnerTube polling");
-        get_innertube_running().store(false, Ordering::SeqCst);
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    // 既存のInnerTubeポーリングを停止（JoinHandleをabort）
+    {
+        let mut handle_lock = get_innertube_handle().lock().await;
+        if let Some(handle) = handle_lock.take() {
+            log::info!("Aborting existing InnerTube polling task");
+            handle.abort();
+        }
     }
+    get_innertube_running().store(false, Ordering::SeqCst);
+
+    // 動画切替のため絵文字キャッシュをクリア
+    innertube::clear_emoji_cache();
+    log::info!("Cleared emoji cache for new video");
 
     // クライアントを初期化
     let mut client = innertube::InnerTubeClient::new(video_id.clone()).map_err(|e| {
@@ -639,11 +659,11 @@ pub async fn start_polling_innertube(
     // WebSocketサーバー状態を取得
     let server_state = Arc::clone(&state.server);
 
-    // ポーリングループを開始
+    // ポーリングループを開始（JoinHandleを保持）
     let running = Arc::clone(get_innertube_running());
     let client_mutex = Arc::clone(get_innertube_client());
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         log::info!("InnerTube polling loop started");
 
         // 重複排除用のメッセージIDセット（挿入順を維持）
@@ -681,10 +701,12 @@ pub async fn start_polling_innertube(
                 .filter(|m| !seen_ids.contains(&m.id))
                 .collect();
 
-            // 見たIDを記録（順序も維持）
+            // 見たIDを記録（順序も維持、重複はスキップ）
             for message in &new_messages {
-                seen_ids.insert(message.id.clone());
-                seen_order.push_back(message.id.clone());
+                // insertはtrueを返す＝新規追加、falseは既存（同一レスポンス内重複）
+                if seen_ids.insert(message.id.clone()) {
+                    seen_order.push_back(message.id.clone());
+                }
             }
 
             // メモリリーク防止: 古いIDから削除（FIFO方式で一定数に保つ）
@@ -731,6 +753,12 @@ pub async fn start_polling_innertube(
         log::info!("InnerTube polling loop ended");
     });
 
+    // JoinHandleを保存
+    {
+        let mut handle_lock = get_innertube_handle().lock().await;
+        *handle_lock = Some(handle);
+    }
+
     Ok(())
 }
 
@@ -739,6 +767,14 @@ pub async fn start_polling_innertube(
 pub async fn stop_polling_innertube() -> Result<(), String> {
     log::info!("Stopping InnerTube polling");
     get_innertube_running().store(false, Ordering::SeqCst);
+
+    // JoinHandleをabort
+    {
+        let mut handle_lock = get_innertube_handle().lock().await;
+        if let Some(handle) = handle_lock.take() {
+            handle.abort();
+        }
+    }
 
     // クライアントをクリア
     {

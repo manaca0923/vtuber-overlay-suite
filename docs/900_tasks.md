@@ -553,9 +553,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] Tauriコマンド登録（デバッグ/リリース両対応）
 - [x] フロントエンドからのApiMode切り替えUI対応（テストボタン追加）
 - [x] URLバリデーション改善（fonts.gstatic.com追加、//形式URL正規化）
-- [x] ポーラー相互排他（公式/InnerTube同時起動防止）
-- [x] 重複排除のLRU化（HashSet順序問題修正）
-- [x] 絵文字キャッシュ実装（徐々に解消方式）
+- [x] ポーラー相互排他（公式/InnerTube同時起動防止、Stopped通知付き）
+- [x] 重複排除のLRU化（HashSet順序問題修正、同一レスポンス内重複対応）
+- [x] 絵文字キャッシュ実装（徐々に解消方式、常に最新を上書き）
+- [x] 動画切替時の絵文字キャッシュクリア
+- [x] JoinHandleによる二重ポーリング防止
 - [x] **手動テスト実施** ✅ 2025-12-21
   - video_id: DAdj_xOJDg4 でテスト成功
   - 一部のカスタム絵文字が画像として正常に表示
@@ -568,11 +570,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 1. **キャッシュ構築**: 絵文字オブジェクトを受信したら`ショートカット→EmojiInfo`をグローバルキャッシュに登録
 2. **テキスト変換**: テキストトークン内の`:_xxx:`パターンをキャッシュから画像に変換
 3. **徐々に解消**: 最初はテキスト表示でも、一度絵文字オブジェクトを受信すればキャッシュされ、以降は画像表示
+4. **動画切替時クリア**: InnerTube開始時にキャッシュをクリアし、誤った絵文字表示を防止
 
 #### 実装箇所
 - `src-tauri/src/youtube/innertube/parser.rs`
   - `EMOJI_CACHE`: グローバル絵文字キャッシュ（RwLock<HashMap<String, EmojiInfo>>）
   - `convert_text_with_emoji_cache()`: テキストから絵文字検出・変換
+  - `clear_emoji_cache()`: キャッシュクリア
 
 #### 制限事項
 - 初回表示時はキャッシュが空のためテキスト表示になる場合がある
@@ -584,10 +588,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - 公式APIとの互換性を維持（ChatMessage型は共通）
 - video_idのみで開始可能（APIキー、live_chat_id不要）
 - ポーラー相互排他（公式APIとInnerTubeの同時起動を防止）
+- JoinHandleを保持して二重ポーリングを防止
 
 ### 成果物
-- `src-tauri/src/commands/youtube.rs` - InnerTubeポーリングコマンド追加、相互排他、LRU
-- `src-tauri/src/youtube/innertube/parser.rs` - 絵文字キャッシュ実装
+- `src-tauri/src/commands/youtube.rs` - InnerTubeポーリングコマンド追加、相互排他、LRU、JoinHandle
+- `src-tauri/src/youtube/innertube/parser.rs` - 絵文字キャッシュ実装（上書き対応）
+- `src-tauri/src/youtube/innertube/mod.rs` - clear_emoji_cacheエクスポート
 - `src-tauri/src/lib.rs` - コマンド登録
 - `src-tauri/Cargo.toml` - once_cell依存追加
 - `src/App.tsx` - InnerTubeテストボタン追加

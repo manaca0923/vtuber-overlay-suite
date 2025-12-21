@@ -328,13 +328,10 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
                 is_custom_emoji: emoji.is_custom_emoji.unwrap_or(false),
             };
 
-            // キャッシュに追加（ショートカットごとに登録）
+            // キャッシュに追加/更新（ショートカットごとに登録、常に最新を反映）
             if let Ok(mut cache) = EMOJI_CACHE.write() {
                 for shortcut in &emoji_info.shortcuts {
-                    if !cache.contains_key(shortcut) {
-                        cache.insert(shortcut.clone(), emoji_info.clone());
-                        log::debug!("Cached emoji: {}", shortcut);
-                    }
+                    cache.insert(shortcut.clone(), emoji_info.clone());
                 }
             }
 

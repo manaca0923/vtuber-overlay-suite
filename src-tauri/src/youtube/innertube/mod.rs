@@ -23,6 +23,5 @@ pub mod parser;
 pub mod types;
 
 pub use client::InnerTubeClient;
-pub use parser::parse_chat_response;
+pub use parser::{parse_chat_response, clear_emoji_cache};
 pub use types::*;
-

@@ -27,27 +27,27 @@ export const deleteSetlist = (id: string) =>
   invoke<void>('delete_setlist', { id });
 
 export const addSongToSetlist = (setlistId: string, songId: string) =>
-  invoke<void>('add_song_to_setlist', { setlist_id: setlistId, song_id: songId });
+  invoke<void>('add_song_to_setlist', { setlistId, songId });
 
 export const removeSongFromSetlist = (setlistId: string, setlistSongId: string) =>
-  invoke<void>('remove_song_from_setlist', { setlist_id: setlistId, setlist_song_id: setlistSongId });
+  invoke<void>('remove_song_from_setlist', { setlistId, setlistSongId });
 
 // Song control commands
 export const setCurrentSong = (setlistId: string, position: number) =>
-  invoke<void>('set_current_song', { setlist_id: setlistId, position });
+  invoke<void>('set_current_song', { setlistId, position });
 
 export const nextSong = (setlistId: string) =>
-  invoke<void>('next_song', { setlist_id: setlistId });
+  invoke<void>('next_song', { setlistId });
 
 export const previousSong = (setlistId: string) =>
-  invoke<void>('previous_song', { setlist_id: setlistId });
+  invoke<void>('previous_song', { setlistId });
 
 export const reorderSetlistSongs = (setlistId: string, setlistSongIds: string[]) =>
-  invoke<void>('reorder_setlist_songs', { setlist_id: setlistId, setlist_song_ids: setlistSongIds });
+  invoke<void>('reorder_setlist_songs', { setlistId, setlistSongIds });
 
 export const broadcastSetlistUpdate = (setlistId: string) =>
-  invoke<void>('broadcast_setlist_update', { setlist_id: setlistId });
+  invoke<void>('broadcast_setlist_update', { setlistId });
 
 // Test mode commands
 export const sendTestComment = (commentText: string, authorName: string) =>
-  invoke<void>('send_test_comment', { comment_text: commentText, author_name: authorName });
+  invoke<void>('send_test_comment', { commentText, authorName });

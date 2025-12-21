@@ -80,6 +80,20 @@ export default function Wizard({ onComplete }: WizardProps) {
     onComplete();
   };
 
+  // APIキーをスキップしてInnerTubeモードで続行
+  const handleSkipApiKey = async () => {
+    // ダミーの設定を保存してウィザード完了扱いにする
+    try {
+      await invoke('save_wizard_settings', {
+        videoId: '',
+        liveChatId: '',
+      });
+    } catch (err) {
+      console.error('Failed to save wizard settings:', err);
+    }
+    onComplete();
+  };
+
   const updateWizardData = useCallback((updates: Partial<WizardData>) => {
     setWizardData((prev) => ({ ...prev, ...updates }));
   }, []);
@@ -165,6 +179,7 @@ export default function Wizard({ onComplete }: WizardProps) {
               onValidationChange={(isValid) =>
                 updateWizardData({ apiKeyValid: isValid })
               }
+              onSkip={handleSkipApiKey}
             />
           )}
           {currentStep === 2 && (

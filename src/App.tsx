@@ -28,9 +28,9 @@ function App() {
   useEffect(() => {
     async function initialize() {
       try {
+        // APIキーを読み込む（あれば）
         const hasKey = await invoke<boolean>('has_api_key');
         if (hasKey) {
-          // APIキーを読み込む
           try {
             const key = await invoke<string | null>('get_api_key');
             if (key) {
@@ -39,21 +39,28 @@ function App() {
           } catch (err) {
             console.error('Failed to load API key:', err);
           }
-          // ウィザード設定を読み込む
-          try {
-            const settings = await invoke<WizardSettings | null>('load_wizard_settings');
-            if (settings) {
-              setWizardSettings(settings);
-            }
-          } catch (err) {
-            console.error('Failed to load wizard settings:', err);
+        }
+
+        // ウィザード設定を読み込む
+        let hasWizardSettings = false;
+        try {
+          const settings = await invoke<WizardSettings | null>('load_wizard_settings');
+          if (settings) {
+            setWizardSettings(settings);
+            hasWizardSettings = true;
           }
+        } catch (err) {
+          console.error('Failed to load wizard settings:', err);
+        }
+
+        // APIキーがあるか、ウィザード設定があればメイン画面へ
+        if (hasKey || hasWizardSettings) {
           setAppMode('main');
         } else {
           setAppMode('wizard');
         }
       } catch (err) {
-        console.error('Failed to check API key:', err);
+        console.error('Failed to initialize:', err);
         setAppMode('wizard');
       } finally {
         setIsCheckingFirstLaunch(false);
@@ -178,6 +185,13 @@ function App() {
               apiKey={apiKey}
               videoId={wizardSettings?.video_id ?? ''}
               liveChatId={wizardSettings?.live_chat_id ?? ''}
+              onSettingsChange={(settings) => {
+                setWizardSettings((prev) => ({
+                  video_id: settings.videoId ?? prev?.video_id ?? '',
+                  live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
+                  saved_at: new Date().toISOString(),
+                }));
+              }}
             />
             <ApiKeySetup
               onSettingsChange={(settings) => {

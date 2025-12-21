@@ -6,12 +6,14 @@ interface WizardStep1Props {
   apiKey: string;
   onApiKeyChange: (apiKey: string) => void;
   onValidationChange: (isValid: boolean) => void;
+  onSkip?: () => void; // スキップ用コールバック
 }
 
 export default function WizardStep1({
   apiKey,
   onApiKeyChange,
   onValidationChange,
+  onSkip,
 }: WizardStep1Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -142,6 +144,19 @@ export default function WizardStep1({
             ✓ {success}
           </div>
         )}
+
+        {/* スキップオプション */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <p className="text-sm text-gray-500 mb-3">
+            APIキーがない場合でも、InnerTube（非公式API）を使ってコメントを取得できます。
+          </p>
+          <button
+            onClick={onSkip}
+            className="w-full px-4 py-2 rounded-lg font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            APIキーなしで続行（InnerTubeモード）
+          </button>
+        </div>
       </div>
     </div>
   );

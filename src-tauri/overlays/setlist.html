@@ -358,8 +358,8 @@
     // デフォルトのポジションを適用
     updateContainerPosition();
 
-    // 初回接続フラグ（二重呼び出し防止用）
-    let isInitialConnection = true;
+    // 設定取得成功フラグ（fetch失敗時のリカバリー用）
+    let settingsFetchedSuccessfully = false;
 
     // HTTP APIから初期設定を取得して適用（タイムアウト付き）
     async function fetchAndApplySettings() {
@@ -378,6 +378,7 @@
           applySettingsUpdate(settings);
           // URLパラメータを再適用（URL優先）
           applyUrlSettings();
+          settingsFetchedSuccessfully = true;
         }
       } catch (e) {
         if (e.name === 'AbortError') {
@@ -385,6 +386,7 @@
         } else {
           console.log('Settings API not available, using defaults');
         }
+        // 失敗時はフラグをfalseのままにして、ws.onopenでリトライ可能にする
       }
     }
 
@@ -437,12 +439,11 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
-        // 再接続時のみデータと設定を再取得（初回は既に取得済み）
-        if (!isInitialConnection) {
+        // 設定取得が未成功の場合は再取得（初回fetch失敗時または再接続時）
+        if (!settingsFetchedSuccessfully) {
           fetchAndDisplaySetlist();
           fetchAndApplySettings();
         }
-        isInitialConnection = false;
       };
 
       ws.onmessage = (event) => {
@@ -482,6 +483,8 @@
         updateSetlist(data.payload);
       } else if (data.type === 'settings:update') {
         applySettingsUpdate(data.payload);
+        // URLパラメータを再適用（URL優先を維持）
+        applyUrlSettings();
       }
     }
 

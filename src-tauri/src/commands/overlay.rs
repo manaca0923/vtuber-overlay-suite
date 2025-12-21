@@ -2,6 +2,56 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 
+/// HEXカラーコードのバリデーション (#RRGGBB形式)
+fn is_valid_hex_color(color: &str) -> bool {
+    color.len() == 7
+        && color.starts_with('#')
+        && color[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// オーバーレイ設定のバリデーション
+fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
+    // primaryColorの検証
+    if !is_valid_hex_color(&settings.common.primary_color) {
+        return Err(format!(
+            "Invalid primaryColor: {}. Expected #RRGGBB format.",
+            settings.common.primary_color
+        ));
+    }
+
+    // borderRadiusの検証 (0-32)
+    if settings.common.border_radius > 32 {
+        return Err(format!(
+            "Invalid borderRadius: {}. Expected 0-32.",
+            settings.common.border_radius
+        ));
+    }
+
+    // コメント設定の検証
+    if settings.comment.max_count < 5 || settings.comment.max_count > 30 {
+        return Err(format!(
+            "Invalid maxCount: {}. Expected 5-30.",
+            settings.comment.max_count
+        ));
+    }
+    if settings.comment.font_size < 8 || settings.comment.font_size > 72 {
+        return Err(format!(
+            "Invalid comment fontSize: {}. Expected 8-72.",
+            settings.comment.font_size
+        ));
+    }
+
+    // セットリスト設定の検証
+    if settings.setlist.font_size < 8 || settings.setlist.font_size > 72 {
+        return Err(format!(
+            "Invalid setlist fontSize: {}. Expected 8-72.",
+            settings.setlist.font_size
+        ));
+    }
+
+    Ok(())
+}
+
 /// 共通設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +98,9 @@ pub async fn save_overlay_settings(
     settings: OverlaySettings,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // サーバーサイドバリデーション
+    validate_overlay_settings(&settings)?;
+
     let pool = &state.db;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -99,6 +152,9 @@ pub async fn broadcast_settings_update(
     settings: OverlaySettings,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // サーバーサイドバリデーション
+    validate_overlay_settings(&settings)?;
+
     use crate::server::types::{
         CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload, WsMessage,
     };

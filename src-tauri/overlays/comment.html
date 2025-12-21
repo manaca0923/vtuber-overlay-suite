@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -47,10 +48,25 @@
     }
 
     /* 表示位置のスタイル */
-    #comment-container.position-top-left { top: 0; left: 0; }
-    #comment-container.position-top-right { top: 0; right: 0; }
-    #comment-container.position-bottom-left { bottom: 0; left: 0; }
-    #comment-container.position-bottom-right { bottom: 0; right: 0; }
+    #comment-container.position-top-left {
+      top: 0;
+      left: 0;
+    }
+
+    #comment-container.position-top-right {
+      top: 0;
+      right: 0;
+    }
+
+    #comment-container.position-bottom-left {
+      bottom: 0;
+      left: 0;
+    }
+
+    #comment-container.position-bottom-right {
+      bottom: 0;
+      right: 0;
+    }
 
     /* bottom配置時はコメントを下から上に積む */
     #comment-container.position-bottom-left,
@@ -161,6 +177,7 @@
         opacity: 0;
         transform: translateY(20px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -172,6 +189,7 @@
         opacity: 1;
         transform: translateY(0);
       }
+
       to {
         opacity: 0;
         transform: translateY(-20px);
@@ -181,8 +199,18 @@
     ::-webkit-scrollbar {
       display: none;
     }
+
+    /* カスタム絵文字（インライン） */
+    .inline-emoji {
+      width: 24px;
+      height: 24px;
+      vertical-align: middle;
+      display: inline;
+      margin: 0 2px;
+    }
   </style>
 </head>
+
 <body>
   <div id="comment-container"></div>
 
@@ -506,6 +534,78 @@
       }
     }
 
+    // URLを正規化（//形式をhttps:に変換）
+    function normalizeUrl(url) {
+      if (!url || typeof url !== 'string') return url;
+      if (url.startsWith('//')) {
+        return 'https:' + url;
+      }
+      return url;
+    }
+
+    // 絵文字URLがYouTubeドメインかどうかを検証
+    function isValidEmojiUrl(url) {
+      if (!url || typeof url !== 'string') return false;
+      try {
+        // normalizeUrlを再利用してURL正規化
+        const parsed = new URL(normalizeUrl(url));
+        const hostname = parsed.hostname;
+        // YouTube関連ドメインのみ許可（ワイルドカードパターン対応）
+        // 完全一致
+        const exactHosts = ['youtube.com', 'www.youtube.com', 'fonts.gstatic.com'];
+        if (exactHosts.includes(hostname)) return true;
+        // サフィックスマッチ（*.ggpht.com, *.googleusercontent.com, *.ytimg.com）
+        const allowedSuffixes = ['.ggpht.com', '.googleusercontent.com', '.ytimg.com', '.gstatic.com'];
+        return allowedSuffixes.some(suffix => hostname.endsWith(suffix));
+      } catch {
+        return false;
+      }
+    }
+
+    // 絵文字を含むメッセージをレンダリング
+    function renderMessageWithEmoji(container, messageRuns) {
+      messageRuns.forEach(run => {
+        if (run.text !== undefined) {
+          // テキスト部分
+          container.appendChild(document.createTextNode(run.text));
+        } else if (run.emoji) {
+          // 絵文字部分
+          // 最適なサイズのサムネイルを選択（24px以上を優先）
+          const thumbnails = run.emoji.image?.thumbnails || [];
+          const thumb = thumbnails.find(t => t.width >= 24) || thumbnails[0];
+
+          // デバッグ: 絵文字データを確認
+          const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
+          if (!thumb) {
+            console.warn('[Emoji] No thumbnail for:', shortcut, run.emoji);
+          } else if (!isValidEmojiUrl(thumb.url)) {
+            console.warn('[Emoji] Invalid URL for:', shortcut, thumb.url);
+          }
+
+          // セキュリティ: YouTubeドメインのURLのみ許可
+          if (thumb && isValidEmojiUrl(thumb.url)) {
+            const img = document.createElement('img');
+            img.className = 'inline-emoji';
+            img.alt = shortcut;
+            img.title = shortcut;
+            img.loading = 'lazy'; // 遅延読み込みでパフォーマンス向上
+            // 画像読み込み失敗時はテキストにフォールバック
+            const normalizedUrl = normalizeUrl(thumb.url);
+            img.onerror = function () {
+              console.warn('[Emoji] Image load failed:', shortcut, normalizedUrl);
+              const text = document.createTextNode(shortcut);
+              this.parentNode?.replaceChild(text, this);
+            };
+            img.src = normalizedUrl;
+            container.appendChild(img);
+          } else {
+            // URLが無効またはサムネイルがない場合はショートカットをテキスト表示
+            container.appendChild(document.createTextNode(shortcut));
+          }
+        }
+      });
+    }
+
     function createCommentElement(comment) {
       const div = document.createElement('div');
       div.className = 'comment';
@@ -606,7 +706,13 @@
 
       const message = document.createElement('div');
       message.className = 'message';
-      message.textContent = comment.message;
+
+      // messageRunsがある場合は絵文字を含むレンダリング
+      if (comment.messageRuns && comment.messageRuns.length > 0) {
+        renderMessageWithEmoji(message, comment.messageRuns);
+      } else {
+        message.textContent = comment.message;
+      }
 
       content.appendChild(header);
       content.appendChild(message);
@@ -622,4 +728,5 @@
     connectWebSocket();
   </script>
 </body>
+
 </html>

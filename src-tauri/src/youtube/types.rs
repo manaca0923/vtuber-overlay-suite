@@ -37,6 +37,41 @@ pub struct ChatMessage {
     pub is_member: bool,           // → isMember (isChatSponsor)
     pub is_verified: bool,         // → isVerified
     pub message_type: MessageType, // → messageType
+    /// InnerTube API使用時のみ設定される構造化メッセージ（絵文字情報を含む）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_runs: Option<Vec<MessageRun>>,
+}
+
+/// メッセージのruns配列要素（テキストまたは絵文字）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MessageRun {
+    Text { text: String },
+    Emoji { emoji: EmojiInfo },
+}
+
+/// 絵文字情報
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmojiInfo {
+    pub emoji_id: String,
+    pub shortcuts: Vec<String>,
+    pub image: EmojiImage,
+    pub is_custom_emoji: bool,
+}
+
+/// 絵文字画像情報
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmojiImage {
+    pub thumbnails: Vec<EmojiThumbnail>,
+}
+
+/// 絵文字サムネイル
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmojiThumbnail {
+    pub url: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,3 +263,4 @@ pub fn parse_message_type(snippet: &MessageSnippet) -> MessageType {
         }
     }
 }
+

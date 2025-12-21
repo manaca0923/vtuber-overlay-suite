@@ -255,6 +255,7 @@ impl ChatPoller {
                                     is_member: item.author_details.is_chat_sponsor,
                                     is_verified: item.author_details.is_verified,
                                     message_type,
+                                    message_runs: None, // 公式APIでは絵文字情報なし
                                 })
                             })
                             .collect();

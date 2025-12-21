@@ -104,6 +104,8 @@ dependencies = [
  "futures-util",
  "keyring",
  "log",
+ "once_cell",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

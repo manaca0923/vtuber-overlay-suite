@@ -205,20 +205,30 @@
 
 ## T08: 神テンプレ実装 + 簡易設定
 **優先度**: P0 | **見積**: 5日 | **依存**: T05, T07
+**ステータス**: ✅ **完了**
 
 ### チェックリスト
-- [ ] テンプレートCSS変数設計
-- [ ] カラーバリアント切替
-- [ ] 位置設定（上/下/左/右）
-- [ ] 表示ON/OFF切替
-- [ ] フォント設定
-- [ ] 設定UIコンポーネント
-- [ ] 設定の永続化（SQLite）
-- [ ] プレビュー画面
+- [x] テンプレートCSS変数設計
+- [x] カラーバリアント切替（default/sakura/ocean）
+- [x] 位置設定（上/下/左/右）
+- [x] 表示ON/OFF切替
+- [x] フォント設定（fontFamily, fontSize）
+- [x] 設定UIコンポーネント（OverlaySettings.tsx）
+- [x] 設定の永続化（SQLite）
+- [x] プレビュー画面（iframe）
 
 ### テスト項目
-- [ ] 設定変更が即時反映
-- [ ] 設定がアプリ再起動後も保持
+- [x] 設定変更が即時反映（WebSocket broadcast）
+- [x] 設定がアプリ再起動後も保持（DB保存）
+
+### 成果物
+- `src/types/overlaySettings.ts` - 型定義・テーマプリセット
+- `src-tauri/src/commands/overlay.rs` - 保存/読み込み/ブロードキャストコマンド
+- `src/components/settings/` - 設定UIコンポーネント群
+- `src-tauri/overlays/comment.html` - 設定対応・XSS対策
+- `src-tauri/overlays/setlist.html` - 設定対応・マーキー機能
+- `src-tauri/src/server/http.rs` - HTTP API（/api/overlay/settings）
+- `docs/300_overlay-specs.md` - 仕様書更新
 
 ---
 
@@ -428,23 +438,42 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 
 ---
 
-## T13: PoC - streamList（gRPC / InnerTube API）
+## T13: PoC - InnerTube API（HTTP）
 **優先度**: P1 | **見積**: 3日 | **依存**: T02
+**ステータス**: 🔄 **進行中**（Phase 1-4完了、手動テスト待ち）
 
 ### チェックリスト
-- [ ] tonic クレート導入
-- [ ] proto ファイル取得・生成
-- [ ] gRPC 接続確立
-- [ ] ストリーミング受信
-- [ ] 切断検知・再接続
-- [ ] Feature Flag 実装
-- [ ] 安定性レポート作成
-- [ ] **カスタム絵文字（メンバースタンプ）対応**
+- [x] InnerTubeClientモジュール作成（HTTP、reqwestベース）
+- [x] 型定義（InnerTube API固有の型）
+- [x] runsパーサー実装（テキスト・絵文字分離）
+- [x] ChatMessageにmessageRunsフィールド追加
+- [x] Feature Flag実装（ApiMode: official/innertube）
+- [x] テストコマンド実装（test_innertube_connection）
+- [x] オーバーレイ絵文字対応（comment.html）
+- [x] **PRレビュー指摘対応（2025-12-21）**
+  - [x] continuation抽出改善（ライブチャット専用コンテキスト優先）
+  - [x] API key抽出フォールバック（複数パターン対応）
+  - [x] replay_chat_item_action全アクション処理（メッセージ取りこぼし防止）
+  - [x] test_innertube_connectionの本番ビルド無効化
+  - [x] ユニットテスト拡充（45件）
+- [ ] 安定性レポート作成（手動テスト必要）
+- [ ] **カスタム絵文字（メンバースタンプ）対応検証**
 
 ### 判断基準
 - 接続成功率 > 95%
 - 平均再接続時間 < 5秒
 - HTTP/2プロキシ環境での動作
+
+### 既知の制限事項（InnerTube API）
+
+> **注意**: 以下はInnerTube API固有の制限であり、PoC段階では許容とする。
+
+| 制限事項 | 説明 | 対応方針 |
+|----------|------|----------|
+| **is_verified常にfalse** | InnerTube APIにはVerifiedバッジ情報がない | 公式API統合時に対応 |
+| **sticker_idにサムネURL使用** | InnerTube APIにはsticker_idがなく、サムネイルURLで代用 | 表示には支障なし |
+| **ApiMode未接続** | PoC段階のため本番ポーリングには統合していない | 次フェーズで対応予定 |
+| **CLIENT_VERSIONの古さ** | 2023年12月版を使用（無効化リスクあり） | 設定ファイル化を検討 |
 
 ### 調査結果（2025-12-21）
 
@@ -493,9 +522,82 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 一部サービスはローカルファイルベースのマッピング（手動で絵文字画像を配置）を採用。
 
 #### 実装時の選択肢
-1. **InnerTube API追加**: 絵文字画像URL取得可能、クォータ制限なし（推奨）
+1. **InnerTube API追加**: 絵文字画像URL取得可能、クォータ制限なし（推奨）→ **採用**
 2. **ローカルマッピング**: 安定だがユーザーが手動で絵文字画像配置が必要
 3. **ハイブリッド**: 公式API + InnerTubeから絵文字情報のみ取得
+
+### 成果物
+- `src-tauri/src/youtube/innertube/mod.rs` - モジュール定義
+- `src-tauri/src/youtube/innertube/client.rs` - InnerTubeClient（HTTP接続）
+- `src-tauri/src/youtube/innertube/types.rs` - InnerTube API固有の型定義
+- `src-tauri/src/youtube/innertube/parser.rs` - runsパーサー
+- `src-tauri/src/youtube/types.rs` - MessageRun, EmojiInfo型追加
+- `src-tauri/src/youtube/errors.rs` - InnerTube用エラー追加
+- `src-tauri/src/commands/youtube.rs` - ApiMode, test_innertube_connectionコマンド追加
+- `src-tauri/overlays/comment.html` - 絵文字画像レンダリング対応
+
+---
+
+## T14: InnerTube API 本番統合
+**優先度**: P1 | **見積**: 0.5日 | **依存**: T13
+**ステータス**: 🔄 **進行中**
+
+### 概要
+T13で実装したInnerTubeクライアントを本番ポーリングに統合する。
+ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にする。
+
+### チェックリスト
+- [x] InnerTubeポーラー実装（start_polling_innertube, stop_polling_innertube）
+- [x] 重複排除ロジック実装（メッセージIDベース）
+- [x] WebSocketブロードキャスト対応（カスタム絵文字含む）
+- [x] Tauriコマンド登録（デバッグ/リリース両対応）
+- [x] フロントエンドからのApiMode切り替えUI対応（テストボタン追加）
+- [x] URLバリデーション改善（fonts.gstatic.com追加、//形式URL正規化）
+- [x] ポーラー相互排他（公式/InnerTube双方向でJoinHandle abort、Stopped通知付き）
+- [x] 重複排除のLRU化（HashSet順序問題修正、同一レスポンス内重複対応）
+- [x] 絵文字キャッシュ実装（徐々に解消方式、常に最新を上書き）
+- [x] 動画切替時の絵文字キャッシュクリア
+- [x] JoinHandleによる二重ポーリング防止（公式→InnerTube、InnerTube→公式両方対応）
+- [x] **手動テスト実施** ✅ 2025-12-21
+  - video_id: DAdj_xOJDg4 でテスト成功
+  - 一部のカスタム絵文字が画像として正常に表示
+- [ ] **本番UI結線**: 設定画面からApiMode切り替え（次フェーズ）
+- [ ] **自動テスト追加**: 絵文字キャッシュ・ポーラー切替テスト
+
+### 絵文字キャッシュ機能（実装済み 2025-12-21）
+
+#### 動作原理
+1. **キャッシュ構築**: 絵文字オブジェクトを受信したら`ショートカット→EmojiInfo`をグローバルキャッシュに登録
+2. **テキスト変換**: テキストトークン内の`:_xxx:`パターンをキャッシュから画像に変換
+3. **徐々に解消**: 最初はテキスト表示でも、一度絵文字オブジェクトを受信すればキャッシュされ、以降は画像表示
+4. **動画切替時クリア**: InnerTube開始時にキャッシュをクリアし、誤った絵文字表示を防止
+
+#### 実装箇所
+- `src-tauri/src/youtube/innertube/parser.rs`
+  - `EMOJI_CACHE`: グローバル絵文字キャッシュ（RwLock<HashMap<String, EmojiInfo>>）
+  - `convert_text_with_emoji_cache()`: テキストから絵文字検出・変換
+  - `clear_emoji_cache()`: キャッシュクリア
+
+#### 制限事項
+- 初回表示時はキャッシュが空のためテキスト表示になる場合がある
+- 同一配信内で一度も絵文字オブジェクトとして受信していない絵文字はテキストのまま
+
+### 設計方針
+- 公式APIとは別に `start_polling_innertube` / `stop_polling_innertube` を提供
+- InnerTubeClient をグローバル状態で管理し、ポーリングループで使用
+- 公式APIとの互換性を維持（ChatMessage型は共通）
+- video_idのみで開始可能（APIキー、live_chat_id不要）
+- ポーラー相互排他（公式APIとInnerTubeの同時起動を防止）
+- JoinHandleを保持して二重ポーリングを防止
+
+### 成果物
+- `src-tauri/src/commands/youtube.rs` - InnerTubeポーリングコマンド追加、相互排他、LRU、JoinHandle
+- `src-tauri/src/youtube/innertube/parser.rs` - 絵文字キャッシュ実装（上書き対応）
+- `src-tauri/src/youtube/innertube/mod.rs` - clear_emoji_cacheエクスポート
+- `src-tauri/src/lib.rs` - コマンド登録
+- `src-tauri/Cargo.toml` - once_cell依存追加
+- `src/App.tsx` - InnerTubeテストボタン追加
+- `src-tauri/overlays/comment.html` - URLバリデーション改善、//形式URL正規化
 
 ---
 
@@ -510,14 +612,14 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 | T05 | ✅ 完了 | 2025-12-18（T04で実装済み、追加修正完了） |
 | T06 | ✅ 完了 | 2025-12-19（Phase 1-3すべて完了） |
 | T07 | ✅ 完了 | 2025-12-18（T04で実装済み） |
-| T08 | ⬜ 未着手 | - |
+| T08 | ✅ 完了 | 2025-12-21 |
 | T09 | ⬜ 未着手 | - |
 | T10 | ✅ 完了 | 2025-12-20（Phase 1-4すべて完了） |
 | T10-B | ✅ 完了 | 2025-12-20（レビュー指摘対応完了） |
 | T10-C | ✅ 完了 | 2025-12-20（追加レビュー指摘対応） |
 | T11 | ✅ 完了 | 2025-12-20 |
 | T12 | ⬜ 未着手 | - |
-| T13 | ⬜ 未着手 | - |
+| T13 | 🔄 進行中 | - |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
@@ -631,4 +733,43 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
   - 使用方法
   - システム要件
 
+- [ ] **InnerTube API ドキュメント追記** (PR#24)
+  - InnerTube APIの制約（rate limit、仕様変更リスク）について
+  - docs/200_youtube-api.mdへの追記を検討
+
+### InnerTube API関連（PR#24）
+
+- [x] **test_innertube_connectionの本番無効化** ✅ 対応済み（2025-12-21）
+  - `lib.rs`で`#[cfg(debug_assertions)]`による条件付きコンパイル分岐を実装
+  - デバッグビルドのみtest_innertube_connectionコマンドを登録
+
+- [ ] **クライアントバージョンの自動更新機構**
+  - `CLIENT_VERSION`（2023年12月）がYouTube側で無効化される可能性
+  - 設定ファイルまたはフォールバック機構を検討
+
+- [x] **InnerTubeテストカバレッジの拡充** ✅ 対応済み（2025-12-21）
+  - `parse_chat_response`: 空レスポンス、no_continuation、no_actions、empty_actions
+  - `parse_author_badges`: 複数バッジ同時存在、unknown_type、verified_not_owner
+  - `extract_continuation`: 複数パターン（invalidation/timed/reload/generic）＋優先度テスト
+  - `extract_api_key`: 複数パターン（標準/camelCase/ytcfg形式）
+  - `parse_action`: replay複数アクション対応（回帰防止テスト追加）
+  - テスト合計: **50件**
+
+- [x] **continuation抽出の堅牢化** ✅ 対応済み（2025-12-21）
+  - ライブチャット専用コンテキスト（invalidationContinuationData, timedContinuationData）を優先
+  - 汎用パターンはフォールバックとして使用（警告ログ付き）
+  - **設計判断**: 複数のinvalidationContinuationDataが存在する場合は最初のマッチを使用
+    - 通常のライブチャットページでは1つのみ存在する前提
+    - 複数存在するケースはPoC段階では想定外とする
+
+- [x] **API key抽出のフォールバック** ✅ 対応済み（2025-12-21）
+  - 複数パターン対応: "INNERTUBE_API_KEY", "innertubeApiKey", ytcfg.set形式
+
+- [x] **replay_chat_item_action全アクション処理** ✅ 対応済み（2025-12-21）
+  - リプレイ時の複数メッセージ取りこぼしを防止
+  - parse_actionがVec<ChatMessage>を返すように変更
+  - **回帰防止テスト追加**: 複数メッセージ/空リプレイ/単一メッセージの3ケース
+
 ---
+
+

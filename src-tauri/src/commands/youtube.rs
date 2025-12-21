@@ -114,6 +114,13 @@ pub async fn start_polling(
 ) -> Result<(), String> {
     log::info!("Starting polling for live chat ID: {}", live_chat_id);
 
+    // 相互排他: InnerTubeポーリングが動いていたら停止
+    if get_innertube_running().load(Ordering::SeqCst) {
+        log::info!("Stopping InnerTube polling (mutual exclusion)");
+        get_innertube_running().store(false, Ordering::SeqCst);
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+
     // 新しいポーラーを作成（ロックの外で）
     let poller = ChatPoller::new(api_key);
 
@@ -586,7 +593,21 @@ pub async fn start_polling_innertube(
         video_id
     );
 
-    // 既存のポーリングを停止
+    // 相互排他: 公式ポーリングが動いていたら停止
+    {
+        let poller_lock = state
+            .poller
+            .lock()
+            .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
+        if let Some(poller) = poller_lock.as_ref() {
+            if poller.is_running() {
+                log::info!("Stopping official polling (mutual exclusion)");
+                poller.stop();
+            }
+        }
+    }
+
+    // 既存のInnerTubeポーリングを停止
     if get_innertube_running().load(Ordering::SeqCst) {
         log::info!("Stopping existing InnerTube polling");
         get_innertube_running().store(false, Ordering::SeqCst);
@@ -625,8 +646,10 @@ pub async fn start_polling_innertube(
     tokio::spawn(async move {
         log::info!("InnerTube polling loop started");
 
-        // 重複排除用のメッセージIDセット
+        // 重複排除用のメッセージIDセット（挿入順を維持）
         let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut seen_order: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+        const MAX_SEEN_IDS: usize = 10000;
 
         while running.load(Ordering::SeqCst) {
             let timeout_ms;
@@ -658,17 +681,18 @@ pub async fn start_polling_innertube(
                 .filter(|m| !seen_ids.contains(&m.id))
                 .collect();
 
-            // 見たIDを記録
+            // 見たIDを記録（順序も維持）
             for message in &new_messages {
                 seen_ids.insert(message.id.clone());
+                seen_order.push_back(message.id.clone());
             }
 
-            // メモリリーク防止: 古いIDを削除（10000件を超えたら古い半分を削除）
-            if seen_ids.len() > 10000 {
-                let keep_count = seen_ids.len() / 2;
-                let to_remove: Vec<String> = seen_ids.iter().take(keep_count).cloned().collect();
-                for id in to_remove {
-                    seen_ids.remove(&id);
+            // メモリリーク防止: 古いIDから削除（FIFO方式で一定数に保つ）
+            while seen_ids.len() > MAX_SEEN_IDS {
+                if let Some(oldest_id) = seen_order.pop_front() {
+                    seen_ids.remove(&oldest_id);
+                } else {
+                    break;
                 }
             }
 

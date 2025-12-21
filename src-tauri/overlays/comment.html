@@ -538,7 +538,12 @@
     function isValidEmojiUrl(url) {
       if (!url || typeof url !== 'string') return false;
       try {
-        const parsed = new URL(url);
+        // //形式のプロトコル相対URLをhttps:に正規化
+        let normalizedUrl = url;
+        if (url.startsWith('//')) {
+          normalizedUrl = 'https:' + url;
+        }
+        const parsed = new URL(normalizedUrl);
         const hostname = parsed.hostname;
         // YouTube関連ドメインのみ許可（ワイルドカードパターン対応）
         // 完全一致
@@ -550,6 +555,15 @@
       } catch {
         return false;
       }
+    }
+
+    // URLを正規化（//形式をhttps:に変換）
+    function normalizeUrl(url) {
+      if (!url || typeof url !== 'string') return url;
+      if (url.startsWith('//')) {
+        return 'https:' + url;
+      }
+      return url;
     }
 
     // 絵文字を含むメッセージをレンダリング
@@ -580,12 +594,13 @@
             img.title = shortcut;
             img.loading = 'lazy'; // 遅延読み込みでパフォーマンス向上
             // 画像読み込み失敗時はテキストにフォールバック
+            const normalizedUrl = normalizeUrl(thumb.url);
             img.onerror = function () {
-              console.warn('[Emoji] Image load failed:', shortcut, thumb.url);
+              console.warn('[Emoji] Image load failed:', shortcut, normalizedUrl);
               const text = document.createTextNode(shortcut);
               this.parentNode?.replaceChild(text, this);
             };
-            img.src = thumb.url;
+            img.src = normalizedUrl;
             container.appendChild(img);
           } else {
             // URLが無効またはサムネイルがない場合はショートカットをテキスト表示

@@ -1,9 +1,39 @@
 //! InnerTube レスポンスパーサー
 
 use chrono::{TimeZone, Utc};
+use std::collections::HashMap;
+use std::sync::RwLock;
+use once_cell::sync::Lazy;
+use regex::Regex;
 
 use super::types::*;
 use crate::youtube::types::{ChatMessage, EmojiImage, EmojiInfo, EmojiThumbnail, MessageRun, MessageType};
+
+/// 絵文字キャッシュ: ショートカット -> EmojiInfo
+/// InnerTubeレスポンスで取得した絵文字情報をキャッシュし、
+/// テキストトークンで送られてきた絵文字ショートカットを画像に変換するために使用
+static EMOJI_CACHE: Lazy<RwLock<HashMap<String, EmojiInfo>>> = Lazy::new(|| {
+    RwLock::new(HashMap::new())
+});
+
+/// 絵文字ショートカットパターン（:_xxx:形式）
+static EMOJI_SHORTCUT_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r":_[^:]+:").expect("Failed to compile emoji shortcut regex")
+});
+
+/// 絵文字キャッシュをクリア（テスト用・デバッグ用）
+#[allow(dead_code)]
+pub fn clear_emoji_cache() {
+    if let Ok(mut cache) = EMOJI_CACHE.write() {
+        cache.clear();
+    }
+}
+
+/// 絵文字キャッシュのサイズを取得（デバッグ用）
+#[allow(dead_code)]
+pub fn get_emoji_cache_size() -> usize {
+    EMOJI_CACHE.read().map(|c| c.len()).unwrap_or(0)
+}
 
 /// InnerTubeレスポンスをChatMessageリストに変換
 pub fn parse_chat_response(response: InnerTubeChatResponse) -> Vec<ChatMessage> {
@@ -258,48 +288,63 @@ fn parse_gift_message(msg: LiveChatSponsorGiftRenderer) -> ChatMessage {
     }
 }
 
+
 /// runs配列をMessageRunリストに変換
+/// 
+/// 絵文字キャッシュ機能:
+/// 1. 絵文字オブジェクトを受信したらショートカット→EmojiInfoをキャッシュ
+/// 2. テキストトークン内の:_xxx:パターンをキャッシュから画像に変換
 fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
     let runs = runs.as_ref()?;
     if runs.is_empty() {
         return None;
     }
 
-    let parsed: Vec<MessageRun> = runs
-        .iter()
-        .filter_map(|run| {
-            if let Some(text) = &run.text {
-                Some(MessageRun::Text { text: text.clone() })
-            } else if let Some(emoji) = &run.emoji {
-                // 空のemoji_idは無効なのでスキップ
-                if emoji.emoji_id.is_empty() {
-                    log::debug!("Skipping emoji with empty emoji_id");
-                    return None;
-                }
-                Some(MessageRun::Emoji {
-                    emoji: EmojiInfo {
-                        emoji_id: emoji.emoji_id.clone(),
-                        shortcuts: emoji.shortcuts.clone().unwrap_or_default(),
-                        image: EmojiImage {
-                            thumbnails: emoji
-                                .image
-                                .thumbnails
-                                .iter()
-                                .map(|t| EmojiThumbnail {
-                                    url: t.url.clone(),
-                                    width: t.width.unwrap_or(24),
-                                    height: t.height.unwrap_or(24),
-                                })
-                                .collect(),
-                        },
-                        is_custom_emoji: emoji.is_custom_emoji.unwrap_or(false),
-                    },
-                })
-            } else {
-                None
+    let mut parsed: Vec<MessageRun> = Vec::new();
+
+    for run in runs {
+        if let Some(emoji) = &run.emoji {
+            // 空のemoji_idは無効なのでスキップ
+            if emoji.emoji_id.is_empty() {
+                log::debug!("Skipping emoji with empty emoji_id");
+                continue;
             }
-        })
-        .collect();
+
+            let emoji_info = EmojiInfo {
+                emoji_id: emoji.emoji_id.clone(),
+                shortcuts: emoji.shortcuts.clone().unwrap_or_default(),
+                image: EmojiImage {
+                    thumbnails: emoji
+                        .image
+                        .thumbnails
+                        .iter()
+                        .map(|t| EmojiThumbnail {
+                            url: t.url.clone(),
+                            width: t.width.unwrap_or(24),
+                            height: t.height.unwrap_or(24),
+                        })
+                        .collect(),
+                },
+                is_custom_emoji: emoji.is_custom_emoji.unwrap_or(false),
+            };
+
+            // キャッシュに追加（ショートカットごとに登録）
+            if let Ok(mut cache) = EMOJI_CACHE.write() {
+                for shortcut in &emoji_info.shortcuts {
+                    if !cache.contains_key(shortcut) {
+                        cache.insert(shortcut.clone(), emoji_info.clone());
+                        log::debug!("Cached emoji: {}", shortcut);
+                    }
+                }
+            }
+
+            parsed.push(MessageRun::Emoji { emoji: emoji_info });
+        } else if let Some(text) = &run.text {
+            // テキストトークン内の:_xxx:パターンをキャッシュから画像に変換
+            let converted = convert_text_with_emoji_cache(text);
+            parsed.extend(converted);
+        }
+    }
 
     if parsed.is_empty() {
         None
@@ -307,6 +352,62 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
         Some(parsed)
     }
 }
+
+/// テキスト内の:_xxx:パターンを絵文字キャッシュから画像に変換
+/// 
+/// 例: "こんにちは:_草lol:です" → [Text("こんにちは"), Emoji(...), Text("です")]
+fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
+    let cache = match EMOJI_CACHE.read() {
+        Ok(c) => c,
+        Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
+    };
+
+    // キャッシュが空ならそのままテキストを返す
+    if cache.is_empty() {
+        return vec![MessageRun::Text { text: text.to_string() }];
+    }
+
+    let mut result: Vec<MessageRun> = Vec::new();
+    let mut last_end = 0;
+
+    for mat in EMOJI_SHORTCUT_REGEX.find_iter(text) {
+        let shortcut = mat.as_str();
+
+        // マッチ前のテキストを追加
+        if mat.start() > last_end {
+            let prefix = &text[last_end..mat.start()];
+            if !prefix.is_empty() {
+                result.push(MessageRun::Text { text: prefix.to_string() });
+            }
+        }
+
+        // キャッシュに絵文字があれば画像に変換、なければテキストのまま
+        if let Some(emoji_info) = cache.get(shortcut) {
+            result.push(MessageRun::Emoji { emoji: emoji_info.clone() });
+            log::debug!("Converted text emoji from cache: {}", shortcut);
+        } else {
+            result.push(MessageRun::Text { text: shortcut.to_string() });
+        }
+
+        last_end = mat.end();
+    }
+
+    // 残りのテキストを追加
+    if last_end < text.len() {
+        let suffix = &text[last_end..];
+        if !suffix.is_empty() {
+            result.push(MessageRun::Text { text: suffix.to_string() });
+        }
+    }
+
+    // マッチがなかった場合は元のテキストをそのまま返す
+    if result.is_empty() {
+        result.push(MessageRun::Text { text: text.to_string() });
+    }
+
+    result
+}
+
 
 /// MessageRunリストからプレーンテキストを抽出
 fn extract_plain_text(runs: &Option<Vec<MessageRun>>) -> String {

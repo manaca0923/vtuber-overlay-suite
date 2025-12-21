@@ -540,7 +540,7 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
 
 ## T14: InnerTube API 本番統合
 **優先度**: P1 | **見積**: 0.5日 | **依存**: T13
-**ステータス**: 🔄 **進行中**（一部絵文字がテキスト表示となる課題あり）
+**ステータス**: 🔄 **進行中**
 
 ### 概要
 T13で実装したInnerTubeクライアントを本番ポーリングに統合する。
@@ -552,85 +552,46 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] WebSocketブロードキャスト対応（カスタム絵文字含む）
 - [x] Tauriコマンド登録（デバッグ/リリース両対応）
 - [x] フロントエンドからのApiMode切り替えUI対応（テストボタン追加）
-- [x] URLバリデーション改善（fonts.gstatic.com追加）
+- [x] URLバリデーション改善（fonts.gstatic.com追加、//形式URL正規化）
+- [x] ポーラー相互排他（公式/InnerTube同時起動防止）
+- [x] 重複排除のLRU化（HashSet順序問題修正）
+- [x] 絵文字キャッシュ実装（徐々に解消方式）
 - [x] **手動テスト実施** ✅ 2025-12-21
   - video_id: DAdj_xOJDg4 でテスト成功
   - 一部のカスタム絵文字が画像として正常に表示
-- [ ] **残課題**: 一部カスタム絵文字がテキスト表示（下記詳細）
+- [ ] **本番UI結線**: 設定画面からApiMode切り替え（次フェーズ）
+- [ ] **自動テスト追加**: 絵文字キャッシュ・ポーラー切替テスト
 
-### 残課題: カスタム絵文字テキスト表示問題
+### 絵文字キャッシュ機能（実装済み 2025-12-21）
 
-#### 問題の症状
-一部のカスタム絵文字が画像ではなくテキスト（`:_草lol:`、`:_疑問顔:`など）として表示される。
+#### 動作原理
+1. **キャッシュ構築**: 絵文字オブジェクトを受信したら`ショートカット→EmojiInfo`をグローバルキャッシュに登録
+2. **テキスト変換**: テキストトークン内の`:_xxx:`パターンをキャッシュから画像に変換
+3. **徐々に解消**: 最初はテキスト表示でも、一度絵文字オブジェクトを受信すればキャッシュされ、以降は画像表示
 
-#### 正常に表示される絵文字
-| 種類 | 例 | 状態 |
-|------|-----|------|
-| 画像URL付きカスタム絵文字 | 猫アイコン、コヨーテアイコン | ✅ 画像表示 |
-| 標準Unicode絵文字 | ♂️（male_sign）など | ✅ 画像表示（fonts.gstatic.com） |
+#### 実装箇所
+- `src-tauri/src/youtube/innertube/parser.rs`
+  - `EMOJI_CACHE`: グローバル絵文字キャッシュ（RwLock<HashMap<String, EmojiInfo>>）
+  - `convert_text_with_emoji_cache()`: テキストから絵文字検出・変換
 
-#### テキストとして表示される絵文字
-| 種類 | 例 | 状態 |
-|------|-----|------|
-| テキストトークン絵文字 | `:_草lol:`, `:_疑問顔:`, `:_尻尾振るコヨーテ:` | ❌ テキスト表示 |
-
-#### 原因分析（2025-12-21 調査結果）
-
-**根本原因**: InnerTube APIが一部のカスタム絵文字を`emoji`オブジェクトではなく**テキストトークン**として返している。
-
-```
-正常な絵文字データ（画像表示可能）:
-{
-  "emoji": {
-    "emojiId": "UC.../emoji_id",
-    "shortcuts": [":_emoji:"],
-    "image": {
-      "thumbnails": [{"url": "https://yt3.ggpht.com/...", "width": 24, "height": 24}]
-    }
-  }
-}
-
-問題のあるデータ（テキスト表示）:
-{
-  "text": ":_草lol:"  // ← 画像URLが含まれていない
-}
-```
-
-**なぜこのようなデータが返されるか**:
-- InnerTube APIの内部動作は非公開のため確定的な理由は不明
-- 考えられる原因:
-  1. サーバー側のキャッシュ/最適化
-  2. 絵文字のメタデータがまだロードされていない
-  3. 特定の条件下で簡略化されたレスポンスが返される
-
-#### 将来の解決策オプション
-
-1. **絵文字マッピングキャッシュ**（推奨）
-   - 一度取得した絵文字のショートカット→画像URLマッピングをキャッシュ
-   - テキストトークンを受信したらキャッシュから画像URLを検索
-   - 実装箇所: `src-tauri/src/youtube/innertube/`
-
-2. **追加のInnerTubeリクエスト**
-   - 絵文字取得専用のAPIエンドポイントがあれば利用
-   - ただし、そのようなエンドポイントは未発見
-
-3. **現状維持**
-   - 多くの絵文字は正常に表示されるため、許容レベルとして運用
+#### 制限事項
+- 初回表示時はキャッシュが空のためテキスト表示になる場合がある
+- 同一配信内で一度も絵文字オブジェクトとして受信していない絵文字はテキストのまま
 
 ### 設計方針
 - 公式APIとは別に `start_polling_innertube` / `stop_polling_innertube` を提供
 - InnerTubeClient をグローバル状態で管理し、ポーリングループで使用
 - 公式APIとの互換性を維持（ChatMessage型は共通）
 - video_idのみで開始可能（APIキー、live_chat_id不要）
+- ポーラー相互排他（公式APIとInnerTubeの同時起動を防止）
 
 ### 成果物
-- `src-tauri/src/commands/youtube.rs` - InnerTubeポーリングコマンド追加
-  - `start_polling_innertube` - InnerTubeポーリング開始
-  - `stop_polling_innertube` - InnerTubeポーリング停止
-  - `is_polling_innertube_running` - ポーリング状態確認
+- `src-tauri/src/commands/youtube.rs` - InnerTubeポーリングコマンド追加、相互排他、LRU
+- `src-tauri/src/youtube/innertube/parser.rs` - 絵文字キャッシュ実装
 - `src-tauri/src/lib.rs` - コマンド登録
+- `src-tauri/Cargo.toml` - once_cell依存追加
 - `src/App.tsx` - InnerTubeテストボタン追加
-- `src-tauri/overlays/comment.html` - URLバリデーション改善、デバッグログ追加
+- `src-tauri/overlays/comment.html` - URLバリデーション改善、//形式URL正規化
 
 ---
 

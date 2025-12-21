@@ -93,8 +93,8 @@
       grid-area: comment;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
       overflow: hidden;
+      min-height: 0; /* グリッドアイテムのoverflow対策 */
     }
 
     #comment-area.position-top {
@@ -104,8 +104,11 @@
     #comment-container {
       display: flex;
       flex-direction: column;
+      justify-content: flex-end; /* 要素を下に詰める */
       gap: var(--comment-gap);
       overflow: hidden;
+      flex: 1; /* 親要素を埋める */
+      min-height: 0; /* flexboxのoverflow対策 */
     }
 
     .comment {

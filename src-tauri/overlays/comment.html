@@ -431,28 +431,47 @@
     // 金額文字列から数値を抽出（通貨記号を除去）
     function parseAmount(amountString) {
       if (!amountString) return 0;
-      // 通貨記号と区切り文字を除去して数値に変換
-      // 例: "¥1,000" -> 1000, "$10.00" -> 10, "€5,00" -> 5
-      const cleaned = amountString.replace(/[^\d.,]/g, '').replace(',', '.');
+
+      // カンマが小数点として使われているか判定（欧州形式: "1.000,50"）
+      // 末尾が ",XX" または ",X" の場合は欧州形式
+      const hasCommaDecimal = /\d,\d{1,2}$/.test(amountString);
+
+      let cleaned = amountString.replace(/[^\d.,]/g, '');
+
+      if (hasCommaDecimal) {
+        // 欧州形式: ピリオドを除去（千の区切り）、カンマをピリオドに（小数点）
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+      } else {
+        // 英語/日本形式: カンマを除去（千の区切り）
+        // 例: "¥1,000" -> "1000", "$1,000.50" -> "1000.50"
+        cleaned = cleaned.replace(/,/g, '');
+      }
+
       return parseFloat(cleaned) || 0;
     }
 
-    // 通貨を日本円相当額に変換（おおよその換算レート）
+    // 通貨を日本円相当額に変換
+    // TODO: 将来的に為替レートはAPIから取得することを検討
+    // 現在は2024年時点の概算レートを使用
     function convertToJPY(amountString) {
       if (!amountString) return 0;
       const amount = parseAmount(amountString);
 
       // 通貨を判定して日本円に換算
-      if (amountString.includes('$') || amountString.includes('USD')) {
-        return amount * 150; // USD -> JPY
+      if (amountString.includes('$') || amountString.includes('USD') || amountString.includes('CA$') || amountString.includes('A$')) {
+        return amount * 150; // USD/CAD/AUD -> JPY
       } else if (amountString.includes('€') || amountString.includes('EUR')) {
         return amount * 160; // EUR -> JPY
       } else if (amountString.includes('£') || amountString.includes('GBP')) {
         return amount * 190; // GBP -> JPY
+      } else if (amountString.includes('₩') || amountString.includes('KRW')) {
+        return amount * 0.11; // KRW -> JPY (1円≒9ウォン)
+      } else if (amountString.includes('NT$') || amountString.includes('TWD')) {
+        return amount * 4.7; // TWD -> JPY
       } else if (amountString.includes('¥') || amountString.includes('JPY') || amountString.includes('円')) {
         return amount; // JPY
       } else {
-        // その他の通貨は金額をそのまま使用（仮）
+        // その他の通貨は金額をそのまま使用（色分けの目安）
         return amount;
       }
     }

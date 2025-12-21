@@ -217,17 +217,29 @@
 - [x] 設定の永続化（SQLite）
 - [x] プレビュー画面（iframe）
 
+#### 追加実装（PR#33 2025-12-21）
+- [x] 統合オーバーレイ（/overlay/combined）- コメント+セットリストを1つのURLで表示
+- [x] レイアウトプリセット機能（streaming, talk, music, gaming, custom）
+- [x] レイアウトプリセット選択UI（ビジュアルプレビュー付き）
+- [x] OBS画面サイズ（1920x1080）対応プレビュー
+- [x] ResizeObserverによるレスポンシブスケーリング
+
 ### テスト項目
 - [x] 設定変更が即時反映（WebSocket broadcast）
 - [x] 設定がアプリ再起動後も保持（DB保存）
+- [x] 統合オーバーレイでコメント・セットリスト同時表示
+- [x] レイアウトプリセット切替で配置変更
 
 ### 成果物
-- `src/types/overlaySettings.ts` - 型定義・テーマプリセット
+- `src/types/overlaySettings.ts` - 型定義・テーマプリセット・レイアウトプリセット
 - `src-tauri/src/commands/overlay.rs` - 保存/読み込み/ブロードキャストコマンド
 - `src/components/settings/` - 設定UIコンポーネント群
+- `src/components/settings/LayoutPresetSelector.tsx` - レイアウトプリセット選択UI
+- `src/components/settings/OverlayPreview.tsx` - OBS画面サイズ対応プレビュー
 - `src-tauri/overlays/comment.html` - 設定対応・XSS対策
 - `src-tauri/overlays/setlist.html` - 設定対応・マーキー機能
-- `src-tauri/src/server/http.rs` - HTTP API（/api/overlay/settings）
+- `src-tauri/overlays/combined.html` - 統合オーバーレイ
+- `src-tauri/src/server/http.rs` - HTTP API（/api/overlay/settings, /overlay/combined）
 - `docs/300_overlay-specs.md` - 仕様書更新
 
 ---

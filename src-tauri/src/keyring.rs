@@ -1,17 +1,13 @@
 // =============================================================================
-// 本番用セキュアストレージ実装
+// セキュアストレージ実装
 // =============================================================================
-// このモジュールはOSのセキュアストレージ（Keychain, Credential Manager等）を
-// 使用してAPIキーを安全に保存するための実装です。
+// OSのセキュアストレージ（Keychain, Credential Manager等）を使用して
+// APIキーを安全に保存する実装です。
 //
-// 現在は commands/keyring.rs のDB保存実装が使用されていますが、
-// 本番リリース時にはこちらの実装に移行する予定です。
-//
-// 参照: docs/900_tasks.md の「本番リリース前チェックリスト」
+// - macOS: Keychain
+// - Windows: Credential Manager
+// - Linux: Secret Service API
 // =============================================================================
-
-// 本番移行まで未使用のためdead_code警告を抑制
-#![allow(dead_code)]
 
 use keyring::Entry;
 use thiserror::Error;
@@ -76,11 +72,11 @@ pub fn delete_api_key() -> Result<(), KeyringError> {
 pub fn has_api_key() -> Result<bool, KeyringError> {
     match get_api_key() {
         Ok(_) => {
-            log::info!("has_api_key: true (API key found in keyring)");
+            log::debug!("has_api_key: true (API key found in keyring)");
             Ok(true)
         }
         Err(KeyringError::NotFound) => {
-            log::info!("has_api_key: false (API key not found in keyring)");
+            log::debug!("has_api_key: false (API key not found in keyring)");
             Ok(false)
         }
         Err(e) => {

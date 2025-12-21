@@ -1,98 +1,141 @@
+use crate::keyring as secure_storage;
 use crate::AppState;
 use sqlx::Row;
 
 // =============================================================================
-// TODO: 本番リリース前の対応事項
+// セキュアストレージ実装（本番用）
 // =============================================================================
-// 現在の実装ではAPIキーをSQLiteに平文で保存しています。
-// 本番リリース前に以下の対応が必要です：
+// OSのセキュアストレージ（Keychain, Credential Manager等）を使用して
+// APIキーを安全に保存します。
 //
-// 1. src-tauri/src/keyring.rs のkeyringクレートを使用した実装に移行
-//    - macOS: Keychain
-//    - Windows: Credential Manager
-//    - Linux: Secret Service API
-//
-// 2. この実装（DB保存）を削除するか、keyringが使用できない環境用の
-//    フォールバックとして残す場合は暗号化を検討
-//
-// 参照: CLAUDE.md の「セキュリティ」セクション
+// 既存のDB保存からの自動移行機能付き：
+// - get_api_key時にDBにあってkeyringに無い場合は自動でkeyringに移行
+// - 移行後はDBから削除
 // =============================================================================
 
-/// APIキーをDBに保存
-///
-/// ⚠️ 注意: 開発用の実装です。本番ではkeyringクレートを使用してください。
-/// DBファイルは平文で保存されるため、セキュリティリスクがあります。
+/// APIキーをセキュアストレージに保存
 #[tauri::command]
-pub async fn save_api_key(api_key: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn save_api_key(api_key: String, _state: tauri::State<'_, AppState>) -> Result<(), String> {
     // 空文字列のバリデーション
     if api_key.trim().is_empty() {
         return Err("API key cannot be empty".to_string());
     }
 
-    let pool = &state.db;
-    let now = chrono::Utc::now().to_rfc3339();
-    
-    sqlx::query(
-        r#"
-        INSERT INTO settings (key, value, updated_at)
-        VALUES ('api_key', ?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        "#
-    )
-    .bind(&api_key)
-    .bind(&now)
-    .execute(pool)
+    // keyringはブロッキング呼び出しなのでspawn_blockingを使用
+    tokio::task::spawn_blocking(move || {
+        secure_storage::save_api_key(&api_key)
+    })
     .await
-    .map_err(|e| format!("DB error: {}", e))?;
-    
-    log::info!("API key saved to database");
-    Ok(())
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Keyring error: {}", e))
 }
 
-/// APIキーをDBから取得
+/// APIキーをセキュアストレージから取得
+///
+/// DBに保存されている場合は自動でセキュアストレージに移行
 #[tauri::command]
 pub async fn get_api_key(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
-    let pool = &state.db;
-    
-    let result = sqlx::query("SELECT value FROM settings WHERE key = 'api_key'")
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| format!("DB error: {}", e))?;
-    
-    if let Some(row) = result {
-        let value: String = row.get("value");
-        log::info!("API key retrieved from database");
-        Ok(Some(value))
-    } else {
-        Ok(None)
+    // まずkeyringから取得を試みる
+    let keyring_result = tokio::task::spawn_blocking(|| {
+        secure_storage::get_api_key()
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    match keyring_result {
+        Ok(api_key) => {
+            // keyringにあればそのまま返す
+            Ok(Some(api_key))
+        }
+        Err(secure_storage::KeyringError::NotFound) => {
+            // keyringに無い場合、DBからの移行を試みる
+            migrate_from_db_if_exists(state).await
+        }
+        Err(e) => Err(format!("Keyring error: {}", e)),
     }
 }
 
-/// APIキーをDBから削除
+/// APIキーをセキュアストレージから削除
 #[tauri::command]
 pub async fn delete_api_key(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    // keyringから削除
+    tokio::task::spawn_blocking(|| {
+        secure_storage::delete_api_key()
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Keyring error: {}", e))?;
+
+    // DBからも削除（移行残りがあれば）
     let pool = &state.db;
-    
     sqlx::query("DELETE FROM settings WHERE key = 'api_key'")
         .execute(pool)
         .await
         .map_err(|e| format!("DB error: {}", e))?;
-    
-    log::info!("API key deleted from database");
+
     Ok(())
 }
 
 /// APIキーが保存されているかチェック
 #[tauri::command]
 pub async fn has_api_key(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    // まずkeyringをチェック
+    let keyring_result = tokio::task::spawn_blocking(|| {
+        secure_storage::has_api_key()
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    match keyring_result {
+        Ok(true) => Ok(true),
+        Ok(false) => {
+            // keyringに無い場合、DBにあるかチェック（移行対象）
+            let pool = &state.db;
+            let result = sqlx::query("SELECT value FROM settings WHERE key = 'api_key'")
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| format!("DB error: {}", e))?;
+            Ok(result.is_some())
+        }
+        Err(e) => Err(format!("Keyring error: {}", e)),
+    }
+}
+
+// =============================================================================
+// 移行ヘルパー関数
+// =============================================================================
+
+/// DBにAPIキーがあればkeyringに移行して返す
+async fn migrate_from_db_if_exists(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
     let pool = &state.db;
-    
+
+    // DBから取得
     let result = sqlx::query("SELECT value FROM settings WHERE key = 'api_key'")
         .fetch_optional(pool)
         .await
         .map_err(|e| format!("DB error: {}", e))?;
-    
-    let has_key = result.is_some();
-    log::info!("has_api_key check: {}", has_key);
-    Ok(has_key)
+
+    if let Some(row) = result {
+        let api_key: String = row.get("value");
+
+        // keyringに移行
+        let api_key_clone = api_key.clone();
+        tokio::task::spawn_blocking(move || {
+            secure_storage::save_api_key(&api_key_clone)
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| format!("Keyring migration error: {}", e))?;
+
+        // DBから削除
+        sqlx::query("DELETE FROM settings WHERE key = 'api_key'")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("DB cleanup error: {}", e))?;
+
+        log::info!("API key migrated from DB to secure storage");
+        Ok(Some(api_key))
+    } else {
+        Ok(None)
+    }
 }

@@ -7,6 +7,9 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
+/// ポーラー停止後のグレースフルシャットダウン待機時間（ミリ秒）
+const POLLER_GRACEFUL_SHUTDOWN_MS: u64 = 200;
+
 /// コメントをDBに保存する（重複は無視）
 async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
     for msg in messages {
@@ -179,20 +182,38 @@ pub async fn start_polling(
     // 新しいポーラーを作成（ロックの外で）
     let poller = ChatPoller::new(api_key);
 
-    // 既存のポーラーを停止して新しいポーラーを設定
-    {
-        let mut poller_lock = state
+    // 既存のポーラーを停止（ロックを解放してから待機）
+    let needs_wait = {
+        let poller_lock = state
             .poller
             .lock()
             .map_err(|e| format!("Failed to acquire poller lock: {}", e))?;
         if let Some(existing_poller) = poller_lock.as_ref() {
             if existing_poller.is_running() {
                 existing_poller.stop();
-                log::info!("Stopped existing poller");
+                log::info!("Stopped existing poller, waiting for graceful shutdown...");
+                true
+            } else {
+                false
             }
+        } else {
+            false
         }
+    }; // ここでロック解放
+
+    // ロック解放後に待機（二重ポーリング防止）
+    if needs_wait {
+        tokio::time::sleep(std::time::Duration::from_millis(POLLER_GRACEFUL_SHUTDOWN_MS)).await;
+    }
+
+    // 新しいポーラーを設定
+    {
+        let mut poller_lock = state
+            .poller
+            .lock()
+            .map_err(|e| format!("Failed to reacquire poller lock: {}", e))?;
         *poller_lock = Some(poller.clone());
-    } // ここでロックを解放
+    } // ここでロック解放
 
     // WebSocketサーバー状態を取得
     let server_state = Arc::clone(&state.server);

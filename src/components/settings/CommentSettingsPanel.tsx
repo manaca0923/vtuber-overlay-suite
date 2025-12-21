@@ -58,25 +58,6 @@ export function CommentSettingsPanel({ settings, onChange }: CommentSettingsPane
         </div>
       </div>
 
-      {/* 最大表示数 */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          最大表示数: {settings.maxCount}
-        </label>
-        <input
-          type="range"
-          min={5}
-          max={30}
-          value={settings.maxCount}
-          onChange={(e) => updateSettings({ maxCount: parseInt(e.target.value, 10) })}
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-        />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>5</span>
-          <span>30</span>
-        </div>
-      </div>
-
       {/* フォントサイズ */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -258,11 +258,11 @@ export interface AppSettings {
 }
 
 export interface CommentSettings {
-  maxCount: number;
+  enabled: boolean;
   showAvatar: boolean;
-  showBadges: boolean;
   fontSize: number;
   position: Position;
+  // NOTE: maxCountは画面高さベースの自動調整に統一したため削除
 }
 
 export interface SetlistSettings {

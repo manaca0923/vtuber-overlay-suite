@@ -25,8 +25,9 @@ OBS Studioのブラウザソースとして動作するオーバーレイの仕�
 ```javascript
 const ws = new WebSocket('ws://localhost:19801/ws');
 ws.onopen = () => {
-  // 購読するチャンネルを指定
-  ws.send(JSON.stringify({ type: 'subscribe', channel: 'comments' }));
+  console.log('WebSocket connected');
+  // 接続完了時に自動で全メッセージを受信開始
+  // NOTE: subscribe機能は未実装のため、接続するだけで全種別のメッセージを受信
 };
 ```
 
@@ -61,6 +62,7 @@ ws.onopen = () => {
 {
   type: 'setlist:update',
   payload: {
+    setlistId: string,        // セットリストID（フィルタリング用）
     currentIndex: number,
     songs: Array<{
       id: string,
@@ -82,9 +84,9 @@ ws.onopen = () => {
     comment: {
       enabled: boolean,        // 表示ON/OFF
       position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
-      maxCount: number,        // 最大表示件数
       showAvatar: boolean,     // アバター表示
       fontSize: number         // フォントサイズ（px）
+      // NOTE: maxCountは画面高さベースの自動調整に統一したため削除
     },
     setlist: {
       enabled: boolean,        // 表示ON/OFF
@@ -443,14 +445,13 @@ body {
 オーバーレイはURLパラメータでカスタマイズ可能。
 
 ```
-http://localhost:19800/overlay/comment?theme=dark&maxCount=15
+http://localhost:19800/overlay/comment?theme=dark&fontSize=16
 http://localhost:19800/overlay/setlist?showArtist=false&position=bottom
 ```
 
 | パラメータ | 型 | デフォルト | 説明 |
 |------------|-----|------------|------|
 | theme | string | 'default' | テーマ名 |
-| maxCount | number | 10 | 最大表示件数 |
 | showAvatar | boolean | true | アバター表示 |
 | showBadge | boolean | true | バッジ表示 |
 | position | string | 'bottom' | 表示位置 |
@@ -508,12 +509,12 @@ interface TemplateSettings {
   comment: {
     enabled: boolean;
     position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-    maxCount: number;
     showAvatar: boolean;
     showBadges: boolean;
     avatarSize: number;
     fontSize: number;
     animationSpeed: 'slow' | 'normal' | 'fast';
+    // NOTE: maxCountは画面高さベースの自動調整に統一したため削除
   };
 
   // セットリスト固有

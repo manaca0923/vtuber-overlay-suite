@@ -2,13 +2,38 @@
 
 ## 概要
 
-MVPでは `liveChatMessages.list`（REST）を使用。`streamList`（gRPC）はPoC後に検討。
+本アプリは**InnerTube API（非公式）**を優先使用し、**YouTube Data API v3（公式）**はデバッグモードで利用可能。
+
+| API | 用途 | 認証 | クォータ制限 |
+|-----|------|------|-------------|
+| InnerTube API | **メイン機能** | 不要 | なし |
+| YouTube Data API v3 | デバッグ・フォールバック | APIキー(BYOK) | 10,000 units/日 |
+
+> **注意**: InnerTubeは非公式APIのため、YouTube側の仕様変更で動作しなくなる可能性があります。
 
 ---
 
-## 認証方式
+## InnerTube API（メイン）
 
-### BYOK（Bring Your Own Key）- MVP必須
+### 特徴
+- **認証不要**: APIキーなしで動作
+- **クォータ制限なし**: 長時間配信でも枯渇しない
+- **カスタム絵文字対応**: メンバースタンプの画像URLを取得可能
+- **非公式**: 仕様変更リスクあり
+
+### 実装
+- `src-tauri/src/youtube/innertube/` モジュール
+- コマンド: `start_polling_innertube`, `stop_polling_innertube`
+
+詳細は `docs/900_tasks.md` のT13/T14を参照。
+
+---
+
+## YouTube Data API v3（デバッグモード）
+
+> **Note**: このAPIは開発時のデバッグ・検証用です。本番環境ではInnerTube APIを使用します。
+
+### BYOK（Bring Your Own Key）
 
 ユーザーが自身のGoogle Cloud ProjectでAPIキーを発行して使用。
 
@@ -111,7 +136,7 @@ GET https://www.googleapis.com/youtube/v3/liveChat/messages
 | videos.list | 1 unit | 1回/配信 | 1 unit |
 | liveChat/messages.list | ~5 units | 720回/時(5秒間隔) | ~3,600 units |
 
-**結論**: 5秒間隔で約2.78時間で枯渇 → BYOK必須
+**結論**: 5秒間隔で約2.78時間で枯渇 → 公式API使用時はBYOK必須（InnerTube APIではクォータ制限なし）
 
 ### 推奨ポーリング戦略
 

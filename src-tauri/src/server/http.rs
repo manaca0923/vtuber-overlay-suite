@@ -253,12 +253,12 @@ struct OverlaySettingsApiResponse {
     setlist: SetlistSettingsApi,
 }
 
+/// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CommentSettingsApi {
     enabled: bool,
     position: CommentPosition,
-    max_count: u32,
     show_avatar: bool,
     font_size: u32,
 }
@@ -283,7 +283,6 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
         comment: CommentSettingsApi {
             enabled: true,
             position: CommentPosition::BottomRight,
-            max_count: 10,
             show_avatar: true,
             font_size: 16,
         },
@@ -358,7 +357,6 @@ async fn get_overlay_settings_api(
                             position: parse_comment_position(
                                 settings["comment"]["position"].as_str().unwrap_or("bottom-right")
                             ),
-                            max_count: settings["comment"]["maxCount"].as_u64().unwrap_or(10) as u32,
                             show_avatar: settings["comment"]["showAvatar"].as_bool().unwrap_or(true),
                             font_size: settings["comment"]["fontSize"].as_u64().unwrap_or(16) as u32,
                         },

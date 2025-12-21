@@ -1,0 +1,196 @@
+// YouTube Live Chat gRPC API
+// Based on: https://developers.google.com/youtube/v3/live/streaming-live-chat
+
+syntax = "proto3";
+
+package youtube.v3;
+
+// YouTube Live Chat Message Service
+service V3DataLiveChatMessageService {
+  // Stream live chat messages for a given live chat ID
+  rpc StreamList(LiveChatMessageListRequest) returns (stream LiveChatMessageListResponse) {}
+}
+
+// Request message for StreamList
+message LiveChatMessageListRequest {
+  // Required. The ID of the live chat for which comments should be returned
+  string live_chat_id = 1;
+
+  // The part parameter specifies the liveChatMessage resource properties
+  // Supported values: id, snippet, authorDetails
+  repeated string part = 2;
+
+  // Localization language for system messages
+  string hl = 3;
+
+  // Size for returned profile images (16-720)
+  uint32 profile_image_size = 4;
+
+  // Maximum items in result set (200-2000)
+  uint32 max_results = 5;
+
+  // Pagination token for subsequent requests
+  string page_token = 6;
+}
+
+// Response message for StreamList
+message LiveChatMessageListResponse {
+  // Fixed value: "youtube#liveChatMessageListResponse"
+  string kind = 1;
+
+  // Resource identifier
+  string etag = 2;
+
+  // ISO 8601 timestamp when stream went offline
+  string offline_at = 3;
+
+  // Pagination metadata
+  PageInfo page_info = 4;
+
+  // Token for next page
+  string next_page_token = 5;
+
+  // Array of chat messages
+  repeated LiveChatMessage items = 6;
+
+  // Current active poll, if exists
+  LiveChatMessage active_poll_item = 7;
+}
+
+// Pagination information
+message PageInfo {
+  uint32 total_results = 1;
+  uint32 results_per_page = 2;
+}
+
+// Live chat message resource
+message LiveChatMessage {
+  // Fixed value: "youtube#liveChatMessage"
+  string kind = 1;
+
+  // Resource identifier
+  string etag = 2;
+
+  // Unique message ID
+  string id = 3;
+
+  // Message details
+  LiveChatMessageSnippet snippet = 4;
+
+  // Author information
+  LiveChatMessageAuthorDetails author_details = 5;
+}
+
+// Message snippet containing the actual content
+message LiveChatMessageSnippet {
+  // Message type
+  string type = 1;
+
+  // Live chat ID
+  string live_chat_id = 2;
+
+  // Author's channel ID
+  string author_channel_id = 3;
+
+  // Published timestamp (ISO 8601)
+  string published_at = 4;
+
+  // Whether message has display content
+  bool has_display_content = 5;
+
+  // Display message text
+  string display_message = 6;
+
+  // Text message details (for TEXT_MESSAGE_EVENT)
+  TextMessageDetails text_message_details = 7;
+
+  // Super chat details (for SUPER_CHAT_EVENT)
+  SuperChatDetails super_chat_details = 8;
+
+  // Super sticker details (for SUPER_STICKER_EVENT)
+  SuperStickerDetails super_sticker_details = 9;
+
+  // New sponsor details (for NEW_SPONSOR_EVENT)
+  NewSponsorDetails new_sponsor_details = 10;
+
+  // Member milestone details (for MEMBER_MILESTONE_CHAT_EVENT)
+  MemberMilestoneChatDetails member_milestone_chat_details = 11;
+
+  // Gift membership details (for MEMBERSHIP_GIFTING_EVENT)
+  MembershipGiftingDetails membership_gifting_details = 12;
+}
+
+// Author details
+message LiveChatMessageAuthorDetails {
+  string channel_id = 1;
+  string channel_url = 2;
+  string display_name = 3;
+  string profile_image_url = 4;
+  bool is_verified = 5;
+  bool is_chat_owner = 6;
+  bool is_chat_sponsor = 7;
+  bool is_chat_moderator = 8;
+}
+
+// Text message details
+message TextMessageDetails {
+  string message_text = 1;
+}
+
+// Super chat details
+message SuperChatDetails {
+  // Amount in micros (1,000,000 = 1 unit of currency)
+  int64 amount_micros = 1;
+
+  // Currency code (ISO 4217)
+  string currency = 2;
+
+  // Formatted amount string
+  string amount_display_string = 3;
+
+  // User's comment
+  string user_comment = 4;
+
+  // Tier level (1-7)
+  uint32 tier = 5;
+}
+
+// Super sticker details
+message SuperStickerDetails {
+  string super_sticker_id = 1;
+  string super_sticker_metadata = 2;
+  int64 amount_micros = 3;
+  string currency = 4;
+  string amount_display_string = 5;
+  uint32 tier = 6;
+}
+
+// New sponsor/member details
+message NewSponsorDetails {
+  // Membership level name
+  string member_level_name = 1;
+
+  // Whether this is an upgrade
+  bool is_upgrade = 2;
+}
+
+// Member milestone chat details
+message MemberMilestoneChatDetails {
+  // User's comment
+  string user_comment = 1;
+
+  // Total months as member
+  uint32 member_month = 2;
+
+  // Membership level name
+  string member_level_name = 3;
+}
+
+// Membership gifting details
+message MembershipGiftingDetails {
+  // Number of memberships gifted
+  uint32 gift_memberships_count = 1;
+
+  // Membership level name
+  string gift_memberships_level_name = 2;
+}

@@ -1,4 +1,5 @@
 use crate::youtube::{
+    api_key_manager::get_api_key_manager,
     client::YouTubeClient, innertube, poller::ChatPoller, poller::PollingEvent, state::PollingState,
     types::ChatMessage,
 };
@@ -944,6 +945,99 @@ pub async fn stop_polling_innertube() -> Result<(), String> {
 #[tauri::command]
 pub async fn is_polling_innertube_running() -> Result<bool, String> {
     Ok(get_innertube_running().load(Ordering::SeqCst))
+}
+
+// ================================
+// APIキー管理コマンド
+// ================================
+
+/// APIキー状態の情報
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ApiKeyStatus {
+    /// 同梱キーが利用可能か
+    pub has_bundled_key: bool,
+    /// BYOKが設定されているか
+    pub has_user_key: bool,
+    /// 現在Secondaryキーを使用中か
+    pub using_secondary: bool,
+    /// ステータスサマリー（デバッグ用）
+    pub summary: String,
+}
+
+/// APIキー状態を取得
+#[tauri::command]
+pub async fn get_api_key_status() -> Result<ApiKeyStatus, String> {
+    let manager = get_api_key_manager()
+        .read()
+        .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+    Ok(ApiKeyStatus {
+        has_bundled_key: manager.has_bundled_key(),
+        has_user_key: manager.has_user_key(),
+        using_secondary: manager.is_using_secondary(),
+        summary: manager.status_summary(),
+    })
+}
+
+/// 同梱APIキーが利用可能かどうかを確認
+#[tauri::command]
+pub async fn has_bundled_api_key() -> Result<bool, String> {
+    let manager = get_api_key_manager()
+        .read()
+        .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+    Ok(manager.has_bundled_key())
+}
+
+/// BYOKキーを設定
+#[tauri::command]
+pub async fn set_byok_key(api_key: Option<String>) -> Result<(), String> {
+    let mut manager = get_api_key_manager()
+        .write()
+        .map_err(|e| format!("Failed to write API key manager: {}", e))?;
+
+    manager.set_user_key(api_key.clone());
+
+    if api_key.is_some() {
+        log::info!("BYOK key has been set");
+    } else {
+        log::info!("BYOK key has been cleared");
+    }
+
+    Ok(())
+}
+
+/// 有効なAPIキーを取得（内部使用）
+/// prefer_bundled: true=同梱キー優先、false=BYOK優先
+#[tauri::command]
+pub async fn get_active_api_key(prefer_bundled: bool) -> Result<Option<String>, String> {
+    let manager = get_api_key_manager()
+        .read()
+        .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+    Ok(manager.get_active_key(prefer_bundled).map(|s| s.to_string()))
+}
+
+/// Secondaryキーにフォールバック
+#[tauri::command]
+pub async fn switch_to_secondary_key() -> Result<(), String> {
+    let manager = get_api_key_manager()
+        .read()
+        .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+    manager.switch_to_secondary();
+    Ok(())
+}
+
+/// Primaryキーにリセット
+#[tauri::command]
+pub async fn reset_to_primary_key() -> Result<(), String> {
+    let manager = get_api_key_manager()
+        .read()
+        .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+    manager.reset_to_primary();
+    Ok(())
 }
 
 

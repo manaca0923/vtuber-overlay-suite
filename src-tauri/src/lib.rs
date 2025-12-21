@@ -145,6 +145,12 @@ pub fn run() {
           commands::youtube::start_polling_innertube,
           commands::youtube::stop_polling_innertube,
           commands::youtube::is_polling_innertube_running,
+          commands::youtube::get_api_key_status,
+          commands::youtube::has_bundled_api_key,
+          commands::youtube::set_byok_key,
+          commands::youtube::get_active_api_key,
+          commands::youtube::switch_to_secondary_key,
+          commands::youtube::reset_to_primary_key,
         ]
       }
       // リリースビルドではtest_innertube_connectionを除外
@@ -191,6 +197,12 @@ pub fn run() {
           commands::youtube::start_polling_innertube,
           commands::youtube::stop_polling_innertube,
           commands::youtube::is_polling_innertube_running,
+          commands::youtube::get_api_key_status,
+          commands::youtube::has_bundled_api_key,
+          commands::youtube::set_byok_key,
+          commands::youtube::get_active_api_key,
+          commands::youtube::switch_to_secondary_key,
+          commands::youtube::reset_to_primary_key,
         ]
       }
     })

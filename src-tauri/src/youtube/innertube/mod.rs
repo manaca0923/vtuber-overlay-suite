@@ -7,6 +7,16 @@
 //! ## 注意事項
 //! - 非公式APIのため、仕様変更のリスクあり
 //! - Feature Flagで公式APIとの切り替えを推奨
+//!
+//! ## 実装状態
+//! 現在はPoC段階（T13）。本番ポーリングへの統合は将来のタスクで実装予定。
+//! リリースビルドでは一部の型・関数がテストコマンドからのみ使用されるため、
+//! dead_code警告を抑制している。
+
+// InnerTubeモジュールは現在PoC段階のため、リリースビルドでは
+// デバッグ専用のtest_innertube_connectionコマンドからのみ使用される。
+// 将来のフル実装に向けて型定義は維持し、警告のみ抑制する。
+#![allow(dead_code)]
 
 pub mod client;
 pub mod parser;
@@ -15,3 +25,4 @@ pub mod types;
 pub use client::InnerTubeClient;
 pub use parser::parse_chat_response;
 pub use types::*;
+

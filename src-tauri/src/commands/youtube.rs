@@ -503,7 +503,8 @@ pub async fn load_api_mode(state: tauri::State<'_, AppState>) -> Result<ApiMode,
     }
 }
 
-/// InnerTube API接続テスト
+/// InnerTube API接続テスト（開発ビルドのみ有効）
+#[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn test_innertube_connection(video_id: String) -> Result<String, String> {
     use crate::youtube::innertube::{parse_chat_response, InnerTubeClient};

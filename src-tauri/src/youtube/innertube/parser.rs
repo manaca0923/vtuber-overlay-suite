@@ -260,6 +260,11 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
             if let Some(text) = &run.text {
                 Some(MessageRun::Text { text: text.clone() })
             } else if let Some(emoji) = &run.emoji {
+                // 空のemoji_idは無効なのでスキップ
+                if emoji.emoji_id.is_empty() {
+                    log::debug!("Skipping emoji with empty emoji_id");
+                    return None;
+                }
                 Some(MessageRun::Emoji {
                     emoji: EmojiInfo {
                         emoji_id: emoji.emoji_id.clone(),
@@ -341,26 +346,24 @@ fn parse_author_badges(badges: &Option<Vec<AuthorBadge>>) -> (bool, bool, bool) 
 }
 
 /// タイムスタンプをパース（マイクロ秒 -> DateTime<Utc>）
+/// 頻繁に呼ばれるため、パース失敗時のログはdebugレベル
 fn parse_timestamp(timestamp_usec: &Option<String>) -> chrono::DateTime<Utc> {
     match timestamp_usec {
         Some(ts) => {
             match ts.parse::<i64>() {
                 Ok(usec) => {
                     Utc.timestamp_micros(usec).single().unwrap_or_else(|| {
-                        log::warn!("Invalid timestamp microseconds: {}", usec);
+                        log::debug!("Invalid timestamp microseconds: {}", usec);
                         Utc::now()
                     })
                 }
                 Err(e) => {
-                    log::warn!("Failed to parse timestamp '{}': {}", ts, e);
+                    log::debug!("Failed to parse timestamp '{}': {}", ts, e);
                     Utc::now()
                 }
             }
         }
-        None => {
-            log::debug!("No timestamp provided, using current time");
-            Utc::now()
-        }
+        None => Utc::now(),
     }
 }
 
@@ -391,6 +394,7 @@ fn parse_amount(text: &str) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::youtube::innertube::types::*;
 
     #[test]
     fn test_parse_amount() {
@@ -400,6 +404,25 @@ mod tests {
 
         let (amount, currency) = parse_amount("$5.00");
         assert_eq!(amount, "5.00");
+        assert_eq!(currency, "USD");
+    }
+
+    #[test]
+    fn test_parse_amount_euro_and_gbp() {
+        let (amount, currency) = parse_amount("€10.00");
+        assert_eq!(amount, "10.00");
+        assert_eq!(currency, "EUR");
+
+        let (amount, currency) = parse_amount("£20.00");
+        assert_eq!(amount, "20.00");
+        assert_eq!(currency, "GBP");
+    }
+
+    #[test]
+    fn test_parse_amount_unknown_currency() {
+        // 不明な通貨記号はUSDにフォールバック
+        let (amount, currency) = parse_amount("₩1000");
+        assert_eq!(amount, "1000");
         assert_eq!(currency, "USD");
     }
 
@@ -424,5 +447,370 @@ mod tests {
 
         let text = extract_plain_text(&runs);
         assert_eq!(text, "Hello :wave: World");
+    }
+
+    #[test]
+    fn test_extract_plain_text_empty() {
+        let runs: Option<Vec<MessageRun>> = None;
+        let text = extract_plain_text(&runs);
+        assert_eq!(text, "");
+    }
+
+    // ========================================
+    // parse_chat_response 異常系テスト
+    // ========================================
+
+    #[test]
+    fn test_parse_chat_response_empty() {
+        // continuation_contentsがNoneの場合
+        let response = InnerTubeChatResponse {
+            continuation_contents: None,
+        };
+        let messages = parse_chat_response(response);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_chat_response_no_continuation() {
+        // live_chat_continuationがNoneの場合
+        let response = InnerTubeChatResponse {
+            continuation_contents: Some(ContinuationContents {
+                live_chat_continuation: None,
+            }),
+        };
+        let messages = parse_chat_response(response);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_chat_response_no_actions() {
+        // actionsがNoneの場合
+        let response = InnerTubeChatResponse {
+            continuation_contents: Some(ContinuationContents {
+                live_chat_continuation: Some(LiveChatContinuation {
+                    actions: None,
+                    continuations: None,
+                }),
+            }),
+        };
+        let messages = parse_chat_response(response);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_chat_response_empty_actions() {
+        // actionsが空配列の場合
+        let response = InnerTubeChatResponse {
+            continuation_contents: Some(ContinuationContents {
+                live_chat_continuation: Some(LiveChatContinuation {
+                    actions: Some(vec![]),
+                    continuations: None,
+                }),
+            }),
+        };
+        let messages = parse_chat_response(response);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_chat_response_valid_text_message() {
+        // 正常なテキストメッセージ
+        let response = InnerTubeChatResponse {
+            continuation_contents: Some(ContinuationContents {
+                live_chat_continuation: Some(LiveChatContinuation {
+                    actions: Some(vec![ChatAction {
+                        add_chat_item_action: Some(AddChatItemAction {
+                            item: ChatItem {
+                                live_chat_text_message_renderer: Some(LiveChatTextMessageRenderer {
+                                    id: "test-id".to_string(),
+                                    message: Some(MessageContent {
+                                        runs: Some(vec![RunItem {
+                                            text: Some("Hello World".to_string()),
+                                            emoji: None,
+                                        }]),
+                                    }),
+                                    author_name: Some(SimpleText {
+                                        simple_text: Some("Test User".to_string()),
+                                        runs: None,
+                                    }),
+                                    author_photo: None,
+                                    author_external_channel_id: Some("channel-123".to_string()),
+                                    timestamp_usec: Some("1703145600000000".to_string()),
+                                    author_badges: None,
+                                }),
+                                live_chat_paid_message_renderer: None,
+                                live_chat_paid_sticker_renderer: None,
+                                live_chat_membership_item_renderer: None,
+                                live_chat_sponsor_gift_announcement_renderer: None,
+                            },
+                        }),
+                        replay_chat_item_action: None,
+                    }]),
+                    continuations: None,
+                }),
+            }),
+        };
+
+        let messages = parse_chat_response(response);
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "test-id");
+        assert_eq!(messages[0].message, "Hello World");
+        assert_eq!(messages[0].author_name, "Test User");
+    }
+
+    // ========================================
+    // parse_author_badges テスト
+    // ========================================
+
+    #[test]
+    fn test_parse_author_badges_none() {
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&None);
+        assert!(!is_owner);
+        assert!(!is_moderator);
+        assert!(!is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_empty() {
+        let badges: Vec<AuthorBadge> = vec![];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(!is_owner);
+        assert!(!is_moderator);
+        assert!(!is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_owner() {
+        let badges = vec![AuthorBadge {
+            live_chat_author_badge_renderer: Some(BadgeRenderer {
+                custom_thumbnail: None,
+                icon: Some(BadgeIcon {
+                    icon_type: "OWNER".to_string(),
+                }),
+                tooltip: None,
+            }),
+        }];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(is_owner);
+        assert!(!is_moderator);
+        assert!(!is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_moderator() {
+        let badges = vec![AuthorBadge {
+            live_chat_author_badge_renderer: Some(BadgeRenderer {
+                custom_thumbnail: None,
+                icon: Some(BadgeIcon {
+                    icon_type: "MODERATOR".to_string(),
+                }),
+                tooltip: None,
+            }),
+        }];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(!is_owner);
+        assert!(is_moderator);
+        assert!(!is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_member() {
+        let badges = vec![AuthorBadge {
+            live_chat_author_badge_renderer: Some(BadgeRenderer {
+                custom_thumbnail: Some(ThumbnailContainer {
+                    thumbnails: vec![Thumbnail {
+                        url: "https://example.com/badge.png".to_string(),
+                        width: Some(16),
+                        height: Some(16),
+                    }],
+                }),
+                icon: None,
+                tooltip: Some("メンバー（1か月）".to_string()),
+            }),
+        }];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(!is_owner);
+        assert!(!is_moderator);
+        assert!(is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_multiple() {
+        // オーナー + モデレーター + メンバーが同時に存在するケース
+        let badges = vec![
+            AuthorBadge {
+                live_chat_author_badge_renderer: Some(BadgeRenderer {
+                    custom_thumbnail: None,
+                    icon: Some(BadgeIcon {
+                        icon_type: "OWNER".to_string(),
+                    }),
+                    tooltip: None,
+                }),
+            },
+            AuthorBadge {
+                live_chat_author_badge_renderer: Some(BadgeRenderer {
+                    custom_thumbnail: None,
+                    icon: Some(BadgeIcon {
+                        icon_type: "MODERATOR".to_string(),
+                    }),
+                    tooltip: None,
+                }),
+            },
+            AuthorBadge {
+                live_chat_author_badge_renderer: Some(BadgeRenderer {
+                    custom_thumbnail: Some(ThumbnailContainer {
+                        thumbnails: vec![Thumbnail {
+                            url: "https://example.com/member.png".to_string(),
+                            width: Some(16),
+                            height: Some(16),
+                        }],
+                    }),
+                    icon: None,
+                    tooltip: Some("メンバー（12か月）".to_string()),
+                }),
+            },
+        ];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(is_owner);
+        assert!(is_moderator);
+        assert!(is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_verified_not_owner() {
+        // VERIFIEDはis_ownerにならない
+        let badges = vec![AuthorBadge {
+            live_chat_author_badge_renderer: Some(BadgeRenderer {
+                custom_thumbnail: None,
+                icon: Some(BadgeIcon {
+                    icon_type: "VERIFIED".to_string(),
+                }),
+                tooltip: None,
+            }),
+        }];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(!is_owner);
+        assert!(!is_moderator);
+        assert!(!is_member);
+    }
+
+    #[test]
+    fn test_parse_author_badges_unknown_type() {
+        // 不明なバッジタイプは無視される
+        let badges = vec![AuthorBadge {
+            live_chat_author_badge_renderer: Some(BadgeRenderer {
+                custom_thumbnail: None,
+                icon: Some(BadgeIcon {
+                    icon_type: "UNKNOWN_NEW_TYPE".to_string(),
+                }),
+                tooltip: None,
+            }),
+        }];
+        let (is_owner, is_moderator, is_member) = parse_author_badges(&Some(badges));
+        assert!(!is_owner);
+        assert!(!is_moderator);
+        assert!(!is_member);
+    }
+
+    // ========================================
+    // parse_timestamp テスト
+    // ========================================
+
+    #[test]
+    fn test_parse_timestamp_valid() {
+        let ts = parse_timestamp(&Some("1703145600000000".to_string()));
+        // 2023-12-21 08:00:00 UTC
+        assert_eq!(ts.timestamp_micros(), 1703145600000000);
+    }
+
+    #[test]
+    fn test_parse_timestamp_none() {
+        let ts = parse_timestamp(&None);
+        // Noneの場合は現在時刻（テストでは具体的な値を検証せず、エラーなく動作することを確認）
+        assert!(ts.timestamp() > 0);
+    }
+
+    #[test]
+    fn test_parse_timestamp_invalid() {
+        let ts = parse_timestamp(&Some("invalid".to_string()));
+        // 無効な場合は現在時刻
+        assert!(ts.timestamp() > 0);
+    }
+
+    // ========================================
+    // parse_runs テスト
+    // ========================================
+
+    #[test]
+    fn test_parse_runs_none() {
+        let result = parse_runs(&None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_runs_empty() {
+        let runs: Vec<RunItem> = vec![];
+        let result = parse_runs(&Some(runs));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_runs_with_emoji() {
+        let runs = vec![
+            RunItem {
+                text: Some("Hello ".to_string()),
+                emoji: None,
+            },
+            RunItem {
+                text: None,
+                emoji: Some(InnerTubeEmoji {
+                    emoji_id: "UC123/custom_emoji".to_string(),
+                    shortcuts: Some(vec![":custom:".to_string()]),
+                    search_terms: None,
+                    image: ThumbnailContainer {
+                        thumbnails: vec![Thumbnail {
+                            url: "https://example.com/emoji.png".to_string(),
+                            width: Some(24),
+                            height: Some(24),
+                        }],
+                    },
+                    is_custom_emoji: Some(true),
+                }),
+            },
+        ];
+        let result = parse_runs(&Some(runs));
+        assert!(result.is_some());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.len(), 2);
+
+        match &parsed[0] {
+            MessageRun::Text { text } => assert_eq!(text, "Hello "),
+            _ => panic!("Expected Text run"),
+        }
+
+        match &parsed[1] {
+            MessageRun::Emoji { emoji } => {
+                assert_eq!(emoji.emoji_id, "UC123/custom_emoji");
+                assert!(emoji.is_custom_emoji);
+            }
+            _ => panic!("Expected Emoji run"),
+        }
+    }
+
+    #[test]
+    fn test_parse_runs_skip_empty_emoji_id() {
+        // 空のemoji_idはスキップされる
+        let runs = vec![RunItem {
+            text: None,
+            emoji: Some(InnerTubeEmoji {
+                emoji_id: "".to_string(), // 空のID
+                shortcuts: Some(vec![":empty:".to_string()]),
+                search_terms: None,
+                image: ThumbnailContainer { thumbnails: vec![] },
+                is_custom_emoji: Some(false),
+            }),
+        }];
+        let result = parse_runs(&Some(runs));
+        assert!(result.is_none()); // 空なのでNone
     }
 }

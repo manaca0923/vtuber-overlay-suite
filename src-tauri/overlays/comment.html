@@ -520,16 +520,14 @@
       if (!url || typeof url !== 'string') return false;
       try {
         const parsed = new URL(url);
-        // YouTube関連ドメインのみ許可
-        const allowedHosts = [
-          'yt3.ggpht.com',
-          'yt4.ggpht.com',
-          'lh3.googleusercontent.com',
-          'www.youtube.com',
-          'youtube.com',
-          'i.ytimg.com'
-        ];
-        return allowedHosts.some(host => parsed.hostname === host || parsed.hostname.endsWith('.' + host));
+        const hostname = parsed.hostname;
+        // YouTube関連ドメインのみ許可（ワイルドカードパターン対応）
+        // 完全一致
+        const exactHosts = ['youtube.com', 'www.youtube.com'];
+        if (exactHosts.includes(hostname)) return true;
+        // サフィックスマッチ（*.ggpht.com, *.googleusercontent.com, *.ytimg.com）
+        const allowedSuffixes = ['.ggpht.com', '.googleusercontent.com', '.ytimg.com'];
+        return allowedSuffixes.some(suffix => hostname.endsWith(suffix));
       } catch {
         return false;
       }

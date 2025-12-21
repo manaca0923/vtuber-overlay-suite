@@ -22,20 +22,10 @@ const PRESETS = {
     author: 'スパチャ太郎',
     messageType: 'superChat' as TestMessageType,
   },
-  sticker: {
-    text: 'ステッカー送ります！',
-    author: 'ステッカー太郎',
-    messageType: 'superSticker' as TestMessageType,
-  },
   membership: {
     text: 'メンバーになりました！',
     author: 'メンバー太郎',
     messageType: 'membership' as TestMessageType,
-  },
-  gift: {
-    text: 'メンバーシップギフト5件！',
-    author: 'ギフト太郎',
-    messageType: 'membershipGift' as TestMessageType,
   },
 } as const;
 
@@ -122,22 +112,10 @@ export function TestModeButton() {
                     スパチャ
                   </button>
                   <button
-                    onClick={() => handlePreset('sticker')}
-                    className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 transition-colors text-sm"
-                  >
-                    ステッカー
-                  </button>
-                  <button
                     onClick={() => handlePreset('membership')}
                     className="px-3 py-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors text-sm"
                   >
                     メンバー
-                  </button>
-                  <button
-                    onClick={() => handlePreset('gift')}
-                    className="px-3 py-1.5 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 transition-colors text-sm"
-                  >
-                    ギフト
                   </button>
                 </div>
               </div>

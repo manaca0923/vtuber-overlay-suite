@@ -372,8 +372,7 @@ pub async fn send_test_comment(
         message: comment_text,
         author_name,
         author_channel_id: "test-channel".to_string(),
-        // シンプルなSVGプレースホルダー（オフライン対応）
-        author_image_url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='24' fill='%236366f1'/%3E%3Ctext x='24' y='30' text-anchor='middle' fill='white' font-size='20'%3E%F0%9F%A7%AA%3C/text%3E%3C/svg%3E".to_string(),
+        author_image_url: "https://via.placeholder.com/48".to_string(),
         published_at: Utc::now(),
         is_owner: false,
         is_moderator: false,

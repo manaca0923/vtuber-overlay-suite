@@ -650,15 +650,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~対象: `App.tsx`, `ApiKeySetup.tsx`, `WizardStep2.tsx`~~
   - 対応済み: デバッグ用console.logを削除（console.errorは維持）
 
-- [ ] **未使用コードの整理** (PR#19, PR#22)
-  - `src-tauri/src/keyring.rs`: 本番移行後に`commands/keyring.rs`のDB実装を削除
-  - Rustコンパイラ警告の解消（`cargo check`で確認）
-  - Windows CIで16件のdead code警告:
-    - 未使用構造体: `SetlistSong`, `Setting`, `CommentLog`
-    - 未使用関数: `save_api_key`, `get_api_key`, `delete_api_key`, `has_api_key`
-    - 未使用定数: `SERVICE_NAME`, `API_KEY_ENTRY`
-    - 未読フィールド: `amount_micros`, `alt_text`, `gift_memberships_level_name`等
-  - 対応: 不要なら削除、将来使用予定なら`#[allow(dead_code)]`付与
+- [x] **未使用コードの整理** (PR#19, PR#22, PR#25で対応済み)
+  - ~~Rustコンパイラ警告の解消（`cargo check`で確認）~~
+  - 対応済み: 将来使用予定のコードに`#[allow(dead_code)]`を付与
+  - `src-tauri/src/keyring.rs`: 本番移行後に`commands/keyring.rs`のDB実装を削除（セキュアストレージ移行時に対応）
 
 - [ ] **オーバーレイ設定のposition型をenum化** (PR#23)
   - 現在: `position: String`（`http.rs`, `types.rs`）
@@ -678,10 +673,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 古い状態で再開すると取得済みコメントが重複する可能性
   - 有効期限を設定して古い状態を無効化
 
-- [ ] **コメント削除のフェードアウトアニメーション** (PR#23)
-  - comment.htmlにCSSアニメーション（.removing）があるが未使用
-  - 古いコメント削除時にフェードアウトを適用
-  - `comment:remove` WebSocketイベント受信時にも適用
+- [x] **コメント削除のフェードアウトアニメーション** (PR#23, PR#25で対応済み)
+  - ~~comment.htmlにCSSアニメーション（.removing）があるが未使用~~
+  - 対応済み: removeCommentWithAnimation()で.removingクラスを使用
+  - comment:removeイベントにも対応
 
 - [ ] **コメントログのDB保存** (PR#23)
   - スキーマ（`001_initial.sql`の`comment_logs`テーブル）は存在
@@ -693,10 +688,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 長時間配信（2時間超）で自動復帰しない可能性
   - 無制限または大きな上限への変更を検討
 
-- [ ] **テストモードでの各種メッセージタイプ送信** (PR#23)
-  - 現在: Textメッセージのみ送信
-  - superChat, superSticker, membership, membershipGiftの検証ができない
-  - テストボタンにメッセージタイプ選択を追加
+- [x] **テストモードでの各種メッセージタイプ送信** (PR#23, PR#25で対応済み)
+  - ~~現在: Textメッセージのみ送信~~
+  - 対応済み: superChat, superSticker, membership, membershipGiftに対応
+  - TestModeButtonにメッセージタイプ選択UIを追加
 
 - [ ] **ApiKeySetup更新後のCommentControlPanel即時反映** (PR#23)
   - ApiKeySetup.tsxでAPIキー/LiveChatIdを更新しても上部のCommentControlPanelに即時反映されない

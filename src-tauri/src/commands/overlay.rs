@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::server::types::{CommentPosition, SetlistPosition};
+use crate::server::types::{CommentPosition, LayoutPreset, SetlistPosition};
 use crate::AppState;
 
 /// HEXカラーコードのバリデーション (#RRGGBB形式)
@@ -88,6 +88,7 @@ pub struct SetlistSettings {
 #[serde(rename_all = "camelCase")]
 pub struct OverlaySettings {
     pub theme: String,
+    pub layout: LayoutPreset,
     pub common: CommonSettings,
     pub comment: CommentSettings,
     pub setlist: SetlistSettings,
@@ -162,6 +163,7 @@ pub async fn broadcast_settings_update(
 
     let payload = SettingsUpdatePayload {
         theme: settings.theme.clone(),
+        layout: settings.layout,
         primary_color: settings.common.primary_color.clone(),
         font_family: settings.common.font_family.clone(),
         border_radius: settings.common.border_radius,

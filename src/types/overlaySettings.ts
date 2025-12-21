@@ -27,6 +27,57 @@ export type CommentPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom
 // セットリスト位置
 export type SetlistPosition = 'top' | 'bottom' | 'left' | 'right';
 
+// レイアウトプリセット
+export type LayoutPreset = 'streaming' | 'talk' | 'music' | 'gaming' | 'custom';
+
+// レイアウトプリセット設定
+export interface LayoutPresetConfig {
+  name: string;
+  description: string;
+  comment: {
+    position: CommentPosition;
+    enabled: boolean;
+  };
+  setlist: {
+    position: SetlistPosition;
+    enabled: boolean;
+  };
+}
+
+// レイアウトプリセット定義
+export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutPresetConfig> = {
+  streaming: {
+    name: '配信向け',
+    description: 'ゲーム配信など、画面上部を空ける',
+    comment: { position: 'bottom-left', enabled: true },
+    setlist: { position: 'bottom', enabled: true },
+  },
+  talk: {
+    name: '雑談向け',
+    description: '顔出し配信で左にセトリ、右下にコメント',
+    comment: { position: 'bottom-right', enabled: true },
+    setlist: { position: 'left', enabled: true },
+  },
+  music: {
+    name: '歌配信向け',
+    description: 'セトリを目立たせ、コメントは控えめ',
+    comment: { position: 'top-right', enabled: true },
+    setlist: { position: 'bottom', enabled: true },
+  },
+  gaming: {
+    name: 'ゲーム配信向け',
+    description: 'ゲーム画面の中央を確保',
+    comment: { position: 'top-left', enabled: true },
+    setlist: { position: 'right', enabled: true },
+  },
+  custom: {
+    name: 'カスタム',
+    description: '個別に設定をカスタマイズ',
+    comment: { position: 'bottom-right', enabled: true },
+    setlist: { position: 'bottom', enabled: true },
+  },
+};
+
 // 共通設定
 export interface CommonSettings {
   primaryColor: string;
@@ -54,6 +105,7 @@ export interface SetlistSettings {
 // オーバーレイ設定全体
 export interface OverlaySettings {
   theme: ThemeName;
+  layout: LayoutPreset;
   common: CommonSettings;
   comment: CommentSettings;
   setlist: SetlistSettings;
@@ -62,6 +114,7 @@ export interface OverlaySettings {
 // デフォルト設定
 export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   theme: 'default',
+  layout: 'streaming',
   common: {
     primaryColor: '#6366f1',
     fontFamily: "'Yu Gothic', 'Meiryo', sans-serif",

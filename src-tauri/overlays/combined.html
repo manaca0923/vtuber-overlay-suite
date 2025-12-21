@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Combined Overlay</title>
+  <style>
+    :root {
+      --primary-color: #6366f1;
+      --background-color: transparent;
+      --text-color: #ffffff;
+      --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      --avatar-size: 48px;
+      --font-size-name: 14px;
+      --font-size-message: 16px;
+      --font-size-setlist: 24px;
+      --comment-gap: 8px;
+      --animation-duration: 0.3s;
+      --animation-easing: ease-out;
+      --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--background-color);
+      font-family: var(--font-family);
+      color: var(--text-color);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* ===== レイアウトコンテナ ===== */
+    #overlay-root {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      padding: 16px;
+      gap: 16px;
+    }
+
+    /* レイアウトプリセット */
+    /* streaming: コメント左下、セットリスト下 */
+    #overlay-root.layout-streaming {
+      grid-template-columns: 400px 1fr;
+      grid-template-rows: 1fr auto;
+      grid-template-areas:
+        "comment ."
+        "comment setlist";
+    }
+
+    /* talk: コメント右下、セットリスト左 */
+    #overlay-root.layout-talk {
+      grid-template-columns: 200px 1fr 400px;
+      grid-template-rows: 1fr;
+      grid-template-areas: "setlist . comment";
+    }
+
+    /* music: コメント右上、セットリスト下 */
+    #overlay-root.layout-music {
+      grid-template-columns: 1fr 400px;
+      grid-template-rows: auto 1fr auto;
+      grid-template-areas:
+        ". comment"
+        ". ."
+        "setlist setlist";
+    }
+
+    /* gaming: コメント左上、セットリスト右 */
+    #overlay-root.layout-gaming {
+      grid-template-columns: 400px 1fr 200px;
+      grid-template-rows: 1fr;
+      grid-template-areas: "comment . setlist";
+    }
+
+    /* custom: デフォルトはstreaming */
+    #overlay-root.layout-custom {
+      grid-template-columns: 400px 1fr;
+      grid-template-rows: 1fr auto;
+      grid-template-areas:
+        "comment ."
+        "comment setlist";
+    }
+
+    /* ===== コメントエリア ===== */
+    #comment-area {
+      grid-area: comment;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      overflow: hidden;
+    }
+
+    #comment-area.position-top {
+      justify-content: flex-start;
+    }
+
+    #comment-container {
+      display: flex;
+      flex-direction: column;
+      gap: var(--comment-gap);
+      overflow: hidden;
+    }
+
+    .comment {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      animation: comment-enter var(--animation-duration) var(--animation-easing);
+      flex-shrink: 0;
+    }
+
+    .comment.no-animation {
+      animation: none;
+    }
+
+    .comment.removing {
+      animation: comment-exit var(--animation-duration) var(--animation-easing);
+    }
+
+    .comment.superchat {
+      background: linear-gradient(135deg, var(--sc-color, #ff0000) 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid var(--sc-color, #ff0000);
+    }
+
+    .comment.supersticker {
+      background: linear-gradient(135deg, #f59e0b 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid #f59e0b;
+    }
+
+    .comment.membership {
+      background: linear-gradient(135deg, #10b981 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid #10b981;
+    }
+
+    .comment.membershipgift {
+      background: linear-gradient(135deg, #8b5cf6 0%, rgba(0, 0, 0, 0.8) 100%);
+      border: 2px solid #8b5cf6;
+    }
+
+    .avatar {
+      width: var(--avatar-size);
+      height: var(--avatar-size);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .name {
+      font-size: var(--font-size-name);
+      font-weight: bold;
+      text-shadow: var(--text-shadow);
+    }
+
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .badge-owner {
+      background: #fbbf24;
+      color: #000;
+    }
+
+    .badge-moderator {
+      background: #3b82f6;
+      color: #fff;
+    }
+
+    .badge-member {
+      background: #10b981;
+      color: #fff;
+    }
+
+    .message {
+      font-size: var(--font-size-message);
+      word-wrap: break-word;
+      text-shadow: var(--text-shadow);
+    }
+
+    .amount {
+      font-size: var(--font-size-name);
+      font-weight: bold;
+      color: #fbbf24;
+    }
+
+    .inline-emoji {
+      width: 24px;
+      height: 24px;
+      vertical-align: middle;
+      display: inline;
+      margin: 0 2px;
+    }
+
+    @keyframes comment-enter {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes comment-exit {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+    }
+
+    /* ===== セットリストエリア ===== */
+    #setlist-area {
+      grid-area: setlist;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #setlist-container {
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      padding: 16px 24px;
+      min-width: 300px;
+      max-width: 100%;
+    }
+
+    .setlist-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      opacity: 0.5;
+      transition: all 0.3s ease;
+    }
+
+    .setlist-item.current {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+
+    .setlist-item.current .song-title {
+      color: var(--primary-color);
+    }
+
+    .song-number {
+      font-size: 14px;
+      font-weight: bold;
+      min-width: 24px;
+      text-align: center;
+      color: var(--primary-color);
+    }
+
+    .song-info {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .song-title {
+      font-size: var(--font-size-setlist);
+      font-weight: bold;
+      text-shadow: var(--text-shadow);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .song-artist {
+      font-size: 14px;
+      opacity: 0.7;
+      text-shadow: var(--text-shadow);
+    }
+
+    .song-status {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--primary-color);
+    }
+
+    /* 非表示 */
+    .hidden {
+      display: none !important;
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="overlay-root" class="layout-streaming">
+    <div id="comment-area">
+      <div id="comment-container"></div>
+    </div>
+    <div id="setlist-area">
+      <div id="setlist-container">
+        <div class="setlist-item" id="song-prev">
+          <span class="song-number">-</span>
+          <div class="song-info">
+            <div class="song-title">-</div>
+            <div class="song-artist"></div>
+          </div>
+        </div>
+        <div class="setlist-item current" id="song-current">
+          <span class="song-number">-</span>
+          <div class="song-info">
+            <div class="song-title">待機中...</div>
+            <div class="song-artist"></div>
+          </div>
+          <span class="song-status">NOW</span>
+        </div>
+        <div class="setlist-item" id="song-next">
+          <span class="song-number">-</span>
+          <div class="song-info">
+            <div class="song-title">-</div>
+            <div class="song-artist"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 設定 =====
+    let showAvatar = true;
+    let showArtist = true;
+    let commentEnabled = true;
+    let setlistEnabled = true;
+    let currentLayout = 'streaming';
+
+    const WS_URL = 'ws://localhost:19801/ws';
+    const API_BASE_URL = 'http://localhost:19800/api';
+
+    const VALID_LAYOUTS = ['streaming', 'talk', 'music', 'gaming', 'custom'];
+    const VALID_COMMENT_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+    const VALID_SETLIST_POSITIONS = ['top', 'bottom', 'left', 'right'];
+
+    let ws = null;
+    let reconnectDelay = 1000;
+
+    // ===== バリデーション =====
+    function isValidHexColor(color) {
+      return typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color);
+    }
+
+    function isValidNumber(value, min, max) {
+      const num = parseInt(value, 10);
+      return !isNaN(num) && num >= min && num <= max;
+    }
+
+    function sanitizeFontFamily(fontFamily) {
+      if (typeof fontFamily !== 'string' || fontFamily.length === 0 || fontFamily.length > 200) {
+        return null;
+      }
+      return fontFamily.replace(/[<>"'`\;{}]/g, '');
+    }
+
+    // ===== URL/API設定適用 =====
+    function applyUrlSettings() {
+      const params = new URLSearchParams(window.location.search);
+      const root = document.documentElement;
+
+      // レイアウト
+      const layout = params.get('layout');
+      if (layout && VALID_LAYOUTS.includes(layout)) {
+        currentLayout = layout;
+        applyLayout(layout);
+      }
+
+      // 共通設定
+      const primaryColor = params.get('primaryColor');
+      if (primaryColor && isValidHexColor(primaryColor)) {
+        root.style.setProperty('--primary-color', primaryColor);
+      }
+
+      const fontFamily = params.get('fontFamily');
+      const sanitizedFont = sanitizeFontFamily(fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
+      }
+
+      // コメント設定
+      const commentFontSize = params.get('commentFontSize');
+      if (commentFontSize && isValidNumber(commentFontSize, 8, 72)) {
+        root.style.setProperty('--font-size-message', commentFontSize + 'px');
+      }
+
+      const showAvatarParam = params.get('showAvatar');
+      if (showAvatarParam !== null) {
+        showAvatar = showAvatarParam === 'true';
+        updateAvatarVisibility();
+      }
+
+      const commentEnabledParam = params.get('commentEnabled');
+      if (commentEnabledParam !== null) {
+        commentEnabled = commentEnabledParam === 'true';
+        updateVisibility();
+      }
+
+      // セットリスト設定
+      const setlistFontSize = params.get('setlistFontSize');
+      if (setlistFontSize && isValidNumber(setlistFontSize, 8, 72)) {
+        root.style.setProperty('--font-size-setlist', setlistFontSize + 'px');
+      }
+
+      const showArtistParam = params.get('showArtist');
+      if (showArtistParam !== null) {
+        showArtist = showArtistParam === 'true';
+        updateArtistVisibility();
+      }
+
+      const setlistEnabledParam = params.get('setlistEnabled');
+      if (setlistEnabledParam !== null) {
+        setlistEnabled = setlistEnabledParam === 'true';
+        updateVisibility();
+      }
+    }
+
+    function applyLayout(layout) {
+      const root = document.getElementById('overlay-root');
+      VALID_LAYOUTS.forEach(l => root.classList.remove(`layout-${l}`));
+      root.classList.add(`layout-${layout}`);
+      currentLayout = layout;
+    }
+
+    function updateVisibility() {
+      const commentArea = document.getElementById('comment-area');
+      const setlistArea = document.getElementById('setlist-area');
+      commentArea.classList.toggle('hidden', !commentEnabled);
+      setlistArea.classList.toggle('hidden', !setlistEnabled);
+    }
+
+    function updateAvatarVisibility() {
+      document.querySelectorAll('.avatar').forEach(avatar => {
+        avatar.style.display = showAvatar ? 'block' : 'none';
+      });
+    }
+
+    function updateArtistVisibility() {
+      document.querySelectorAll('.song-artist').forEach(artist => {
+        artist.style.display = showArtist ? 'block' : 'none';
+      });
+    }
+
+    // ===== WebSocket設定更新 =====
+    function applySettingsUpdate(settings) {
+      const root = document.documentElement;
+
+      if (settings.layout && VALID_LAYOUTS.includes(settings.layout)) {
+        applyLayout(settings.layout);
+      }
+
+      if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
+        root.style.setProperty('--primary-color', settings.primaryColor);
+      }
+
+      const sanitizedFont = sanitizeFontFamily(settings.fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
+      }
+
+      // コメント設定
+      if (settings.comment) {
+        if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
+        }
+        if (settings.comment.showAvatar !== undefined) {
+          showAvatar = settings.comment.showAvatar;
+          updateAvatarVisibility();
+        }
+        if (settings.comment.enabled !== undefined) {
+          commentEnabled = settings.comment.enabled;
+          updateVisibility();
+        }
+      }
+
+      // セットリスト設定
+      if (settings.setlist) {
+        if (settings.setlist.fontSize && isValidNumber(settings.setlist.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-setlist', settings.setlist.fontSize + 'px');
+        }
+        if (settings.setlist.showArtist !== undefined) {
+          showArtist = settings.setlist.showArtist;
+          updateArtistVisibility();
+        }
+        if (settings.setlist.enabled !== undefined) {
+          setlistEnabled = settings.setlist.enabled;
+          updateVisibility();
+        }
+      }
+    }
+
+    // ===== コメント機能 =====
+    const commentBuffer = [];
+    const displayQueue = [];
+    let isProcessingQueue = false;
+    let currentDisplayInterval = 300;
+    const BUFFER_INTERVAL = 5000;
+    const MIN_DISPLAY_INTERVAL = 100;
+    const MAX_DISPLAY_INTERVAL = 1000;
+
+    function queueComment(comment) {
+      if (!comment || !comment.id) return;
+      if (commentBuffer.some(c => c.id === comment.id)) return;
+      if (displayQueue.some(c => c.id === comment.id)) return;
+      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) return;
+      commentBuffer.push(comment);
+    }
+
+    function flushBuffer() {
+      if (commentBuffer.length > 0) {
+        const count = commentBuffer.length;
+        currentDisplayInterval = Math.floor(BUFFER_INTERVAL / count);
+        currentDisplayInterval = Math.max(MIN_DISPLAY_INTERVAL, Math.min(MAX_DISPLAY_INTERVAL, currentDisplayInterval));
+        displayQueue.push(...commentBuffer);
+        commentBuffer.length = 0;
+        processQueue();
+      }
+    }
+
+    function processQueue() {
+      if (isProcessingQueue || displayQueue.length === 0) return;
+      isProcessingQueue = true;
+      const comment = displayQueue.shift();
+      addComment(comment);
+      setTimeout(() => {
+        isProcessingQueue = false;
+        processQueue();
+      }, currentDisplayInterval);
+    }
+
+    setInterval(flushBuffer, BUFFER_INTERVAL);
+
+    function addComment(comment) {
+      const container = document.getElementById('comment-container');
+      if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) return;
+
+      const el = createCommentElement(comment);
+      container.appendChild(el);
+
+      requestAnimationFrame(() => {
+        trimOverflowingComments();
+      });
+    }
+
+    function removeCommentWithAnimation(element) {
+      if (!element || element.classList.contains('removing')) return;
+      element.classList.add('removing');
+      element.addEventListener('animationend', () => element.remove(), { once: true });
+      setTimeout(() => {
+        if (element.parentNode) element.remove();
+      }, 500);
+    }
+
+    function trimOverflowingComments() {
+      const container = document.getElementById('comment-container');
+      const area = document.getElementById('comment-area');
+      const areaRect = area.getBoundingClientRect();
+      const comments = Array.from(container.querySelectorAll('.comment:not(.removing)'));
+
+      comments.forEach(comment => {
+        const rect = comment.getBoundingClientRect();
+        if (rect.top < areaRect.top - 10) {
+          removeCommentWithAnimation(comment);
+        }
+      });
+    }
+
+    function getSuperChatColor(amountString) {
+      if (!amountString) return '#1e88e5';
+      const amount = parseFloat(amountString.replace(/[^\d.]/g, '')) || 0;
+      // 日本円換算（簡易）
+      let jpy = amount;
+      if (amountString.includes('$')) jpy = amount * 150;
+      else if (amountString.includes('€')) jpy = amount * 160;
+      else if (amountString.includes('£')) jpy = amount * 190;
+
+      if (jpy >= 10000) return '#f44336';
+      if (jpy >= 5000) return '#e91e63';
+      if (jpy >= 2000) return '#e65100';
+      if (jpy >= 1000) return '#ffb300';
+      if (jpy >= 500) return '#00c853';
+      if (jpy >= 200) return '#00e5ff';
+      return '#1e88e5';
+    }
+
+    function createCommentElement(comment) {
+      const div = document.createElement('div');
+      div.className = 'comment';
+      div.dataset.id = comment.id;
+
+      const messageType = comment.messageType?.type;
+      if (messageType === 'superChat') {
+        div.classList.add('superchat');
+        div.style.setProperty('--sc-color', getSuperChatColor(comment.messageType.amount));
+      } else if (messageType === 'superSticker') {
+        div.classList.add('supersticker');
+      } else if (messageType === 'membership') {
+        div.classList.add('membership');
+      } else if (messageType === 'membershipGift') {
+        div.classList.add('membershipgift');
+      }
+
+      const avatar = document.createElement('img');
+      avatar.className = 'avatar';
+      avatar.src = comment.authorImageUrl;
+      avatar.alt = comment.authorName;
+      if (!showAvatar) avatar.style.display = 'none';
+
+      const content = document.createElement('div');
+      content.className = 'content';
+
+      const header = document.createElement('div');
+      header.className = 'header';
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = comment.authorName;
+      header.appendChild(name);
+
+      if (comment.isOwner) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-owner';
+        badge.textContent = 'Owner';
+        header.appendChild(badge);
+      }
+      if (comment.isModerator) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-moderator';
+        badge.textContent = 'Mod';
+        header.appendChild(badge);
+      }
+      if (comment.isMember) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-member';
+        badge.textContent = 'Member';
+        header.appendChild(badge);
+      }
+
+      if (messageType === 'superChat' && comment.messageType.amount) {
+        const amount = document.createElement('span');
+        amount.className = 'amount';
+        amount.textContent = comment.messageType.amount;
+        header.appendChild(amount);
+      }
+
+      const message = document.createElement('div');
+      message.className = 'message';
+      if (comment.messageRuns && comment.messageRuns.length > 0) {
+        renderMessageWithEmoji(message, comment.messageRuns);
+      } else {
+        message.textContent = comment.message;
+      }
+
+      content.appendChild(header);
+      content.appendChild(message);
+      div.appendChild(avatar);
+      div.appendChild(content);
+
+      return div;
+    }
+
+    function renderMessageWithEmoji(container, messageRuns) {
+      messageRuns.forEach(run => {
+        if (run.text !== undefined) {
+          container.appendChild(document.createTextNode(run.text));
+        } else if (run.emoji) {
+          const thumbnails = run.emoji.image?.thumbnails || [];
+          const thumb = thumbnails.find(t => t.width >= 24) || thumbnails[0];
+          const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
+
+          if (thumb && isValidEmojiUrl(thumb.url)) {
+            const img = document.createElement('img');
+            img.className = 'inline-emoji';
+            img.alt = shortcut;
+            img.title = shortcut;
+            img.loading = 'lazy';
+            const normalizedUrl = normalizeUrl(thumb.url);
+            img.onerror = function () {
+              const text = document.createTextNode(shortcut);
+              this.parentNode?.replaceChild(text, this);
+            };
+            img.src = normalizedUrl;
+            container.appendChild(img);
+          } else {
+            container.appendChild(document.createTextNode(shortcut));
+          }
+        }
+      });
+    }
+
+    function normalizeUrl(url) {
+      if (!url || typeof url !== 'string') return url;
+      if (url.startsWith('//')) return 'https:' + url;
+      return url;
+    }
+
+    function isValidEmojiUrl(url) {
+      if (!url || typeof url !== 'string') return false;
+      try {
+        const parsed = new URL(normalizeUrl(url));
+        const hostname = parsed.hostname;
+        const exactHosts = ['youtube.com', 'www.youtube.com', 'fonts.gstatic.com'];
+        if (exactHosts.includes(hostname)) return true;
+        const allowedSuffixes = ['.ggpht.com', '.googleusercontent.com', '.ytimg.com', '.gstatic.com'];
+        return allowedSuffixes.some(suffix => hostname.endsWith(suffix));
+      } catch {
+        return false;
+      }
+    }
+
+    // ===== セットリスト機能 =====
+    let currentSetlist = { songs: [], currentIndex: -1 };
+
+    function updateSetlist(data) {
+      currentSetlist = data;
+      const songs = data.songs || [];
+      const currentIndex = data.currentIndex ?? -1;
+
+      const prevEl = document.getElementById('song-prev');
+      const currentEl = document.getElementById('song-current');
+      const nextEl = document.getElementById('song-next');
+
+      // 前の曲
+      if (currentIndex > 0) {
+        const prevSong = songs[currentIndex - 1];
+        prevEl.querySelector('.song-number').textContent = currentIndex;
+        prevEl.querySelector('.song-title').textContent = prevSong.title;
+        prevEl.querySelector('.song-artist').textContent = prevSong.artist || '';
+        prevEl.style.display = 'flex';
+      } else {
+        prevEl.style.display = 'none';
+      }
+
+      // 現在の曲
+      if (currentIndex >= 0 && currentIndex < songs.length) {
+        const currentSong = songs[currentIndex];
+        currentEl.querySelector('.song-number').textContent = currentIndex + 1;
+        currentEl.querySelector('.song-title').textContent = currentSong.title;
+        currentEl.querySelector('.song-artist').textContent = currentSong.artist || '';
+        currentEl.style.display = 'flex';
+      } else {
+        currentEl.querySelector('.song-number').textContent = '-';
+        currentEl.querySelector('.song-title').textContent = '待機中...';
+        currentEl.querySelector('.song-artist').textContent = '';
+      }
+
+      // 次の曲
+      if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+        const nextSong = songs[currentIndex + 1];
+        nextEl.querySelector('.song-number').textContent = currentIndex + 2;
+        nextEl.querySelector('.song-title').textContent = nextSong.title;
+        nextEl.querySelector('.song-artist').textContent = nextSong.artist || '';
+        nextEl.style.display = 'flex';
+      } else {
+        nextEl.style.display = 'none';
+      }
+
+      updateArtistVisibility();
+    }
+
+    // ===== WebSocket接続 =====
+    let settingsVersion = 0;
+    let fetchInFlight = false;
+    let settingsFetchSucceeded = false;
+
+    async function fetchAndApplySettings() {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
+      const requestVersion = settingsVersion;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(`${API_BASE_URL}/overlay/settings`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const settings = await response.json();
+          if (settingsVersion > requestVersion) return;
+          applySettingsUpdate(settings);
+          applyUrlSettings();
+          settingsFetchSucceeded = true;
+        }
+      } catch (e) {
+        console.log('Settings API not available, using defaults');
+      } finally {
+        fetchInFlight = false;
+      }
+    }
+
+    async function fetchLatestSetlist() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/setlist/latest`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.songs) {
+            updateSetlist({
+              songs: data.songs.map(s => ({ title: s.title, artist: s.artist })),
+              currentIndex: data.setlist.currentIndex
+            });
+          }
+        }
+      } catch (e) {
+        console.log('Failed to fetch setlist');
+      }
+    }
+
+    function connectWebSocket() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        reconnectDelay = 1000;
+        if (!settingsFetchSucceeded) {
+          fetchAndApplySettings();
+        }
+        fetchLatestSetlist();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          switch (data.type) {
+            case 'comment:add':
+              queueComment(data.payload);
+              break;
+            case 'comment:remove':
+              const el = document.querySelector(`[data-id="${CSS.escape(data.payload?.id)}"]`);
+              if (el) removeCommentWithAnimation(el);
+              break;
+            case 'setlist:update':
+              updateSetlist({
+                songs: data.payload.songs.map(s => ({ title: s.title, artist: s.artist })),
+                currentIndex: data.payload.currentIndex
+              });
+              break;
+            case 'settings:update':
+              settingsVersion++;
+              applySettingsUpdate(data.payload);
+              applyUrlSettings();
+              break;
+          }
+        } catch (e) {
+          console.error('Failed to parse message:', e);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket closed, reconnecting...');
+        setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+          connectWebSocket();
+        }, reconnectDelay);
+      };
+    }
+
+    // ===== ウィンドウリサイズ =====
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        trimOverflowingComments();
+      }, 100);
+    });
+
+    // ===== 初期化 =====
+    applyUrlSettings();
+    fetchAndApplySettings();
+    connectWebSocket();
+  </script>
+</body>
+
+</html>

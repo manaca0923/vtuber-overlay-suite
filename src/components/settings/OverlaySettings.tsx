@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ThemeSelector } from './ThemeSelector';
+import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
 import { SetlistSettingsPanel } from './SetlistSettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
@@ -8,9 +9,13 @@ import {
   loadOverlaySettings,
   saveOverlaySettings,
   broadcastSettingsUpdate,
+  LAYOUT_PRESETS,
   type OverlaySettings as Settings,
   type ThemeName,
+  type LayoutPreset,
 } from '../../types/overlaySettings';
+
+type PreviewMode = 'combined' | 'individual';
 
 export function OverlaySettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_OVERLAY_SETTINGS);
@@ -19,6 +24,7 @@ export function OverlaySettings() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activePanel, setActivePanel] = useState<'comment' | 'setlist'>('comment');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
 
   useEffect(() => {
     async function load() {
@@ -28,6 +34,7 @@ export function OverlaySettings() {
           // 古い設定と新しいデフォルト値をマージ（マイグレーション対応）
           const merged: Settings = {
             theme: saved.theme ?? DEFAULT_OVERLAY_SETTINGS.theme,
+            layout: saved.layout ?? DEFAULT_OVERLAY_SETTINGS.layout,
             common: {
               ...DEFAULT_OVERLAY_SETTINGS.common,
               ...saved.common,
@@ -79,6 +86,31 @@ export function OverlaySettings() {
     }));
   };
 
+  const handleLayoutChange = (layout: LayoutPreset) => {
+    // プリセット以外（custom）の場合はレイアウトのみ変更
+    if (layout === 'custom') {
+      setSettings((prev) => ({ ...prev, layout }));
+      return;
+    }
+
+    // プリセットの設定を適用
+    const presetConfig = LAYOUT_PRESETS[layout];
+    setSettings((prev) => ({
+      ...prev,
+      layout,
+      comment: {
+        ...prev.comment,
+        position: presetConfig.comment.position,
+        enabled: presetConfig.comment.enabled,
+      },
+      setlist: {
+        ...prev.setlist,
+        position: presetConfig.setlist.position,
+        enabled: presetConfig.setlist.enabled,
+      },
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -95,6 +127,14 @@ export function OverlaySettings() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 左: 設定パネル */}
         <div className="space-y-6">
+          {/* レイアウトプリセット */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <LayoutPresetSelector
+              selected={settings.layout}
+              onChange={handleLayoutChange}
+            />
+          </div>
+
           {/* テーマ選択 */}
           <div className="bg-white rounded-lg shadow p-6">
             <ThemeSelector
@@ -133,13 +173,17 @@ export function OverlaySettings() {
               {activePanel === 'comment' && (
                 <CommentSettingsPanel
                   settings={settings.comment}
-                  onChange={(comment) => setSettings((prev) => ({ ...prev, comment }))}
+                  onChange={(comment) => {
+                    setSettings((prev) => ({ ...prev, comment, layout: 'custom' }));
+                  }}
                 />
               )}
               {activePanel === 'setlist' && (
                 <SetlistSettingsPanel
                   settings={settings.setlist}
-                  onChange={(setlist) => setSettings((prev) => ({ ...prev, setlist }))}
+                  onChange={(setlist) => {
+                    setSettings((prev) => ({ ...prev, setlist, layout: 'custom' }));
+                  }}
                 />
               )}
             </div>
@@ -172,8 +216,40 @@ export function OverlaySettings() {
         </div>
 
         {/* 右: プレビュー */}
-        <div className="lg:sticky lg:top-4">
-          <OverlayPreview settings={settings} activePanel={activePanel} />
+        <div className="lg:sticky lg:top-4 space-y-4">
+          {/* プレビューモード切替 */}
+          <div className="flex items-center gap-2 bg-white rounded-lg shadow p-3">
+            <span className="text-sm text-gray-600">プレビュー:</span>
+            <button
+              onClick={() => setPreviewMode('combined')}
+              className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                previewMode === 'combined'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              統合
+            </button>
+            <button
+              onClick={() => setPreviewMode('individual')}
+              className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                previewMode === 'individual'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              個別
+            </button>
+          </div>
+
+          {/* プレビュー */}
+          <div className="h-[500px]">
+            <OverlayPreview
+              settings={settings}
+              activePanel={activePanel}
+              mode={previewMode}
+            />
+          </div>
         </div>
       </div>
     </div>

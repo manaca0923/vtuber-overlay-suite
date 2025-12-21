@@ -25,9 +25,13 @@ export function OverlayPreview({ settings, activePanel }: OverlayPreviewProps) {
       params.set('fontSize', String(settings.comment.fontSize));
       params.set('maxCount', String(settings.comment.maxCount));
       params.set('showAvatar', String(settings.comment.showAvatar));
+      params.set('position', settings.comment.position);
+      params.set('enabled', String(settings.comment.enabled));
     } else {
       params.set('fontSize', String(settings.setlist.fontSize));
       params.set('showArtist', String(settings.setlist.showArtist));
+      params.set('position', settings.setlist.position);
+      params.set('enabled', String(settings.setlist.enabled));
     }
 
     return `${base}?${params.toString()}`;

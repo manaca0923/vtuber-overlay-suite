@@ -31,6 +31,18 @@ pub enum YouTubeError {
 
     #[error("Failed to parse response: {0}")]
     ParseError(String),
+
+    #[error("Network error: {0}")]
+    NetworkError(String),
+
+    #[error("API error: {0}")]
+    ApiError(String),
+
+    #[error("InnerTube API not initialized - call initialize() first")]
+    InnerTubeNotInitialized,
+
+    #[error("InnerTube continuation expired - reinitializing required")]
+    InnerTubeContinuationExpired,
 }
 
 impl From<YouTubeError> for String {

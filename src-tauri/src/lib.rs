@@ -135,6 +135,9 @@ pub fn run() {
       commands::overlay::save_overlay_settings,
       commands::overlay::load_overlay_settings,
       commands::overlay::broadcast_settings_update,
+      commands::youtube::save_api_mode,
+      commands::youtube::load_api_mode,
+      commands::youtube::test_innertube_connection,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

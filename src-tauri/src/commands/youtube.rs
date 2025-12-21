@@ -72,6 +72,7 @@ pub async fn get_chat_messages(
                 is_member: item.author_details.is_chat_sponsor,
                 is_verified: item.author_details.is_verified,
                 message_type,
+                message_runs: None, // 公式APIでは絵文字情報なし
             })
         })
         .collect();
@@ -344,6 +345,7 @@ pub async fn send_test_comment(
         is_member: false,
         is_verified: false,
         message_type: MessageType::Text,
+        message_runs: None,
     };
 
     // WebSocketでブロードキャスト
@@ -424,5 +426,123 @@ pub struct WizardSettingsData {
     pub video_id: String,
     pub live_chat_id: String,
     pub saved_at: String,
+}
+
+// ================================
+// InnerTube API 関連コマンド
+// ================================
+
+/// API取得モードの列挙型
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiMode {
+    Official,
+    InnerTube,
+}
+
+impl Default for ApiMode {
+    fn default() -> Self {
+        ApiMode::Official
+    }
+}
+
+/// APIモードを保存
+#[tauri::command]
+pub async fn save_api_mode(
+    mode: ApiMode,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let pool = &state.db;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let data = serde_json::json!({
+        "api_mode": mode,
+        "saved_at": now
+    });
+    let data_str =
+        serde_json::to_string(&data).map_err(|e| format!("JSON serialize error: {}", e))?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO settings (key, value, updated_at)
+        VALUES ('api_mode', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        "#,
+    )
+    .bind(&data_str)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?;
+
+    log::info!("Saved API mode: {:?}", mode);
+    Ok(())
+}
+
+/// APIモードを読み込み
+#[tauri::command]
+pub async fn load_api_mode(state: tauri::State<'_, AppState>) -> Result<ApiMode, String> {
+    let pool = &state.db;
+
+    let result: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key = 'api_mode'")
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("DB error: {}", e))?;
+
+    if let Some(json_str) = result {
+        #[derive(serde::Deserialize)]
+        struct ApiModeData {
+            api_mode: ApiMode,
+        }
+        let data: ApiModeData =
+            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+        Ok(data.api_mode)
+    } else {
+        Ok(ApiMode::default())
+    }
+}
+
+/// InnerTube API接続テスト
+#[tauri::command]
+pub async fn test_innertube_connection(video_id: String) -> Result<String, String> {
+    use crate::youtube::innertube::{parse_chat_response, InnerTubeClient};
+
+    log::info!("Testing InnerTube connection for video: {}", video_id);
+
+    // クライアント初期化
+    let mut client = InnerTubeClient::new(video_id.clone());
+    client.initialize().await.map_err(|e| {
+        log::error!("InnerTube initialization failed: {}", e);
+        format!("初期化に失敗しました: {}", e)
+    })?;
+
+    log::info!("InnerTube client initialized");
+
+    // メッセージ取得
+    let response = client.get_chat_messages().await.map_err(|e| {
+        log::error!("InnerTube message fetch failed: {}", e);
+        format!("メッセージ取得に失敗しました: {}", e)
+    })?;
+
+    // パース
+    let messages = parse_chat_response(response);
+
+    // 統計情報を返す
+    let emoji_count = messages
+        .iter()
+        .filter(|m| m.message_runs.is_some())
+        .flat_map(|m| m.message_runs.as_ref().unwrap())
+        .filter(|run| matches!(run, crate::youtube::types::MessageRun::Emoji { .. }))
+        .count();
+
+    let result = format!(
+        "接続成功！\nメッセージ数: {}\nカスタム絵文字数: {}",
+        messages.len(),
+        emoji_count
+    );
+
+    log::info!("{}", result);
+    Ok(result)
 }
 

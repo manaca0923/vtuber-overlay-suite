@@ -181,6 +181,15 @@
     ::-webkit-scrollbar {
       display: none;
     }
+
+    /* カスタム絵文字（インライン） */
+    .inline-emoji {
+      width: 24px;
+      height: 24px;
+      vertical-align: middle;
+      display: inline;
+      margin: 0 2px;
+    }
   </style>
 </head>
 <body>
@@ -506,6 +515,35 @@
       }
     }
 
+    // 絵文字を含むメッセージをレンダリング
+    function renderMessageWithEmoji(container, messageRuns) {
+      messageRuns.forEach(run => {
+        if (run.text !== undefined) {
+          // テキスト部分
+          container.appendChild(document.createTextNode(run.text));
+        } else if (run.emoji) {
+          // 絵文字部分
+          const img = document.createElement('img');
+          img.className = 'inline-emoji';
+
+          // 最適なサイズのサムネイルを選択（24px以上を優先）
+          const thumbnails = run.emoji.image?.thumbnails || [];
+          const thumb = thumbnails.find(t => t.width >= 24) || thumbnails[0];
+
+          if (thumb) {
+            img.src = thumb.url;
+            img.alt = run.emoji.shortcuts?.[0] || ':emoji:';
+            img.title = run.emoji.shortcuts?.[0] || '';
+            container.appendChild(img);
+          } else {
+            // サムネイルがない場合はショートカットをテキスト表示
+            const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
+            container.appendChild(document.createTextNode(shortcut));
+          }
+        }
+      });
+    }
+
     function createCommentElement(comment) {
       const div = document.createElement('div');
       div.className = 'comment';
@@ -606,7 +644,13 @@
 
       const message = document.createElement('div');
       message.className = 'message';
-      message.textContent = comment.message;
+
+      // messageRunsがある場合は絵文字を含むレンダリング
+      if (comment.messageRuns && comment.messageRuns.length > 0) {
+        renderMessageWithEmoji(message, comment.messageRuns);
+      } else {
+        message.textContent = comment.message;
+      }
 
       content.appendChild(header);
       content.appendChild(message);

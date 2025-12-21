@@ -634,11 +634,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### セキュリティ（必須）
 
-- [ ] **APIキーのセキュアストレージ移行** (PR#19)
-  - 現在: SQLiteに平文保存（`src-tauri/src/commands/keyring.rs`）
-  - 対応: `src-tauri/src/keyring.rs`のkeyringクレート実装に移行
-  - 参照: CLAUDE.md「セキュリティ」セクション
-  - 備考: macOS=Keychain, Windows=Credential Manager, Linux=Secret Service API
+- [x] **APIキーのセキュアストレージ移行** (PR#19, PR#26で対応済み)
+  - ~~現在: SQLiteに平文保存~~
+  - 対応済み: `src-tauri/src/keyring.rs`のkeyringクレート実装に移行完了
+  - macOS=Keychain, Windows=Credential Manager, Linux=Secret Service API
+  - 既存DBからの自動移行機能付き（get_api_key時に自動でkeyringに移行）
+  - tokio::spawn_blockingでブロッキング呼び出しをラップ
 
 - [x] **空文字列APIキーのバリデーション** (PR#15, PR#19で対応済み)
   - ~~`save_api_key`で空文字列のAPIキーを保存できてしまう~~
@@ -650,10 +651,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~対象: `App.tsx`, `ApiKeySetup.tsx`, `WizardStep2.tsx`~~
   - 対応済み: デバッグ用console.logを削除（console.errorは維持）
 
-- [x] **未使用コードの整理** (PR#19, PR#22, PR#25で対応済み)
+- [x] **未使用コードの整理** (PR#19, PR#22, PR#25, PR#26で対応済み)
   - ~~Rustコンパイラ警告の解消（`cargo check`で確認）~~
   - 対応済み: 将来使用予定のコードに`#[allow(dead_code)]`を付与
-  - `src-tauri/src/keyring.rs`: 本番移行後に`commands/keyring.rs`のDB実装を削除（セキュアストレージ移行時に対応）
+  - `src-tauri/src/keyring.rs`: セキュアストレージ移行完了（DB実装からkeyring実装に移行済み）
 
 - [ ] **オーバーレイ設定のposition型をenum化** (PR#23)
   - 現在: `position: String`（`http.rs`, `types.rs`）
@@ -705,9 +706,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - OBSブラウザソースでの長時間使用テスト
   - 低スペックマシンでの動作確認
 
-- [ ] **keyringブロッキング呼び出し対応** (PR#15)
-  - keyring操作はOS APIへのブロッキング呼び出しの可能性
-  - パフォーマンス問題時は`tokio::task::spawn_blocking`使用を検討
+- [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
+  - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
+  - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
 
 ### テスト
 

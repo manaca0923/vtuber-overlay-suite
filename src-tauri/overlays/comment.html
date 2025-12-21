@@ -551,10 +551,16 @@
           if (thumb && isValidEmojiUrl(thumb.url)) {
             const img = document.createElement('img');
             img.className = 'inline-emoji';
-            img.src = thumb.url;
-            img.alt = run.emoji.shortcuts?.[0] || ':emoji:';
-            img.title = run.emoji.shortcuts?.[0] || '';
+            const shortcut = run.emoji.shortcuts?.[0] || ':emoji:';
+            img.alt = shortcut;
+            img.title = shortcut;
             img.loading = 'lazy'; // 遅延読み込みでパフォーマンス向上
+            // 画像読み込み失敗時はテキストにフォールバック
+            img.onerror = function() {
+              const text = document.createTextNode(shortcut);
+              this.parentNode?.replaceChild(text, this);
+            };
+            img.src = thumb.url;
             container.appendChild(img);
           } else {
             // URLが無効またはサムネイルがない場合はショートカットをテキスト表示

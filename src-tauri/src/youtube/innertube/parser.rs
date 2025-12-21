@@ -342,11 +342,26 @@ fn parse_author_badges(badges: &Option<Vec<AuthorBadge>>) -> (bool, bool, bool) 
 
 /// タイムスタンプをパース（マイクロ秒 -> DateTime<Utc>）
 fn parse_timestamp(timestamp_usec: &Option<String>) -> chrono::DateTime<Utc> {
-    timestamp_usec
-        .as_ref()
-        .and_then(|ts| ts.parse::<i64>().ok())
-        .and_then(|usec| Utc.timestamp_micros(usec).single())
-        .unwrap_or_else(Utc::now)
+    match timestamp_usec {
+        Some(ts) => {
+            match ts.parse::<i64>() {
+                Ok(usec) => {
+                    Utc.timestamp_micros(usec).single().unwrap_or_else(|| {
+                        log::warn!("Invalid timestamp microseconds: {}", usec);
+                        Utc::now()
+                    })
+                }
+                Err(e) => {
+                    log::warn!("Failed to parse timestamp '{}': {}", ts, e);
+                    Utc::now()
+                }
+            }
+        }
+        None => {
+            log::debug!("No timestamp provided, using current time");
+            Utc::now()
+        }
+    }
 }
 
 /// 金額テキストをパース（例: "¥1,000" -> ("1,000", "JPY")）

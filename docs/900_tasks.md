@@ -653,4 +653,23 @@ YouTubeのWeb/アプリが内部で使用する非公開API。`runs`配列でメ
   - 使用方法
   - システム要件
 
+- [ ] **InnerTube API ドキュメント追記** (PR#24)
+  - InnerTube APIの制約（rate limit、仕様変更リスク）について
+  - docs/200_youtube-api.mdへの追記を検討
+
+### InnerTube API関連（PR#24）
+
+- [ ] **test_innertube_connectionの本番無効化**
+  - テスト用コマンドのため本番では無効化を検討
+  - `#[cfg(debug_assertions)]`などで制御可能
+
+- [ ] **クライアントバージョンの自動更新機構**
+  - `CLIENT_VERSION`（2023年12月）がYouTube側で無効化される可能性
+  - 設定ファイルまたはフォールバック機構を検討
+
+- [ ] **InnerTubeテストカバレッジの拡充**
+  - `parse_chat_response`: 空のレスポンス、不正なレスポンス
+  - `parse_author_badges`: 複数バッジ同時存在ケース
+  - `extract_continuation`: 複数continuationトークン存在ケース
+
 ---

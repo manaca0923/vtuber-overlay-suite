@@ -119,6 +119,7 @@ dependencies = [
  "tauri-plugin-shell",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-stream",
  "tokio-tungstenite",
  "tonic",
  "tonic-build",

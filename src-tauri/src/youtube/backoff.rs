@@ -1,3 +1,4 @@
+use rand::Rng;
 use std::time::Duration;
 
 /// 指数バックオフの最大試行回数
@@ -5,13 +6,18 @@ use std::time::Duration;
 /// ユーザーは手動でポーリングを停止可能
 const MAX_ATTEMPTS: u32 = u32::MAX;
 
+/// ジッタの最大割合（±25%）
+const JITTER_FACTOR: f64 = 0.25;
+
 /// 指数バックオフを管理する構造体
 /// エラー時のリトライ間隔を指数的に増加させる（1s→2s→4s→8s→16s...）
+/// ジッタを追加して複数クライアントの再接続衝突を防止
 pub struct ExponentialBackoff {
     base_delay: Duration,
     max_delay: Duration,
     max_attempts: u32,
     current_attempt: u32,
+    use_jitter: bool,
 }
 
 impl ExponentialBackoff {
@@ -21,12 +27,28 @@ impl ExponentialBackoff {
     /// - base_delay: 1秒
     /// - max_delay: 60秒
     /// - max_attempts: 無制限（u32::MAX）
+    /// - use_jitter: false（互換性のため）
     pub fn new() -> Self {
         Self {
             base_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(60),
             max_attempts: MAX_ATTEMPTS,
             current_attempt: 0,
+            use_jitter: false,
+        }
+    }
+
+    /// ジッタ付きでExponentialBackoffインスタンスを作成
+    ///
+    /// gRPCストリーミングなど、複数クライアントの再接続衝突を
+    /// 避けたい場合に使用
+    pub fn with_jitter() -> Self {
+        Self {
+            base_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(60),
+            max_attempts: MAX_ATTEMPTS,
+            current_attempt: 0,
+            use_jitter: true,
         }
     }
 
@@ -38,19 +60,36 @@ impl ExponentialBackoff {
             max_delay,
             max_attempts,
             current_attempt: 0,
+            use_jitter: false,
         }
     }
 
     /// 次のリトライまでの待機時間を計算して返す
     ///
-    /// 計算式: base_delay * 2^current_attempt
+    /// 計算式: base_delay * 2^current_attempt (± jitter)
     /// max_delayを超える場合はmax_delayが返される
     pub fn next_delay(&mut self) -> Duration {
         // saturating_powでオーバーフローを防止
         let multiplier = 2u32.saturating_pow(self.current_attempt);
         let delay = self.base_delay.saturating_mul(multiplier);
         self.current_attempt = self.current_attempt.saturating_add(1);
-        delay.min(self.max_delay)
+        let capped_delay = delay.min(self.max_delay);
+
+        if self.use_jitter {
+            self.apply_jitter(capped_delay)
+        } else {
+            capped_delay
+        }
+    }
+
+    /// 遅延にジッタを適用（±JITTER_FACTOR）
+    fn apply_jitter(&self, delay: Duration) -> Duration {
+        let delay_ms = delay.as_millis() as f64;
+        let jitter_range = delay_ms * JITTER_FACTOR;
+        let mut rng = rand::thread_rng();
+        let jitter = rng.gen_range(-jitter_range..=jitter_range);
+        let jittered_ms = (delay_ms + jitter).max(0.0) as u64;
+        Duration::from_millis(jittered_ms)
     }
 
     /// バックオフカウンターをリセット（成功時に呼び出す）
@@ -156,5 +195,51 @@ mod tests {
 
         backoff.reset();
         assert!(backoff.should_retry());
+    }
+
+    #[test]
+    fn test_jitter_within_bounds() {
+        let mut backoff = ExponentialBackoff::with_jitter();
+
+        // Run multiple times to test randomness
+        for _ in 0..10 {
+            backoff.reset();
+            let delay = backoff.next_delay();
+            // Base delay is 1s, jitter is ±25%, so 750ms to 1250ms
+            assert!(delay >= Duration::from_millis(750));
+            assert!(delay <= Duration::from_millis(1250));
+        }
+    }
+
+    #[test]
+    fn test_jitter_progression() {
+        let mut backoff = ExponentialBackoff::with_jitter();
+
+        let delay1 = backoff.next_delay();
+        let delay2 = backoff.next_delay();
+        let delay3 = backoff.next_delay();
+
+        // Verify each delay is within expected bounds (base * 2^n ±25%)
+        // delay1: base=1s, range 750-1250ms
+        // delay2: base=2s, range 1500-2500ms
+        // delay3: base=4s, range 3000-5000ms
+        //
+        // Instead of comparing delays directly (which could be flaky due to jitter overlap),
+        // verify each delay is within its expected range
+        assert!(
+            delay1 >= Duration::from_millis(750) && delay1 <= Duration::from_millis(1250),
+            "delay1 {:?} should be in range 750-1250ms",
+            delay1
+        );
+        assert!(
+            delay2 >= Duration::from_millis(1500) && delay2 <= Duration::from_millis(2500),
+            "delay2 {:?} should be in range 1500-2500ms",
+            delay2
+        );
+        assert!(
+            delay3 >= Duration::from_millis(3000) && delay3 <= Duration::from_millis(5000),
+            "delay3 {:?} should be in range 3000-5000ms",
+            delay3
+        );
     }
 }

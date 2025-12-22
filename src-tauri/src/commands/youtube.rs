@@ -590,11 +590,15 @@ pub struct WizardSettingsData {
 // ================================
 
 /// API取得モードの列挙型
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ApiMode {
+    /// 公式API ポーリング（BYOK必須）
     Official,
+    /// InnerTube API（非公式、APIキー不要）
     InnerTube,
+    /// 公式API gRPCストリーミング（推奨、同梱キー使用可）
+    Grpc,
 }
 
 impl Default for ApiMode {

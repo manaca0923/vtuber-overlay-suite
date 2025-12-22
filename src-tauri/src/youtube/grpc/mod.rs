@@ -4,6 +4,7 @@
 //! It uses server-streaming to receive real-time chat messages.
 
 pub mod client;
+pub mod poller;
 
 // Re-export the generated protobuf types
 pub mod proto {
@@ -11,3 +12,4 @@ pub mod proto {
 }
 
 pub use client::GrpcChatClient;
+pub use poller::GrpcPoller;

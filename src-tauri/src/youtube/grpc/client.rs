@@ -75,7 +75,7 @@ impl GrpcChatClient {
             api_key,
             live_chat_id,
             next_page_token: None,
-            backoff: ExponentialBackoff::new(),
+            backoff: ExponentialBackoff::with_jitter(),
             seen_ids: std::collections::HashSet::new(),
             seen_order: VecDeque::new(),
         })

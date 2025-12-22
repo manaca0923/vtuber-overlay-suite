@@ -44,3 +44,4 @@ tonic = { version = "0.12", features = ["tls", "tls-roots"] }
 prost = "0.13"
 prost-types = "0.13"
 rand = "0.8"
+tokio-stream = "0.1"

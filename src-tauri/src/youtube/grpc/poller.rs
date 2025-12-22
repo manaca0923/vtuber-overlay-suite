@@ -20,7 +20,8 @@ pub struct GrpcPoller {
     task_handle: Option<JoinHandle<()>>,
     /// Stop signal
     stop_signal: Arc<AtomicBool>,
-    /// Channel for receiving messages
+    /// Channel for receiving messages (reserved for future external message consumption)
+    #[allow(dead_code)]
     message_rx: Option<mpsc::Receiver<Vec<ChatMessage>>>,
 }
 
@@ -119,19 +120,28 @@ async fn run_grpc_stream(
         // Try secondary key if primary failed with auth error
         if retry_with_secondary {
             let manager = get_api_key_manager();
-            if let Ok(guard) = manager.read() {
-                guard.switch_to_secondary();
-                if let Some(secondary) = guard.get_active_key(true) {
-                    log::info!("Switching to secondary API key");
-                    current_api_key = secondary.to_string();
-                    retry_with_secondary = false;
-                } else {
-                    log::error!("No secondary API key available");
-                    return Err(YouTubeError::InvalidApiKey);
+            match manager.read() {
+                Ok(guard) => {
+                    guard.switch_to_secondary();
+                    if let Some(secondary) = guard.get_active_key(true) {
+                        log::info!("Switching to secondary API key");
+                        current_api_key = secondary.to_string();
+                        retry_with_secondary = false;
+                    } else {
+                        log::error!("No secondary API key available");
+                        return Err(YouTubeError::InvalidApiKey);
+                    }
                 }
-            } else {
-                log::error!("Failed to acquire API key manager lock");
-                return Err(YouTubeError::ApiError("Lock error".to_string()));
+                Err(poison_error) => {
+                    // RwLock is poisoned - a thread panicked while holding the lock
+                    log::error!(
+                        "API key manager lock is poisoned (a thread panicked): {}",
+                        poison_error
+                    );
+                    return Err(YouTubeError::ApiError(
+                        "API key manager lock poisoned".to_string(),
+                    ));
+                }
             }
         }
 

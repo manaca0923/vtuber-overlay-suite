@@ -219,11 +219,27 @@ mod tests {
         let delay2 = backoff.next_delay();
         let delay3 = backoff.next_delay();
 
-        // Each delay should roughly double (within jitter bounds)
-        // delay1 ≈ 1s (750-1250ms)
-        // delay2 ≈ 2s (1500-2500ms)
-        // delay3 ≈ 4s (3000-5000ms)
-        assert!(delay1 < delay2);
-        assert!(delay2 < delay3);
+        // Verify each delay is within expected bounds (base * 2^n ±25%)
+        // delay1: base=1s, range 750-1250ms
+        // delay2: base=2s, range 1500-2500ms
+        // delay3: base=4s, range 3000-5000ms
+        //
+        // Instead of comparing delays directly (which could be flaky due to jitter overlap),
+        // verify each delay is within its expected range
+        assert!(
+            delay1 >= Duration::from_millis(750) && delay1 <= Duration::from_millis(1250),
+            "delay1 {:?} should be in range 750-1250ms",
+            delay1
+        );
+        assert!(
+            delay2 >= Duration::from_millis(1500) && delay2 <= Duration::from_millis(2500),
+            "delay2 {:?} should be in range 1500-2500ms",
+            delay2
+        );
+        assert!(
+            delay3 >= Duration::from_millis(3000) && delay3 <= Duration::from_millis(5000),
+            "delay3 {:?} should be in range 3000-5000ms",
+            delay3
+        );
     }
 }

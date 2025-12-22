@@ -174,16 +174,35 @@ impl UnifiedPoller {
         let api_key = if mode != ApiMode::InnerTube {
             // BYOKが指定されている場合は設定
             if let Some(key) = &user_api_key {
-                if let Ok(mut guard) = get_api_key_manager().write() {
-                    guard.set_user_key(Some(key.clone()));
+                match get_api_key_manager().write() {
+                    Ok(mut guard) => {
+                        guard.set_user_key(Some(key.clone()));
+                    }
+                    Err(poison_error) => {
+                        log::error!(
+                            "API key manager write lock is poisoned: {}",
+                            poison_error
+                        );
+                        return Err(YouTubeError::ApiError(
+                            "API key manager lock poisoned".to_string(),
+                        ));
+                    }
                 }
             }
 
             // アクティブなキーを取得
-            let key = get_api_key_manager()
-                .read()
-                .ok()
-                .and_then(|guard| guard.get_active_key(use_bundled_key).map(|s| s.to_string()));
+            let key = match get_api_key_manager().read() {
+                Ok(guard) => guard.get_active_key(use_bundled_key).map(|s| s.to_string()),
+                Err(poison_error) => {
+                    log::error!(
+                        "API key manager read lock is poisoned: {}",
+                        poison_error
+                    );
+                    return Err(YouTubeError::ApiError(
+                        "API key manager lock poisoned".to_string(),
+                    ));
+                }
+            };
 
             match key {
                 Some(k) if !k.is_empty() => k,

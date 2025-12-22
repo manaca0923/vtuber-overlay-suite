@@ -634,6 +634,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T13 | ✅ 完了 | 2025-12-21 |
 | T14 | ✅ 完了 | 2025-12-21 |
 | T15 | ✅ 完了 | 2025-12-21 |
+| T16 | 🔄 進行中 | 2025-12-22〜 |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
@@ -883,6 +884,72 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - `docs/200_youtube-api.md` - InnerTube優先方針追記、BYOK必須表記修正
 - `docs/300_overlay-specs.md` - subscribe削除、setlistId追加
 - `docs/400_data-models.md` - maxCount削除
+
+---
+
+## T16: YouTube公式API + streamList gRPC 実装
+**優先度**: P0 | **見積**: 8日 | **依存**: T14
+**ステータス**: 🔄 **進行中**（2025-12-22開始）
+
+### 背景
+正式運用に向けて、InnerTube API（非公式）に加えて公式YouTube Data API + streamList gRPCを実装し、ユーザーが切り替え可能にする。
+マネタイズ対応のため、公式APIの利用が必要。
+
+### 方針
+- InnerTube / 公式API(ポーリング) / 公式API(gRPC) の3モード切り替え
+- アプリ同梱キー + BYOK の両方サポート
+- gRPC優先実装（クォータ消費が少ない）
+- Remote Configは後回し（Phase 2以降で対応）
+
+### チェックリスト
+
+#### Phase 1: APIキー管理の拡張（1日）
+- [x] `api_key_manager.rs` 作成（同梱キー+BYOK管理）
+- [x] グローバルシングルトンApiKeyManager実装
+- [x] Tauriコマンド追加（get_api_key_status, has_bundled_api_key, set_byok_key等）
+- [x] lib.rsにコマンド登録
+- [x] ビルド確認
+
+#### Phase 2: gRPC基盤の構築（2日）
+- [x] Cargo.tomlにtonic/prost依存追加
+- [x] build.rsにproto生成処理追加
+- [x] `proto/youtube_live_chat.proto` 作成
+- [x] gRPCモジュール基盤作成（`youtube/grpc/mod.rs`, `client.rs`）
+
+#### Phase 3: gRPCストリーミング実装（2日）
+- [ ] GrpcStreamClient実装
+- [ ] API keyメタデータ付与
+- [ ] server-streaming受信ループ
+- [ ] 指数バックオフ + ジッタによる再接続
+- [ ] messageIdベースの重複排除
+
+#### Phase 4: 統合ポーラー作成（1日）
+- [ ] UnifiedPoller実装（3モード統一管理）
+- [ ] ApiModeに`Grpc`を追加
+- [ ] フォールバック機構（gRPC→ポーリング）
+- [ ] 新規コマンド実装（start_unified_polling, stop_unified_polling）
+
+#### Phase 5: フロントエンド統合（1日）
+- [ ] CommentControlPanel.tsx改修（モード切替UI）
+- [ ] ApiKeySetup.tsx改修（同梱キー/BYOK選択）
+- [ ] TypeScript型定義追加
+
+#### Phase 6: テスト・ドキュメント（1日）
+- [ ] 各モードの接続テスト
+- [ ] モード切り替えテスト
+- [ ] 再接続テスト（ネットワーク断）
+- [ ] `docs/200_youtube-api.md` 更新
+
+### 技術スタック
+- gRPC: tonic 0.12 + prost 0.13
+- 接続先: `youtube.googleapis.com:443`
+- 認証: `x-goog-api-key` メタデータ
+
+### 成果物
+- `src-tauri/src/youtube/api_key_manager.rs` - APIキー管理
+- `src-tauri/src/youtube/grpc/` - gRPCクライアント
+- `src-tauri/src/youtube/unified_poller.rs` - 統合ポーラー
+- `src/components/CommentControlPanel.tsx` - モード切替UI
 
 ---
 

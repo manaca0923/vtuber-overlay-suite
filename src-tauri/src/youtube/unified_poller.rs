@@ -4,6 +4,7 @@
 //! モードに応じて適切なポーラーを起動し、メッセージをブロードキャストする。
 
 use super::api_key_manager::get_api_key_manager;
+use super::backoff::ExponentialBackoff;
 use super::errors::YouTubeError;
 use super::grpc::GrpcPoller;
 use super::innertube::InnerTubeClient;
@@ -252,12 +253,17 @@ async fn run_innertube_loop(
 
     let mut seen_ids: HashSet<String> = HashSet::new();
     let mut seen_order: VecDeque<String> = VecDeque::new();
+    // エラー時の指数バックオフ（ジッタ付き）
+    let mut error_backoff = ExponentialBackoff::with_jitter();
 
     log::info!("InnerTube polling loop started");
 
     while running.load(Ordering::SeqCst) {
         match client.get_chat_messages().await {
             Ok(response) => {
+                // 成功時はバックオフをリセット
+                error_backoff.reset();
+
                 let messages = parse_chat_response(response);
 
                 // 重複排除
@@ -295,8 +301,10 @@ async fn run_innertube_loop(
             }
             Err(e) => {
                 log::error!("InnerTube fetch error: {:?}", e);
-                // エラー時は少し待ってから再試行
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                // 指数バックオフで待機
+                let delay = error_backoff.next_delay();
+                log::info!("InnerTube: retrying in {:?}", delay);
+                tokio::time::sleep(delay).await;
             }
         }
     }

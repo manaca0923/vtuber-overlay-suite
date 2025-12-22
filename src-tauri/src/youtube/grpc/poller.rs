@@ -4,11 +4,11 @@
 
 use super::client::GrpcChatClient;
 use crate::youtube::api_key_manager::get_api_key_manager;
+use crate::youtube::backoff::ExponentialBackoff;
 use crate::youtube::errors::YouTubeError;
 use crate::youtube::types::ChatMessage;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
@@ -20,9 +20,6 @@ pub struct GrpcPoller {
     task_handle: Option<JoinHandle<()>>,
     /// Stop signal
     stop_signal: Arc<AtomicBool>,
-    /// Channel for receiving messages (reserved for future external message consumption)
-    #[allow(dead_code)]
-    message_rx: Option<mpsc::Receiver<Vec<ChatMessage>>>,
 }
 
 impl GrpcPoller {
@@ -31,7 +28,6 @@ impl GrpcPoller {
         Self {
             task_handle: None,
             stop_signal: Arc::new(AtomicBool::new(false)),
-            message_rx: None,
         }
     }
 
@@ -48,9 +44,8 @@ impl GrpcPoller {
         // Reset stop signal
         self.stop_signal.store(false, Ordering::SeqCst);
 
-        // Create message channel
-        let (tx, rx) = mpsc::channel::<Vec<ChatMessage>>(100);
-        self.message_rx = Some(rx);
+        // Create message channel for internal broadcasting
+        let (tx, _rx) = mpsc::channel::<Vec<ChatMessage>>(100);
 
         let stop_signal = self.stop_signal.clone();
 
@@ -84,7 +79,6 @@ impl GrpcPoller {
             let _ = handle.await;
         }
 
-        self.message_rx = None;
         log::info!("gRPC polling stopped");
     }
 
@@ -110,6 +104,8 @@ async fn run_grpc_stream(
 ) -> Result<(), YouTubeError> {
     let mut current_api_key = api_key;
     let mut retry_with_secondary = false;
+    // 接続失敗時のバックオフ（ジッタ付き）
+    let mut connection_backoff = ExponentialBackoff::with_jitter();
 
     loop {
         if stop_signal.load(Ordering::SeqCst) {
@@ -152,21 +148,27 @@ async fn run_grpc_stream(
         )
         .await
         {
-            Ok(c) => c,
+            Ok(c) => {
+                // 接続成功時はバックオフをリセット
+                connection_backoff.reset();
+                c
+            }
             Err(YouTubeError::InvalidApiKey) => {
                 retry_with_secondary = true;
                 continue;
             }
             Err(e) => {
                 log::error!("Failed to connect to gRPC: {:?}", e);
-                // Wait before retry
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                // 指数バックオフで待機
+                let delay = connection_backoff.next_delay();
+                log::info!("Retrying connection in {:?}", delay);
+                tokio::time::sleep(delay).await;
                 continue;
             }
         };
 
         // Start streaming
-        let stream = match client.stream().await {
+        let mut stream = match client.stream().await {
             Ok(s) => s,
             Err(YouTubeError::InvalidApiKey) => {
                 retry_with_secondary = true;
@@ -190,7 +192,6 @@ async fn run_grpc_stream(
         }));
 
         // Process stream
-        let mut stream = stream;
         loop {
             if stop_signal.load(Ordering::SeqCst) {
                 break;

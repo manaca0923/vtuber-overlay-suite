@@ -1044,4 +1044,70 @@ pub async fn reset_to_primary_key() -> Result<(), String> {
     Ok(())
 }
 
+// ================================
+// 統合ポーラーコマンド
+// ================================
+
+use crate::youtube::unified_poller::UnifiedPoller;
+use tokio::sync::Mutex as TokioMutex2;
+
+// グローバルな統合ポーラー状態
+static UNIFIED_POLLER: std::sync::OnceLock<Arc<TokioMutex2<UnifiedPoller>>> = std::sync::OnceLock::new();
+
+fn get_unified_poller() -> &'static Arc<TokioMutex2<UnifiedPoller>> {
+    UNIFIED_POLLER.get_or_init(|| Arc::new(TokioMutex2::new(UnifiedPoller::new())))
+}
+
+/// 統合ポーリングを開始
+///
+/// 3つのモード（InnerTube / Official / gRPC）のいずれかでポーリングを開始する。
+/// 既存のポーリングは自動的に停止される。
+#[tauri::command]
+pub async fn start_unified_polling(
+    video_id: String,
+    mode: ApiMode,
+    use_bundled_key: bool,
+    user_api_key: Option<String>,
+    app: AppHandle,
+) -> Result<(), String> {
+    log::info!(
+        "Starting unified polling: mode={:?}, video_id={}, use_bundled_key={}",
+        mode,
+        video_id,
+        use_bundled_key
+    );
+
+    let poller = get_unified_poller().lock().await;
+
+    poller
+        .start(video_id, mode, use_bundled_key, user_api_key, app)
+        .await
+        .map_err(|e| format!("{}", e))
+}
+
+/// 統合ポーリングを停止
+#[tauri::command]
+pub async fn stop_unified_polling() -> Result<(), String> {
+    log::info!("Stopping unified polling");
+
+    let poller = get_unified_poller().lock().await;
+    poller.stop().await;
+
+    Ok(())
+}
+
+/// 統合ポーリングが実行中かどうかを確認
+#[tauri::command]
+pub async fn is_unified_polling_running() -> Result<bool, String> {
+    let poller = get_unified_poller().lock().await;
+    Ok(poller.is_running())
+}
+
+/// 現在のAPIモードを取得
+#[tauri::command]
+pub async fn get_unified_polling_mode() -> Result<Option<ApiMode>, String> {
+    let poller = get_unified_poller().lock().await;
+    Ok(poller.current_mode().await)
+}
+
 

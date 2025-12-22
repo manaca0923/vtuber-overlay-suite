@@ -151,6 +151,10 @@ pub fn run() {
           commands::youtube::get_active_api_key,
           commands::youtube::switch_to_secondary_key,
           commands::youtube::reset_to_primary_key,
+          commands::youtube::start_unified_polling,
+          commands::youtube::stop_unified_polling,
+          commands::youtube::is_unified_polling_running,
+          commands::youtube::get_unified_polling_mode,
         ]
       }
       // リリースビルドではtest_innertube_connectionを除外
@@ -203,6 +207,10 @@ pub fn run() {
           commands::youtube::get_active_api_key,
           commands::youtube::switch_to_secondary_key,
           commands::youtube::reset_to_primary_key,
+          commands::youtube::start_unified_polling,
+          commands::youtube::stop_unified_polling,
+          commands::youtube::is_unified_polling_running,
+          commands::youtube::get_unified_polling_mode,
         ]
       }
     })

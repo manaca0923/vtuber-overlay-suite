@@ -171,60 +171,22 @@ impl UnifiedPoller {
         user_api_key: Option<String>,
         app_handle: AppHandle,
     ) -> Result<(), YouTubeError> {
-        // APIキーを取得（Official/Grpcモードの場合）
-        let api_key = if mode != ApiMode::InnerTube {
-            // BYOKが指定されている場合は設定
-            if let Some(key) = &user_api_key {
-                match get_api_key_manager().write() {
-                    Ok(mut guard) => {
-                        guard.set_user_key(Some(key.clone()));
-                    }
-                    Err(poison_error) => {
-                        log::error!(
-                            "API key manager write lock is poisoned: {}",
-                            poison_error
-                        );
-                        return Err(YouTubeError::ApiError(
-                            "API key manager lock poisoned".to_string(),
-                        ));
-                    }
-                }
-            }
-
-            // アクティブなキーを取得
-            let key = match get_api_key_manager().read() {
-                Ok(guard) => guard.get_active_key(use_bundled_key).map(|s| s.to_string()),
-                Err(poison_error) => {
-                    log::error!(
-                        "API key manager read lock is poisoned: {}",
-                        poison_error
-                    );
-                    return Err(YouTubeError::ApiError(
-                        "API key manager lock poisoned".to_string(),
-                    ));
-                }
-            };
-
-            match key {
-                Some(k) if !k.is_empty() => k,
-                _ => return Err(YouTubeError::InvalidApiKey),
-            }
-        } else {
-            String::new()
-        };
-
         match mode {
             ApiMode::InnerTube => {
+                // InnerTubeモードはAPIキー不要
                 self.start_innertube(video_id, app_handle).await
             }
             ApiMode::Official => {
-                // video_idからlive_chat_idを取得する必要がある
-                // 既存のロジックを使用
+                // APIキーを取得
+                let api_key = get_api_key_for_mode(use_bundled_key, user_api_key.as_ref())?;
+                // video_idからlive_chat_idを取得
                 let client = super::client::YouTubeClient::new(api_key.clone());
                 let live_chat_id = client.get_live_chat_id(&video_id).await?;
                 self.start_official(live_chat_id, api_key, app_handle).await
             }
             ApiMode::Grpc => {
+                // APIキーを取得
+                let api_key = get_api_key_for_mode(use_bundled_key, user_api_key.as_ref())?;
                 // video_idからlive_chat_idを取得
                 let client = super::client::YouTubeClient::new(api_key.clone());
                 let live_chat_id = client.get_live_chat_id(&video_id).await?;
@@ -237,6 +199,51 @@ impl UnifiedPoller {
 impl Default for UnifiedPoller {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// APIキーを取得する（Official/Grpcモード用）
+///
+/// BYOKが指定されている場合は設定し、その後アクティブなキーを返す。
+fn get_api_key_for_mode(
+    use_bundled_key: bool,
+    user_api_key: Option<&String>,
+) -> Result<String, YouTubeError> {
+    // BYOKが指定されている場合は設定
+    if let Some(key) = user_api_key {
+        match get_api_key_manager().write() {
+            Ok(mut guard) => {
+                guard.set_user_key(Some(key.clone()));
+            }
+            Err(poison_error) => {
+                log::error!(
+                    "API key manager write lock is poisoned: {}",
+                    poison_error
+                );
+                return Err(YouTubeError::ApiError(
+                    "API key manager lock poisoned".to_string(),
+                ));
+            }
+        }
+    }
+
+    // アクティブなキーを取得
+    let key = match get_api_key_manager().read() {
+        Ok(guard) => guard.get_active_key(use_bundled_key).map(|s| s.to_string()),
+        Err(poison_error) => {
+            log::error!(
+                "API key manager read lock is poisoned: {}",
+                poison_error
+            );
+            return Err(YouTubeError::ApiError(
+                "API key manager lock poisoned".to_string(),
+            ));
+        }
+    };
+
+    match key {
+        Some(k) if !k.is_empty() => Ok(k),
+        _ => Err(YouTubeError::InvalidApiKey),
     }
 }
 

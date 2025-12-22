@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 
 /// gRPC polling state
@@ -44,22 +43,11 @@ impl GrpcPoller {
         // Reset stop signal
         self.stop_signal.store(false, Ordering::SeqCst);
 
-        // Create message channel for internal broadcasting
-        let (tx, _rx) = mpsc::channel::<Vec<ChatMessage>>(100);
-
         let stop_signal = self.stop_signal.clone();
 
         // Spawn streaming task
         let handle = tauri::async_runtime::spawn(async move {
-            if let Err(e) = run_grpc_stream(
-                live_chat_id,
-                api_key,
-                stop_signal,
-                tx,
-                app_handle,
-            )
-            .await
-            {
+            if let Err(e) = run_grpc_stream(live_chat_id, api_key, stop_signal, app_handle).await {
                 log::error!("gRPC streaming error: {:?}", e);
             }
         });
@@ -95,16 +83,21 @@ impl Default for GrpcPoller {
 }
 
 /// Run the gRPC streaming loop
+///
+/// # バックオフ戦略
+/// - `connection_backoff`: gRPCエンドポイントへの接続失敗時に使用
+/// - `client.get_backoff_delay()`: ストリーム開始失敗・切断後の再接続時に使用
+///   （クライアント内部で成功時にリセットされる）
 async fn run_grpc_stream(
     live_chat_id: String,
     api_key: String,
     stop_signal: Arc<AtomicBool>,
-    tx: mpsc::Sender<Vec<ChatMessage>>,
     app_handle: AppHandle,
 ) -> Result<(), YouTubeError> {
     let mut current_api_key = api_key;
     let mut retry_with_secondary = false;
-    // 接続失敗時のバックオフ（ジッタ付き）
+    // gRPCエンドポイントへの接続失敗時のバックオフ（ジッタ付き）
+    // ストリーム開始・再接続のバックオフはclient.get_backoff_delay()を使用
     let mut connection_backoff = ExponentialBackoff::with_jitter();
 
     loop {
@@ -205,9 +198,6 @@ async fn run_grpc_stream(
                     // Parse and broadcast messages
                     let messages = client.parse_response(response);
                     if !messages.is_empty() {
-                        // Send to channel
-                        let _ = tx.send(messages.clone()).await;
-
                         // Emit to frontend via Tauri event
                         let _ = app_handle.emit("chat-messages", &messages);
 

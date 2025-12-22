@@ -265,6 +265,11 @@ async fn run_innertube_loop(
 
     log::info!("InnerTube polling loop started");
 
+    // 接続成功を通知
+    let _ = app_handle.emit("innertube-status", serde_json::json!({
+        "connected": true
+    }));
+
     while running.load(Ordering::SeqCst) {
         match client.get_chat_messages().await {
             Ok(response) => {
@@ -308,6 +313,13 @@ async fn run_innertube_loop(
             }
             Err(e) => {
                 log::error!("InnerTube fetch error: {:?}", e);
+
+                // エラーをフロントエンドに通知
+                let _ = app_handle.emit("innertube-status", serde_json::json!({
+                    "connected": false,
+                    "error": format!("{:?}", e)
+                }));
+
                 // 指数バックオフで待機
                 let delay = error_backoff.next_delay();
                 log::info!("InnerTube: retrying in {:?}", delay);
@@ -315,6 +327,12 @@ async fn run_innertube_loop(
             }
         }
     }
+
+    // 終了を通知
+    let _ = app_handle.emit("innertube-status", serde_json::json!({
+        "connected": false,
+        "stopped": true
+    }));
 
     log::info!("InnerTube polling loop ended");
     Ok(())

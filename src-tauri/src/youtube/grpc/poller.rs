@@ -59,7 +59,15 @@ impl GrpcPoller {
     }
 
     /// Stop polling
+    ///
+    /// この関数は冪等であり、複数回呼び出しても安全です。
     pub async fn stop(&mut self) {
+        // 既に停止済みならスキップ
+        if self.task_handle.is_none() {
+            log::debug!("gRPC polling already stopped");
+            return;
+        }
+
         self.stop_signal.store(true, Ordering::SeqCst);
 
         if let Some(handle) = self.task_handle.take() {

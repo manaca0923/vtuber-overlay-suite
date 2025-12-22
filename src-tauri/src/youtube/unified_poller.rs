@@ -278,17 +278,15 @@ async fn run_innertube_loop(
 
                 let messages = parse_chat_response(response);
 
-                // 重複排除
+                // 重複排除（HashSet::insertの戻り値を利用して簡素化）
                 let new_messages: Vec<ChatMessage> = messages
                     .into_iter()
                     .filter(|msg| {
-                        if seen_ids.contains(&msg.id) {
-                            false
-                        } else {
-                            if seen_ids.insert(msg.id.clone()) {
-                                seen_order.push_back(msg.id.clone());
-                            }
+                        if seen_ids.insert(msg.id.clone()) {
+                            seen_order.push_back(msg.id.clone());
                             true
+                        } else {
+                            false
                         }
                     })
                     .collect();

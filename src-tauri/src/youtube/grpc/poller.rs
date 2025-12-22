@@ -90,6 +90,16 @@ impl Default for GrpcPoller {
     }
 }
 
+impl Drop for GrpcPoller {
+    /// ドロップ時にタスクを確実に停止する
+    fn drop(&mut self) {
+        self.stop_signal.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.task_handle.take() {
+            handle.abort();
+        }
+    }
+}
+
 /// Run the gRPC streaming loop
 ///
 /// # バックオフ戦略

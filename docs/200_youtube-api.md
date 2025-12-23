@@ -464,20 +464,166 @@ impl CommandParser {
 
 ---
 
-## Phase 2: streamList（gRPC）
+## 統合ポーラー（Unified Poller）
 
 ### 概要
-- 公式仕様: `liveChatMessages.streamList`
-- 接続先: `youtube.googleapis.com:443`
-- プロトコル: gRPC server-streaming
-- 認証: API key または OAuth2
 
-### PoC検証項目
-- [ ] HTTP/2接続の安定性
-- [ ] プロキシ環境での動作
-- [ ] 切断時の自動再接続
-- [ ] クォータ消費量の実測
+3つのAPIモードを統一的に管理する統合ポーラーを実装。ユーザーはUIから自由にモードを切り替え可能。
 
-### 参考
+### APIモード
+
+| モード | 説明 | 認証 | クォータ | 推奨 |
+|--------|------|------|----------|------|
+| `innertube` | 非公式API | 不要 | なし | - |
+| `grpc` | 公式API gRPCストリーミング | APIキー | あり（低消費） | ✅ |
+| `official` | 公式API ポーリング | APIキー | あり（高消費） | - |
+
+### Tauriコマンド
+
+```typescript
+// 統合ポーリング開始
+await invoke('start_unified_polling', {
+  videoId: 'VIDEO_ID',
+  mode: 'innertube' | 'grpc' | 'official',
+  useBundledKey: true,  // 同梱キーを使用
+  userApiKey: null,     // またはBYOKキー
+});
+
+// 統合ポーリング停止
+await invoke('stop_unified_polling');
+
+// 実行中確認
+const running = await invoke<boolean>('is_unified_polling_running');
+
+// 現在のモード取得
+const mode = await invoke<ApiMode | null>('get_unified_polling_mode');
+```
+
+### ステータスイベント
+
+```typescript
+// InnerTubeモード
+listen<InnerTubeStatusEvent>('innertube-status', (event) => {
+  const { connected, error, stopped } = event.payload;
+});
+
+// gRPCモード
+listen<GrpcStatusEvent>('grpc-status', (event) => {
+  const { connected, liveChatId, error } = event.payload;
+});
+```
+
+### 実装
+
+- `src-tauri/src/youtube/unified_poller.rs` - 統合ポーラー
+- `src-tauri/src/commands/youtube.rs` - Tauriコマンド
+- `src/types/api.ts` - TypeScript型定義
+
+---
+
+## gRPCストリーミング（公式API）
+
+### 概要
+
+YouTube Data API v3の`liveChatMessages.streamList`をgRPCで実装。ポーリングよりも低遅延でクォータ消費も少ない。
+
+### 技術スタック
+
+| 項目 | 値 |
+|------|-----|
+| ライブラリ | tonic 0.12 + prost 0.13 |
+| 接続先 | `youtube.googleapis.com:443` |
+| プロトコル | gRPC server-streaming |
+| 認証 | `x-goog-api-key` メタデータ |
+
+### proto定義
+
+```protobuf
+// src-tauri/proto/youtube_live_chat.proto
+service LiveChatMessageService {
+  rpc StreamList(LiveChatMessageListRequest) returns (stream LiveChatMessageListResponse);
+}
+```
+
+### 実装
+
+- `src-tauri/src/youtube/grpc/mod.rs` - モジュール定義
+- `src-tauri/src/youtube/grpc/client.rs` - gRPCクライアント
+- `src-tauri/src/youtube/grpc/poller.rs` - ストリーミングポーラー
+
+### バックオフ戦略
+
+```rust
+// 接続失敗時: ExponentialBackoff（ジッタ付き）
+// ストリーム切断時: クライアント内部バックオフ
+```
+
+| 状況 | バックオフ |
+|------|-----------|
+| 接続成功 | リセット |
+| 接続失敗 | 1s→2s→4s→...→60s（+ジッタ） |
+| ストリームエラー | クライアント内部で管理 |
+| 認証エラー | セカンダリキーにフォールバック |
+
+### 認証エラー対応
+
+APIキーが無効な場合、セカンダリキーへ自動フォールバック:
+
+```rust
+if status.code() == tonic::Code::Unauthenticated {
+    retry_with_secondary = true;
+}
+```
+
+---
+
+## APIキー管理
+
+### 概要
+
+アプリ同梱キー（Primary/Secondary）とユーザーキー（BYOK）を統合管理。
+
+### 構造
+
+```rust
+pub struct ApiKeyManager {
+    primary_key: Option<String>,    // ビルド時同梱（環境変数）
+    secondary_key: Option<String>,  // フォールバック用
+    user_key: Option<String>,       // BYOK
+    using_secondary: AtomicBool,    // フォールバック中フラグ
+}
+```
+
+### 優先順位
+
+1. **BYOK優先モード** (`useBundledKey: false`): ユーザーキー → なければエラー
+2. **同梱キー優先モード** (`useBundledKey: true`): Primary → Secondary → ユーザーキー
+
+### Tauriコマンド
+
+```typescript
+// ステータス確認
+const status = await invoke<ApiKeyStatus>('get_api_key_status');
+// { hasBundledKey, hasUserKey, usingSecondary, summary }
+
+// 同梱キー有無
+const hasBundled = await invoke<boolean>('has_bundled_api_key');
+
+// BYOKキー設定
+await invoke('set_byok_key', { apiKey: 'YOUR_KEY' });
+
+// アクティブキー取得
+const key = await invoke<string | null>('get_active_api_key', { preferBundled: true });
+```
+
+### 実装
+
+- `src-tauri/src/youtube/api_key_manager.rs`
+
+---
+
+## 参考リンク
+
+- [YouTube Data API v3 リファレンス](https://developers.google.com/youtube/v3/docs)
 - [streamList リファレンス](https://developers.google.com/youtube/v3/live/docs/liveChatMessages/streamList)
 - [Streaming Live Chat ガイド](https://developers.google.com/youtube/v3/live/streaming-live-chat)

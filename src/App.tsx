@@ -35,6 +35,70 @@ function App() {
   const [isPolling, setIsPolling] = useState(false);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ステータスメッセージを表示（3秒後に自動消去）
+  const showStatus = useCallback((type: 'success' | 'error', text: string) => {
+    // 既存のタイマーをクリア
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+    }
+    setStatusMessage({ type, text });
+    statusTimerRef.current = setTimeout(() => {
+      setStatusMessage(null);
+      statusTimerRef.current = null;
+    }, 3000);
+  }, []);
+
+  // コメント取得開始ハンドラ
+  const handleStartPolling = useCallback(async (videoId: string) => {
+    try {
+      await invoke('start_polling_innertube', { videoId });
+      setIsPolling(true);
+      showStatus('success', 'コメント取得を開始しました');
+    } catch (e) {
+      showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [showStatus]);
+
+  // コメント取得停止ハンドラ
+  const handleStopPolling = useCallback(async () => {
+    try {
+      await invoke('stop_polling_innertube');
+      setIsPolling(false);
+      showStatus('success', 'コメント取得を停止しました');
+    } catch (e) {
+      showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [showStatus]);
+
+  // 開始ボタンクリック時の処理
+  const handleStartClick = useCallback(() => {
+    if (wizardSettings?.video_id) {
+      // 設定済みのVideo IDがあればそのまま開始
+      handleStartPolling(wizardSettings.video_id);
+    } else {
+      // なければモーダルを表示
+      setIsVideoIdModalOpen(true);
+    }
+  }, [wizardSettings?.video_id, handleStartPolling]);
+
+  // ウィザード完了ハンドラ
+  const handleWizardComplete = useCallback(async () => {
+    // 設定を再読み込み
+    try {
+      const key = await invoke<string | null>('get_api_key');
+      if (key) {
+        setApiKey(key);
+      }
+      const settings = await invoke<WizardSettings | null>('load_wizard_settings');
+      if (settings) {
+        setWizardSettings(settings);
+      }
+    } catch (err) {
+      console.error('Failed to reload settings after wizard:', err);
+    }
+    setAppMode('main');
+  }, []);
+
   // 初回起動判定 & 設定読み込み
   useEffect(() => {
     async function initialize() {
@@ -80,6 +144,15 @@ function App() {
     initialize();
   }, []);
 
+  // クリーンアップ：アンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+      }
+    };
+  }, []);
+
   // ローディング画面
   if (isCheckingFirstLaunch) {
     return (
@@ -91,79 +164,6 @@ function App() {
       </div>
     );
   }
-
-  // ウィザード完了ハンドラ
-  const handleWizardComplete = async () => {
-    // 設定を再読み込み
-    try {
-      const key = await invoke<string | null>('get_api_key');
-      if (key) {
-        setApiKey(key);
-      }
-      const settings = await invoke<WizardSettings | null>('load_wizard_settings');
-      if (settings) {
-        setWizardSettings(settings);
-      }
-    } catch (err) {
-      console.error('Failed to reload settings after wizard:', err);
-    }
-    setAppMode('main');
-  };
-
-  // ステータスメッセージを表示（3秒後に自動消去）
-  const showStatus = useCallback((type: 'success' | 'error', text: string) => {
-    // 既存のタイマーをクリア
-    if (statusTimerRef.current) {
-      clearTimeout(statusTimerRef.current);
-    }
-    setStatusMessage({ type, text });
-    statusTimerRef.current = setTimeout(() => {
-      setStatusMessage(null);
-      statusTimerRef.current = null;
-    }, 3000);
-  }, []);
-
-  // クリーンアップ：アンマウント時にタイマーをクリア
-  useEffect(() => {
-    return () => {
-      if (statusTimerRef.current) {
-        clearTimeout(statusTimerRef.current);
-      }
-    };
-  }, []);
-
-  // コメント取得開始ハンドラ
-  const handleStartPolling = useCallback(async (videoId: string) => {
-    try {
-      await invoke('start_polling_innertube', { videoId });
-      setIsPolling(true);
-      showStatus('success', 'コメント取得を開始しました');
-    } catch (e) {
-      showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
-    }
-  }, [showStatus]);
-
-  // コメント取得停止ハンドラ
-  const handleStopPolling = useCallback(async () => {
-    try {
-      await invoke('stop_polling_innertube');
-      setIsPolling(false);
-      showStatus('success', 'コメント取得を停止しました');
-    } catch (e) {
-      showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
-    }
-  }, [showStatus]);
-
-  // 開始ボタンクリック時の処理
-  const handleStartClick = useCallback(() => {
-    if (wizardSettings?.video_id) {
-      // 設定済みのVideo IDがあればそのまま開始
-      handleStartPolling(wizardSettings.video_id);
-    } else {
-      // なければモーダルを表示
-      setIsVideoIdModalOpen(true);
-    }
-  }, [wizardSettings?.video_id, handleStartPolling]);
 
   // ウィザードモード
   if (appMode === 'wizard') {

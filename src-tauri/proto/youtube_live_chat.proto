@@ -1,196 +1,196 @@
 // YouTube Live Chat gRPC API
 // Based on: https://developers.google.com/youtube/v3/live/streaming-live-chat
+// NOTE: This proto must use proto2 syntax and match the official field numbers
 
-syntax = "proto3";
+syntax = "proto2";
 
-package youtube.v3;
+package youtube.api.v3;
 
-// YouTube Live Chat Message Service
 service V3DataLiveChatMessageService {
-  // Stream live chat messages for a given live chat ID
-  rpc StreamList(LiveChatMessageListRequest) returns (stream LiveChatMessageListResponse) {}
+  // Allows a user to load live chat through a server-streamed RPC.
+  rpc StreamList(LiveChatMessageListRequest)
+      returns (stream LiveChatMessageListResponse) {}
 }
 
-// Request message for StreamList
 message LiveChatMessageListRequest {
-  // Required. The ID of the live chat for which comments should be returned
-  string live_chat_id = 1;
-
-  // The part parameter specifies the liveChatMessage resource properties
-  // Supported values: id, snippet, authorDetails
-  repeated string part = 2;
-
-  // Localization language for system messages
-  string hl = 3;
-
-  // Size for returned profile images (16-720)
-  uint32 profile_image_size = 4;
-
-  // Maximum items in result set (200-2000)
-  uint32 max_results = 5;
-
-  // Pagination token for subsequent requests
-  string page_token = 6;
+  optional string live_chat_id = 1;
+  optional string hl = 2;
+  optional uint32 profile_image_size = 3;
+  optional uint32 max_results = 98;
+  optional string page_token = 99;
+  repeated string part = 100;
 }
 
-// Response message for StreamList
 message LiveChatMessageListResponse {
-  // Fixed value: "youtube#liveChatMessageListResponse"
-  string kind = 1;
-
-  // Resource identifier
-  string etag = 2;
-
-  // ISO 8601 timestamp when stream went offline
-  string offline_at = 3;
-
-  // Pagination metadata
-  PageInfo page_info = 4;
-
-  // Token for next page
-  string next_page_token = 5;
-
-  // Array of chat messages
-  repeated LiveChatMessage items = 6;
-
-  // Current active poll, if exists
-  LiveChatMessage active_poll_item = 7;
+  optional string kind = 200;
+  optional string etag = 201;
+  optional string offline_at = 2;
+  optional PageInfo page_info = 1004;
+  optional string next_page_token = 100602;
+  repeated LiveChatMessage items = 1007;
+  optional LiveChatMessage active_poll_item = 1008;
 }
 
-// Pagination information
-message PageInfo {
-  uint32 total_results = 1;
-  uint32 results_per_page = 2;
-}
-
-// Live chat message resource
 message LiveChatMessage {
-  // Fixed value: "youtube#liveChatMessage"
-  string kind = 1;
-
-  // Resource identifier
-  string etag = 2;
-
-  // Unique message ID
-  string id = 3;
-
-  // Message details
-  LiveChatMessageSnippet snippet = 4;
-
-  // Author information
-  LiveChatMessageAuthorDetails author_details = 5;
+  optional string kind = 200;
+  optional string etag = 201;
+  optional string id = 101;
+  optional LiveChatMessageSnippet snippet = 2;
+  optional LiveChatMessageAuthorDetails author_details = 3;
 }
 
-// Message snippet containing the actual content
-message LiveChatMessageSnippet {
-  // Message type
-  string type = 1;
-
-  // Live chat ID
-  string live_chat_id = 2;
-
-  // Author's channel ID
-  string author_channel_id = 3;
-
-  // Published timestamp (ISO 8601)
-  string published_at = 4;
-
-  // Whether message has display content
-  bool has_display_content = 5;
-
-  // Display message text
-  string display_message = 6;
-
-  // Text message details (for TEXT_MESSAGE_EVENT)
-  TextMessageDetails text_message_details = 7;
-
-  // Super chat details (for SUPER_CHAT_EVENT)
-  SuperChatDetails super_chat_details = 8;
-
-  // Super sticker details (for SUPER_STICKER_EVENT)
-  SuperStickerDetails super_sticker_details = 9;
-
-  // New sponsor details (for NEW_SPONSOR_EVENT)
-  NewSponsorDetails new_sponsor_details = 10;
-
-  // Member milestone details (for MEMBER_MILESTONE_CHAT_EVENT)
-  MemberMilestoneChatDetails member_milestone_chat_details = 11;
-
-  // Gift membership details (for MEMBERSHIP_GIFTING_EVENT)
-  MembershipGiftingDetails membership_gifting_details = 12;
-}
-
-// Author details
 message LiveChatMessageAuthorDetails {
-  string channel_id = 1;
-  string channel_url = 2;
-  string display_name = 3;
-  string profile_image_url = 4;
-  bool is_verified = 5;
-  bool is_chat_owner = 6;
-  bool is_chat_sponsor = 7;
-  bool is_chat_moderator = 8;
+  optional string channel_id = 10101;
+  optional string channel_url = 102;
+  optional string display_name = 103;
+  optional string profile_image_url = 104;
+  optional bool is_verified = 4;
+  optional bool is_chat_owner = 5;
+  optional bool is_chat_sponsor = 6;
+  optional bool is_chat_moderator = 7;
 }
 
-// Text message details
-message TextMessageDetails {
-  string message_text = 1;
+message LiveChatMessageSnippet {
+  message TypeWrapper {
+    enum Type {
+      INVALID_TYPE = 0;
+      TEXT_MESSAGE_EVENT = 1;
+      TOMBSTONE = 2;
+      FAN_FUNDING_EVENT = 3;
+      CHAT_ENDED_EVENT = 4;
+      SPONSOR_ONLY_MODE_STARTED_EVENT = 5;
+      SPONSOR_ONLY_MODE_ENDED_EVENT = 6;
+      NEW_SPONSOR_EVENT = 7;
+      MEMBER_MILESTONE_CHAT_EVENT = 17;
+      MEMBERSHIP_GIFTING_EVENT = 18;
+      GIFT_MEMBERSHIP_RECEIVED_EVENT = 19;
+      MESSAGE_DELETED_EVENT = 8;
+      MESSAGE_RETRACTED_EVENT = 9;
+      USER_BANNED_EVENT = 10;
+      SUPER_CHAT_EVENT = 15;
+      SUPER_STICKER_EVENT = 16;
+      POLL_EVENT = 20;
+    }
+  }
+
+  optional TypeWrapper.Type type = 1;
+  optional string live_chat_id = 201;
+  optional string author_channel_id = 301;
+  optional string published_at = 4;
+  optional bool has_display_content = 17;
+  optional string display_message = 16;
+
+  optional LiveChatTextMessageDetails text_message_details = 19;
+  optional LiveChatMessageDeletedDetails message_deleted_details = 20;
+  optional LiveChatMessageRetractedDetails message_retracted_details = 21;
+  optional LiveChatUserBannedMessageDetails user_banned_details = 22;
+  optional LiveChatSuperChatDetails super_chat_details = 27;
+  optional LiveChatSuperStickerDetails super_sticker_details = 28;
+  optional LiveChatNewSponsorDetails new_sponsor_details = 29;
+  optional LiveChatMemberMilestoneChatDetails member_milestone_chat_details = 30;
+  optional LiveChatMembershipGiftingDetails membership_gifting_details = 31;
+  optional LiveChatGiftMembershipReceivedDetails gift_membership_received_details = 32;
+  optional LiveChatPollDetails poll_details = 33;
 }
 
-// Super chat details
-message SuperChatDetails {
-  // Amount in micros (1,000,000 = 1 unit of currency)
-  int64 amount_micros = 1;
-
-  // Currency code (ISO 4217)
-  string currency = 2;
-
-  // Formatted amount string
-  string amount_display_string = 3;
-
-  // User's comment
-  string user_comment = 4;
-
-  // Tier level (1-7)
-  uint32 tier = 5;
+message LiveChatTextMessageDetails {
+  optional string message_text = 1;
 }
 
-// Super sticker details
-message SuperStickerDetails {
-  string super_sticker_id = 1;
-  string super_sticker_metadata = 2;
-  int64 amount_micros = 3;
-  string currency = 4;
-  string amount_display_string = 5;
-  uint32 tier = 6;
+message LiveChatMessageDeletedDetails {
+  optional string deleted_message_id = 101;
 }
 
-// New sponsor/member details
-message NewSponsorDetails {
-  // Membership level name
-  string member_level_name = 1;
-
-  // Whether this is an upgrade
-  bool is_upgrade = 2;
+message LiveChatMessageRetractedDetails {
+  optional string retracted_message_id = 201;
 }
 
-// Member milestone chat details
-message MemberMilestoneChatDetails {
-  // User's comment
-  string user_comment = 1;
-
-  // Total months as member
-  uint32 member_month = 2;
-
-  // Membership level name
-  string member_level_name = 3;
+message LiveChatUserBannedMessageDetails {
+  message BanTypeWrapper {
+    enum BanType {
+      PERMANENT = 1;
+      TEMPORARY = 2;
+    }
+  }
+  optional ChannelProfileDetails banned_user_details = 1;
+  optional BanTypeWrapper.BanType ban_type = 2;
+  optional uint64 ban_duration_seconds = 4;
 }
 
-// Membership gifting details
-message MembershipGiftingDetails {
-  // Number of memberships gifted
-  uint32 gift_memberships_count = 1;
+message LiveChatSuperChatDetails {
+  optional uint64 amount_micros = 1;
+  optional string currency = 2;
+  optional string amount_display_string = 3;
+  optional string user_comment = 4;
+  optional uint32 tier = 5;
+}
 
-  // Membership level name
-  string gift_memberships_level_name = 2;
+message LiveChatSuperStickerDetails {
+  optional uint64 amount_micros = 1;
+  optional string currency = 2;
+  optional string amount_display_string = 3;
+  optional uint32 tier = 4;
+  optional SuperStickerMetadata super_sticker_metadata = 5;
+}
+
+message LiveChatNewSponsorDetails {
+  optional string member_level_name = 1;
+  optional bool is_upgrade = 2;
+}
+
+message LiveChatMemberMilestoneChatDetails {
+  optional string member_level_name = 1;
+  optional uint32 member_month = 2;
+  optional string user_comment = 3;
+}
+
+message LiveChatMembershipGiftingDetails {
+  optional int32 gift_memberships_count = 1;
+  optional string gift_memberships_level_name = 2;
+}
+
+message LiveChatGiftMembershipReceivedDetails {
+  optional string member_level_name = 1;
+  optional string gifter_channel_id = 2;
+  optional string associated_membership_gifting_message_id = 3;
+}
+
+message LiveChatPollDetails {
+  message PollMetadata {
+    message PollOption {
+      optional string option_text = 1;
+      optional int64 tally = 2;
+    }
+    optional string question_text = 1;
+    repeated PollOption options = 2;
+  }
+
+  message PollStatusWrapper {
+    enum PollStatus {
+      UNKNOWN = 0;
+      ACTIVE = 1;
+      CLOSED = 2;
+    }
+  }
+
+  optional PollMetadata metadata = 1;
+  optional PollStatusWrapper.PollStatus status = 2;
+}
+
+message SuperStickerMetadata {
+  optional string sticker_id = 1;
+  optional string alt_text = 2;
+  optional string alt_text_language = 3;
+}
+
+message ChannelProfileDetails {
+  optional string channel_id = 101;
+  optional string channel_url = 2;
+  optional string display_name = 3;
+  optional string profile_image_url = 4;
+}
+
+message PageInfo {
+  optional int32 total_results = 1;
+  optional int32 results_per_page = 2;
 }

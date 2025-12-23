@@ -6,7 +6,6 @@ use super::client::GrpcChatClient;
 use crate::youtube::api_key_manager::get_api_key_manager;
 use crate::youtube::backoff::ExponentialBackoff;
 use crate::youtube::errors::YouTubeError;
-use crate::youtube::types::ChatMessage;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::async_runtime::JoinHandle;
@@ -194,7 +193,7 @@ async fn run_grpc_stream(
             }
         };
 
-        log::info!("gRPC stream connected");
+        log::info!("gRPC stream connected, waiting for messages...");
 
         // Emit connection status
         let _ = app_handle.emit("grpc-status", serde_json::json!({
@@ -202,28 +201,53 @@ async fn run_grpc_stream(
             "liveChatId": &live_chat_id
         }));
 
+        // Track message count for debugging
+        let mut message_count = 0u64;
+        let mut response_count = 0u64;
+
         // Process stream
         loop {
             if stop_signal.load(Ordering::SeqCst) {
+                log::info!("gRPC stream stopped by signal (received {} responses, {} messages)", response_count, message_count);
                 break;
             }
 
+            log::debug!("Waiting for next gRPC response...");
+
             match stream.next().await {
                 Some(Ok(response)) => {
+                    response_count += 1;
                     // Reset backoff on successful message
                     client.reset_backoff();
 
+                    // Log response details
+                    let item_count = response.items.len();
+                    let has_next_page = response.next_page_token.as_ref().map_or(false, |t| !t.is_empty());
+                    log::info!(
+                        "gRPC response #{}: {} items, next_page_token={}",
+                        response_count,
+                        item_count,
+                        if has_next_page { "present" } else { "empty" }
+                    );
+
                     // Parse and broadcast messages
                     let messages = client.parse_response(response);
+                    message_count += messages.len() as u64;
+
                     if !messages.is_empty() {
                         // Emit to frontend via Tauri event
                         let _ = app_handle.emit("chat-messages", &messages);
 
-                        log::debug!("Received {} chat messages", messages.len());
+                        log::debug!("Broadcast {} chat messages (total: {})", messages.len(), message_count);
                     }
                 }
                 Some(Err(status)) => {
-                    log::warn!("gRPC stream error: {:?}", status);
+                    log::error!(
+                        "gRPC stream error: code={}, message={}, details={:?}",
+                        status.code(),
+                        status.message(),
+                        status.details()
+                    );
 
                     // Check if auth error
                     if status.code() == tonic::Code::Unauthenticated {
@@ -239,8 +263,15 @@ async fn run_grpc_stream(
                     break;
                 }
                 None => {
-                    // Stream ended normally
-                    log::info!("gRPC stream ended");
+                    // Stream ended - this could mean:
+                    // 1. Server closed the stream (normal for server-streaming)
+                    // 2. Network issue
+                    // 3. Invalid request
+                    log::warn!(
+                        "gRPC stream ended after {} responses, {} messages. This may indicate the stream was closed by server.",
+                        response_count,
+                        message_count
+                    );
                     break;
                 }
             }

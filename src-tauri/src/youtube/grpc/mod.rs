@@ -8,7 +8,7 @@ pub mod poller;
 
 // Re-export the generated protobuf types
 pub mod proto {
-    tonic::include_proto!("youtube.v3");
+    tonic::include_proto!("youtube.api.v3");
 }
 
 pub use client::GrpcChatClient;

@@ -85,43 +85,66 @@ impl GrpcChatClient {
     pub async fn stream(
         &mut self,
     ) -> Result<Streaming<LiveChatMessageListResponse>, YouTubeError> {
-        let request = self.create_request();
+        let request = self.create_request()?;
+
+        log::info!(
+            "Starting gRPC stream for live_chat_id: {}",
+            self.live_chat_id
+        );
 
         let response = self
             .client
             .stream_list(request)
             .await
-            .map_err(|e| self.handle_grpc_error(e))?;
+            .map_err(|e| {
+                log::error!("gRPC StreamList call failed: code={}, message={}", e.code(), e.message());
+                self.handle_grpc_error(e)
+            })?;
 
         // Reset backoff on successful connection
         self.backoff.reset();
+
+        log::info!("gRPC stream started successfully");
 
         Ok(response.into_inner())
     }
 
     /// Create a gRPC request with authentication
-    fn create_request(&self) -> Request<LiveChatMessageListRequest> {
+    fn create_request(&self) -> Result<Request<LiveChatMessageListRequest>, YouTubeError> {
         let request_body = LiveChatMessageListRequest {
-            live_chat_id: self.live_chat_id.clone(),
+            live_chat_id: Some(self.live_chat_id.clone()),
             part: vec![
                 "id".to_string(),
                 "snippet".to_string(),
                 "authorDetails".to_string(),
             ],
-            hl: "ja".to_string(),
-            profile_image_size: DEFAULT_PROFILE_IMAGE_SIZE,
-            max_results: DEFAULT_MAX_RESULTS,
-            page_token: self.next_page_token.clone().unwrap_or_default(),
+            hl: Some("ja".to_string()),
+            profile_image_size: Some(DEFAULT_PROFILE_IMAGE_SIZE),
+            max_results: Some(DEFAULT_MAX_RESULTS),
+            page_token: self.next_page_token.clone(),
         };
+
+        log::debug!(
+            "Creating gRPC request: live_chat_id={}, page_token={:?}",
+            self.live_chat_id,
+            self.next_page_token
+        );
 
         let mut request = Request::new(request_body);
 
         // Add API key authentication
-        if let Ok(api_key_value) = self.api_key.parse() {
-            request.metadata_mut().insert("x-goog-api-key", api_key_value);
-        }
+        let api_key_value: tonic::metadata::AsciiMetadataValue = self
+            .api_key
+            .parse()
+            .map_err(|e| {
+                log::error!("Failed to parse API key as metadata value: {:?}", e);
+                YouTubeError::InvalidApiKey
+            })?;
 
-        request
+        request.metadata_mut().insert("x-goog-api-key", api_key_value);
+        log::debug!("API key metadata set successfully");
+
+        Ok(request)
     }
 
     /// Handle gRPC errors and convert to YouTubeError
@@ -167,24 +190,32 @@ impl GrpcChatClient {
     /// Parse a gRPC response into ChatMessage list
     pub fn parse_response(&mut self, response: LiveChatMessageListResponse) -> Vec<ChatMessage> {
         // Update next page token
-        if !response.next_page_token.is_empty() {
-            self.next_page_token = Some(response.next_page_token.clone());
+        if let Some(ref token) = response.next_page_token {
+            if !token.is_empty() {
+                self.next_page_token = Some(token.clone());
+            }
         }
 
         let mut messages = Vec::new();
 
         for item in response.items {
+            // Get message ID (skip if not present)
+            let msg_id = match &item.id {
+                Some(id) => id.clone(),
+                None => continue,
+            };
+
             // Skip already seen messages
-            if self.seen_ids.contains(&item.id) {
+            if self.seen_ids.contains(&msg_id) {
                 continue;
             }
 
             // Add to seen_ids and maintain order for FIFO eviction
-            if self.seen_ids.insert(item.id.clone()) {
-                self.seen_order.push_back(item.id.clone());
+            if self.seen_ids.insert(msg_id.clone()) {
+                self.seen_order.push_back(msg_id.clone());
             }
 
-            if let Some(msg) = self.convert_to_chat_message(&item) {
+            if let Some(msg) = self.convert_to_chat_message(&item, &msg_id) {
                 messages.push(msg);
             }
         }
@@ -206,29 +237,33 @@ impl GrpcChatClient {
     fn convert_to_chat_message(
         &self,
         item: &super::proto::LiveChatMessage,
+        msg_id: &str,
     ) -> Option<ChatMessage> {
         let snippet = item.snippet.as_ref()?;
         let author = item.author_details.as_ref()?;
 
         // Parse published_at
-        let published_at = DateTime::parse_from_rfc3339(&snippet.published_at)
+        let published_at = snippet
+            .published_at
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&Utc))
-            .unwrap_or_else(|_| Utc::now());
+            .unwrap_or_else(Utc::now);
 
         // Determine message type
         let message_type = self.parse_message_type(snippet);
 
         Some(ChatMessage {
-            id: item.id.clone(),
-            message: snippet.display_message.clone(),
-            author_name: author.display_name.clone(),
-            author_channel_id: author.channel_id.clone(),
-            author_image_url: author.profile_image_url.clone(),
+            id: msg_id.to_string(),
+            message: snippet.display_message.clone().unwrap_or_default(),
+            author_name: author.display_name.clone().unwrap_or_default(),
+            author_channel_id: author.channel_id.clone().unwrap_or_default(),
+            author_image_url: author.profile_image_url.clone().unwrap_or_default(),
             published_at,
-            is_owner: author.is_chat_owner,
-            is_moderator: author.is_chat_moderator,
-            is_member: author.is_chat_sponsor,
-            is_verified: author.is_verified,
+            is_owner: author.is_chat_owner.unwrap_or(false),
+            is_moderator: author.is_chat_moderator.unwrap_or(false),
+            is_member: author.is_chat_sponsor.unwrap_or(false),
+            is_verified: author.is_verified.unwrap_or(false),
             message_type,
             message_runs: None, // gRPC doesn't provide runs
         })
@@ -239,30 +274,41 @@ impl GrpcChatClient {
         &self,
         snippet: &super::proto::LiveChatMessageSnippet,
     ) -> MessageType {
-        match snippet.r#type.as_str() {
-            "superChatEvent" | "SUPER_CHAT_EVENT" => {
+        use super::proto::live_chat_message_snippet::type_wrapper::Type;
+
+        // Convert i32 to Type enum
+        let msg_type = snippet
+            .r#type
+            .and_then(|v| Type::try_from(v).ok());
+
+        match msg_type {
+            Some(Type::SuperChatEvent) => {
                 if let Some(details) = &snippet.super_chat_details {
                     MessageType::SuperChat {
-                        amount: details.amount_display_string.clone(),
-                        currency: details.currency.clone(),
+                        amount: details.amount_display_string.clone().unwrap_or_default(),
+                        currency: details.currency.clone().unwrap_or_default(),
                     }
                 } else {
                     MessageType::Text
                 }
             }
-            "superStickerEvent" | "SUPER_STICKER_EVENT" => {
+            Some(Type::SuperStickerEvent) => {
                 if let Some(details) = &snippet.super_sticker_details {
-                    MessageType::SuperSticker {
-                        sticker_id: details.super_sticker_id.clone(),
-                    }
+                    // Get sticker ID from metadata
+                    let sticker_id = details
+                        .super_sticker_metadata
+                        .as_ref()
+                        .and_then(|m| m.sticker_id.clone())
+                        .unwrap_or_default();
+                    MessageType::SuperSticker { sticker_id }
                 } else {
                     MessageType::Text
                 }
             }
-            "newSponsorEvent" | "NEW_SPONSOR_EVENT" => {
+            Some(Type::NewSponsorEvent) => {
                 if let Some(details) = &snippet.new_sponsor_details {
                     MessageType::Membership {
-                        level: details.member_level_name.clone(),
+                        level: details.member_level_name.clone().unwrap_or_default(),
                     }
                 } else {
                     MessageType::Membership {
@@ -270,12 +316,13 @@ impl GrpcChatClient {
                     }
                 }
             }
-            "memberMilestoneChatEvent" | "MEMBER_MILESTONE_CHAT_EVENT" => {
+            Some(Type::MemberMilestoneChatEvent) => {
                 if let Some(details) = &snippet.member_milestone_chat_details {
                     MessageType::Membership {
                         level: format!(
                             "{} ({}ヶ月)",
-                            details.member_level_name, details.member_month
+                            details.member_level_name.as_deref().unwrap_or("Member"),
+                            details.member_month.unwrap_or(0)
                         ),
                     }
                 } else {
@@ -284,10 +331,10 @@ impl GrpcChatClient {
                     }
                 }
             }
-            "membershipGiftingEvent" | "MEMBERSHIP_GIFTING_EVENT" => {
+            Some(Type::MembershipGiftingEvent) => {
                 if let Some(details) = &snippet.membership_gifting_details {
                     MessageType::MembershipGift {
-                        count: details.gift_memberships_count,
+                        count: details.gift_memberships_count.unwrap_or(1) as u32,
                     }
                 } else {
                     MessageType::MembershipGift { count: 1 }

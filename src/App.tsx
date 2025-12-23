@@ -7,6 +7,7 @@ import { SetlistList } from './components/SetlistList';
 import { TestModeButton } from './components/TestModeButton';
 import { OverlaySettings } from './components/settings';
 import Wizard from './components/wizard/Wizard';
+import { UpdateChecker } from './components/UpdateChecker';
 
 type Tab = 'comment' | 'setlist' | 'settings';
 type AppMode = 'wizard' | 'main';
@@ -224,6 +225,9 @@ function App() {
           <OverlaySettings />
         )}
       </div>
+
+      {/* アップデートチェッカー */}
+      <UpdateChecker />
     </div>
   );
 }

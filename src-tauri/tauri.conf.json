@@ -39,6 +39,26 @@
     ],
     "category": "Utility",
     "shortDescription": "VTuber streaming support tool",
-    "longDescription": "An all-in-one desktop application for VTuber streaming support, providing comment overlay and setlist management."
+    "longDescription": "An all-in-one desktop application for VTuber streaming support, providing comment overlay and setlist management.",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/manaca0923/vtuber-overlay-suite/releases/latest/download/latest.json"
+      ],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

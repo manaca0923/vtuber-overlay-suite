@@ -434,19 +434,41 @@ T10-Bマージ後のレビューで指摘された追加修正項目
 
 ## T12: インストーラー + 更新通知
 **優先度**: P1 | **見積**: 4日 | **依存**: All
+**ステータス**: ✅ **完了**（2025-12-23）
 
 ### チェックリスト
-- [ ] Tauri Updater 設定
-- [ ] 更新サーバー設定（GitHub Releases等）
-- [ ] 起動時更新チェック
-- [ ] 更新通知ダイアログ
-- [ ] Windows インストーラー（.msi）
-- [ ] macOS インストーラー（.dmg）
-- [ ] 自動更新または手動ダウンロード
+- [x] Tauri Updater 設定（tauri.conf.json, Cargo.toml）
+- [x] 更新サーバー設定（GitHub Releases）
+- [x] 起動時更新チェック（UpdateChecker.tsx）
+- [x] 更新通知ダイアログ（ダウンロード・再起動UI）
+- [x] Windows インストーラー（.msi, .exe）- GitHub Actionsで生成
+- [x] macOS インストーラー（.dmg）- GitHub Actionsで生成
+- [x] 自動更新フロー実装
+
+### 成果物
+- `src-tauri/tauri.conf.json` - Updater設定追加
+- `src-tauri/Cargo.toml` - tauri-plugin-updater, tauri-plugin-process追加
+- `src-tauri/src/lib.rs` - プラグイン初期化
+- `src-tauri/capabilities/default.json` - updater, processパーミッション
+- `src/components/UpdateChecker.tsx` - 更新チェック・通知UI
+- `.github/workflows/release.yml` - リリースワークフロー
+- `docs/500_release.md` - リリース手順書
+
+### 初回リリース前の手動作業
+- [ ] 署名キー生成（`npx tauri signer generate`）
+- [ ] tauri.conf.jsonにpubkey設定
+- [ ] GitHub Secretsに秘密鍵登録
+
+### 将来的改善（PR#42）
+- [ ] **リトライ回数制限**: 連続失敗時のバックオフ・リトライ制限
+- [ ] **ダウンロードキャンセル機能**: ダウンロード中の中断機能
+- [ ] **「このバージョンをスキップ」機能**: dismiss状態の永続化
+- [ ] **pubkey空チェックCI**: ワークフロー側でpubkey設定を検証するステップ
+- [ ] **リリースノート自動生成**: CHANGELOG.mdまたはコミット履歴からの自動生成
 
 ### テスト項目
-- [ ] 新バージョン検出→通知
-- [ ] 更新ダウンロード・インストール
+- [ ] 新バージョン検出→通知（手動テスト必要）
+- [ ] 更新ダウンロード・インストール（手動テスト必要）
 
 ---
 
@@ -630,7 +652,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T10-B | ✅ 完了 | 2025-12-20（レビュー指摘対応完了） |
 | T10-C | ✅ 完了 | 2025-12-20（追加レビュー指摘対応） |
 | T11 | ✅ 完了 | 2025-12-20 |
-| T12 | ⬜ 未着手 | - |
+| T12 | ✅ 完了 | 2025-12-23 |
 | T13 | ✅ 完了 | 2025-12-21 |
 | T14 | ✅ 完了 | 2025-12-21 |
 | T15 | ✅ 完了 | 2025-12-21 |

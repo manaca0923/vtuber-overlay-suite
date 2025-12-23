@@ -3,6 +3,9 @@
  * comment.html と combined.html で共有するJavaScript関数
  */
 
+(function() {
+'use strict';
+
 // =============================================================================
 // バリデーション関数
 // =============================================================================
@@ -447,3 +450,5 @@ window.CommentRenderer = {
   removeCommentWithAnimation,
   CommentQueueManager
 };
+
+})();

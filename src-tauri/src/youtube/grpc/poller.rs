@@ -244,10 +244,10 @@ async fn run_grpc_stream(
                         let state = app_handle.state::<AppState>();
                         let server_state = state.server.read().await;
                         for msg in messages.clone() {
-                            let _ = server_state.broadcast(WsMessage::CommentAdd { payload: msg });
+                            server_state.broadcast(WsMessage::CommentAdd { payload: msg }).await;
                         }
 
-                        log::debug!("Broadcast {} chat messages (total: {})", messages.len(), message_count);
+                        log::info!("Broadcast {} chat messages to WebSocket (total: {})", messages.len(), message_count);
                     }
                 }
                 Some(Err(status)) => {

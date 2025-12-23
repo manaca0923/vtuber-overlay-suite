@@ -198,16 +198,24 @@ impl GrpcChatClient {
         }
 
         let mut messages = Vec::new();
+        let total_items = response.items.len();
+        let mut skipped_no_id = 0;
+        let mut skipped_seen = 0;
+        let mut skipped_convert = 0;
 
         for item in response.items {
             // Get message ID (skip if not present)
             let msg_id = match &item.id {
                 Some(id) => id.clone(),
-                None => continue,
+                None => {
+                    skipped_no_id += 1;
+                    continue;
+                }
             };
 
             // Skip already seen messages
             if self.seen_ids.contains(&msg_id) {
+                skipped_seen += 1;
                 continue;
             }
 
@@ -218,7 +226,16 @@ impl GrpcChatClient {
 
             if let Some(msg) = self.convert_to_chat_message(&item, &msg_id) {
                 messages.push(msg);
+            } else {
+                skipped_convert += 1;
             }
+        }
+
+        if total_items > 0 {
+            log::info!(
+                "parse_response: total={}, parsed={}, skipped(no_id={}, seen={}, convert={})",
+                total_items, messages.len(), skipped_no_id, skipped_seen, skipped_convert
+            );
         }
 
         // FIFO eviction: remove oldest IDs when limit exceeded

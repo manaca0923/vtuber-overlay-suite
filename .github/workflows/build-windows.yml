@@ -52,10 +52,16 @@ jobs:
       - name: Run TypeScript type check
         run: npm run typecheck
 
+      - name: Disable updater artifacts for CI build
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $config.bundle.createUpdaterArtifacts = $false
+          $config | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+
       - name: Build Tauri app
         run: npm run tauri:build
         env:
-          # Tauri署名なしでビルド（開発用）
           TAURI_SKIP_UPDATER_SIGNATURE: true
 
       - name: Upload Windows artifacts

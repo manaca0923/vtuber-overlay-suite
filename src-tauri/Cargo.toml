@@ -33,7 +33,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 axum = "0.7"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-rustls", "chrono", "uuid"] }

@@ -10,6 +10,7 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 
 use super::types::{CommentPosition, LayoutPreset, SetlistPosition};
 
@@ -27,6 +28,10 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         overlays_dir,
     };
 
+    // 静的ファイル配信（shared/ディレクトリ内のCSS/JS）
+    let shared_dir = state.overlays_dir.join("shared");
+    let serve_shared = ServeDir::new(&shared_dir);
+
     let app = Router::new()
         .route("/api/health", get(health_check))
         .route("/api/setlist/latest", get(get_latest_setlist_api))
@@ -35,6 +40,7 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         .route("/overlay/comment", get(overlay_comment))
         .route("/overlay/setlist", get(overlay_setlist))
         .route("/overlay/combined", get(overlay_combined))
+        .nest_service("/overlay/shared", serve_shared)
         .layer(CorsLayer::permissive())
         .with_state(state);
 

@@ -16,7 +16,8 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use tonic::{Request, Status, Streaming};
 
 /// YouTube gRPC endpoint
-const YOUTUBE_GRPC_ENDPOINT: &str = "https://youtube.googleapis.com";
+/// Note: Use https:// with port 443 for tonic TLS connection
+const YOUTUBE_GRPC_ENDPOINT: &str = "https://youtube.googleapis.com:443";
 
 /// Default profile image size
 const DEFAULT_PROFILE_IMAGE_SIZE: u32 = 64;

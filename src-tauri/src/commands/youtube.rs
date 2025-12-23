@@ -1047,15 +1047,20 @@ pub async fn reset_to_primary_key() -> Result<(), String> {
 // ================================
 // 統合ポーラーコマンド
 // ================================
+//
+// NOTE: 将来的にはこの統合ポーラー（UNIFIED_POLLER）に既存の個別ポーラー
+// （INNERTUBE_RUNNING, INNERTUBE_CLIENT, INNERTUBE_HANDLE, AppState.poller）を
+// 統合することを検討してください。現在は並行して存在していますが、
+// 一元管理することでコードの保守性が向上します。
+// @see docs/900_tasks.md
 
 use crate::youtube::unified_poller::UnifiedPoller;
-use tokio::sync::Mutex as TokioMutex2;
 
 // グローバルな統合ポーラー状態
-static UNIFIED_POLLER: std::sync::OnceLock<Arc<TokioMutex2<UnifiedPoller>>> = std::sync::OnceLock::new();
+static UNIFIED_POLLER: std::sync::OnceLock<Arc<TokioMutex<UnifiedPoller>>> = std::sync::OnceLock::new();
 
-fn get_unified_poller() -> &'static Arc<TokioMutex2<UnifiedPoller>> {
-    UNIFIED_POLLER.get_or_init(|| Arc::new(TokioMutex2::new(UnifiedPoller::new())))
+fn get_unified_poller() -> &'static Arc<TokioMutex<UnifiedPoller>> {
+    UNIFIED_POLLER.get_or_init(|| Arc::new(TokioMutex::new(UnifiedPoller::new())))
 }
 
 /// 統合ポーリングを開始

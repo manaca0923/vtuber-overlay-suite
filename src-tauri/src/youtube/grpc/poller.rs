@@ -3,14 +3,15 @@
 //! Manages gRPC streaming connection lifecycle and broadcasts messages via WebSocket.
 
 use super::client::GrpcChatClient;
+use crate::server::types::WsMessage;
 use crate::youtube::api_key_manager::get_api_key_manager;
 use crate::youtube::backoff::ExponentialBackoff;
 use crate::youtube::errors::YouTubeError;
-use crate::youtube::types::ChatMessage;
+use crate::AppState;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio_stream::StreamExt;
 
 /// gRPC polling state
@@ -219,7 +220,14 @@ async fn run_grpc_stream(
                         // Emit to frontend via Tauri event
                         let _ = app_handle.emit("chat-messages", &messages);
 
-                        log::debug!("Received {} chat messages", messages.len());
+                        // Broadcast to WebSocket clients (for overlays)
+                        let state = app_handle.state::<AppState>();
+                        let server_state = state.server.read().await;
+                        for msg in messages.clone() {
+                            let _ = server_state.broadcast(WsMessage::CommentAdd { payload: msg });
+                        }
+
+                        log::debug!("Received and broadcast {} chat messages", messages.len());
                     }
                 }
                 Some(Err(status)) => {

@@ -122,11 +122,13 @@ export function UpdateChecker() {
         {/* ヘッダー */}
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-            {state.downloaded
-              ? 'アップデート準備完了'
-              : state.downloading
-                ? 'ダウンロード中...'
-                : '新しいバージョンがあります'}
+            {state.error
+              ? '更新エラー'
+              : state.downloaded
+                ? 'アップデート準備完了'
+                : state.downloading
+                  ? 'ダウンロード中...'
+                  : '新しいバージョンがあります'}
           </h3>
           {!state.downloading && !state.downloaded && (
             <button
@@ -175,7 +177,22 @@ export function UpdateChecker() {
 
         {/* アクションボタン */}
         <div className="flex gap-2">
-          {state.downloaded ? (
+          {state.error ? (
+            <>
+              <button
+                onClick={state.update ? downloadAndInstall : checkForUpdates}
+                className="flex-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                再試行
+              </button>
+              <button
+                onClick={() => setDismissed(true)}
+                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                閉じる
+              </button>
+            </>
+          ) : state.downloaded ? (
             <button
               onClick={handleRelaunch}
               className="flex-1 px-3 py-1.5 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors"

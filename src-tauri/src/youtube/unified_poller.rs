@@ -129,8 +129,51 @@ impl UnifiedPoller {
 
         poller
             .start(live_chat_id, move |event: PollingEvent| {
-                if let PollingEvent::Messages { messages } = event {
-                    let _ = handle.emit("chat-messages", &messages);
+                match event {
+                    PollingEvent::Messages { messages } => {
+                        let _ = handle.emit("chat-messages", &messages);
+                    }
+                    PollingEvent::Started { live_chat_id } => {
+                        let _ = handle.emit("official-status", serde_json::json!({
+                            "connected": true,
+                            "liveChatId": live_chat_id
+                        }));
+                    }
+                    PollingEvent::Stopped { reason } => {
+                        let _ = handle.emit("official-status", serde_json::json!({
+                            "connected": false,
+                            "stopped": true,
+                            "reason": reason
+                        }));
+                    }
+                    PollingEvent::Error { message, retrying } => {
+                        let _ = handle.emit("official-status", serde_json::json!({
+                            "connected": false,
+                            "error": message,
+                            "retrying": retrying
+                        }));
+                    }
+                    PollingEvent::QuotaExceeded => {
+                        let _ = handle.emit("official-status", serde_json::json!({
+                            "connected": false,
+                            "error": "クォータ超過",
+                            "quotaExceeded": true
+                        }));
+                    }
+                    PollingEvent::StreamEnded => {
+                        let _ = handle.emit("official-status", serde_json::json!({
+                            "connected": false,
+                            "streamEnded": true
+                        }));
+                    }
+                    PollingEvent::StateUpdate { quota_used, remaining_quota, poll_count, .. } => {
+                        let _ = handle.emit("official-status", serde_json::json!({
+                            "connected": true,
+                            "quotaUsed": quota_used,
+                            "remainingQuota": remaining_quota,
+                            "pollCount": poll_count
+                        }));
+                    }
                 }
             })
             .await?;

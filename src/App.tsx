@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ApiKeySetup } from './components/ApiKeySetup';
 import { CommentControlPanel } from './components/CommentControlPanel';
@@ -33,6 +33,7 @@ function App() {
   const [isVideoIdModalOpen, setIsVideoIdModalOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 初回起動判定 & 設定読み込み
   useEffect(() => {
@@ -111,8 +112,24 @@ function App() {
 
   // ステータスメッセージを表示（3秒後に自動消去）
   const showStatus = useCallback((type: 'success' | 'error', text: string) => {
+    // 既存のタイマーをクリア
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+    }
     setStatusMessage({ type, text });
-    setTimeout(() => setStatusMessage(null), 3000);
+    statusTimerRef.current = setTimeout(() => {
+      setStatusMessage(null);
+      statusTimerRef.current = null;
+    }, 3000);
+  }, []);
+
+  // クリーンアップ：アンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+      }
+    };
   }, []);
 
   // コメント取得開始ハンドラ

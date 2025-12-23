@@ -917,28 +917,47 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] gRPCモジュール基盤作成（`youtube/grpc/mod.rs`, `client.rs`）
 
 #### Phase 3: gRPCストリーミング実装（2日）
-- [ ] GrpcStreamClient実装
-- [ ] API keyメタデータ付与
-- [ ] server-streaming受信ループ
-- [ ] 指数バックオフ + ジッタによる再接続
-- [ ] messageIdベースの重複排除
+- [x] GrpcStreamClient実装 ✅ 2025-12-22（PR#39）
+- [x] API keyメタデータ付与
+- [x] server-streaming受信ループ
+- [x] 指数バックオフ + ジッタによる再接続
+- [x] messageIdベースの重複排除
 
 #### Phase 4: 統合ポーラー作成（1日）
-- [ ] UnifiedPoller実装（3モード統一管理）
-- [ ] ApiModeに`Grpc`を追加
-- [ ] フォールバック機構（gRPC→ポーリング）
-- [ ] 新規コマンド実装（start_unified_polling, stop_unified_polling）
+- [x] UnifiedPoller実装（3モード統一管理） ✅ 2025-12-22（PR#39）
+- [x] ApiModeに`Grpc`を追加
+- [x] フォールバック機構（gRPC→ポーリング）
+- [x] 新規コマンド実装（start_unified_polling, stop_unified_polling）
 
 #### Phase 5: フロントエンド統合（1日）
-- [ ] CommentControlPanel.tsx改修（モード切替UI）
-- [ ] ApiKeySetup.tsx改修（同梱キー/BYOK選択）
-- [ ] TypeScript型定義追加
+- [x] CommentControlPanel.tsx改修（モード切替UI） ✅ 2025-12-23（PR#40）
+- [x] TypeScript型定義追加（src/types/api.ts）
+- [x] InnerTube/gRPCステータスイベントリスナー
+- [x] 統合ポーラーコマンド登録
 
 #### Phase 6: テスト・ドキュメント（1日）
 - [ ] 各モードの接続テスト
 - [ ] モード切り替えテスト
 - [ ] 再接続テスト（ネットワーク断）
 - [ ] `docs/200_youtube-api.md` 更新
+
+### 技術的負債（次イテレーションで対応予定）
+
+以下はPR#40レビューで指摘された改善項目。機能実装完了後に対応予定。
+
+- [ ] **グローバル状態の統合** (PR#40)
+  - 現在: `UNIFIED_POLLER`, `INNERTUBE_*`, `AppState.poller` が並行して存在
+  - 対応: 統合ポーラーに一元化してコード保守性を向上
+  - @see `src-tauri/src/commands/youtube.rs:1051-1055`
+
+- [ ] **公式APIモードの保存状態再開機能** (PR#40)
+  - 現在: 統合ポーラー使用により一時的に無効化（`_useSavedState`パラメータ）
+  - 対応: 統合ポーラーに保存状態復元機能を追加
+  - @see `src/components/CommentControlPanel.tsx:285-286`
+
+- [ ] **接続状態管理の最適化** (PR#40)
+  - 現在: `isPolling`と`connectionStatus`を別々に管理
+  - 提案: `connectionStatus`を拡張（`'disconnected' | 'connecting' | 'connected' | 'error'`）し、`isPolling`を派生状態化
 
 ### 技術スタック
 - gRPC: tonic 0.12 + prost 0.13

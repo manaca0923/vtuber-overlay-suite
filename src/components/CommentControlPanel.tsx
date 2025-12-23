@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ChatMessage } from '../types/chat';
+import type { ApiMode, InnerTubeStatusEvent, GrpcStatusEvent } from '../types/api';
+import { API_MODE_INFO } from '../types/api';
 
 // YouTube API クォータ定数
 const DAILY_QUOTA_LIMIT = 10000; // 1日のクォータ上限
@@ -86,11 +88,84 @@ export function CommentControlPanel({
   const [editVideoInput, setEditVideoInput] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // APIモード関連
+  const [apiMode, setApiMode] = useState<ApiMode>('innertube');
+  const [useBundledKey, setUseBundledKey] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'error'>('disconnected');
+
   // コンポーネントのマウント状態を管理
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+    };
+  }, []);
+
+  // APIモードを読み込み
+  useEffect(() => {
+    async function loadApiMode() {
+      try {
+        const savedMode = await invoke<ApiMode>('load_api_mode');
+        if (isMountedRef.current) {
+          setApiMode(savedMode);
+        }
+      } catch (err) {
+        console.error('Failed to load API mode:', err);
+      }
+    }
+    loadApiMode();
+  }, []);
+
+  // InnerTube/gRPCステータスイベントを監視
+  useEffect(() => {
+    let unlistenInnerTube: UnlistenFn | null = null;
+    let unlistenGrpc: UnlistenFn | null = null;
+
+    async function setupStatusListeners() {
+      try {
+        unlistenInnerTube = await listen<InnerTubeStatusEvent>('innertube-status', (event) => {
+          if (!isMountedRef.current) return;
+          const { connected, error: statusError, stopped } = event.payload;
+          if (connected) {
+            setConnectionStatus('connected');
+            setError(null);
+            setLastEvent('InnerTube接続成功');
+          } else if (stopped) {
+            setConnectionStatus('disconnected');
+            setLastEvent('InnerTube停止');
+          } else if (statusError) {
+            setConnectionStatus('error');
+            setError(statusError);
+            setLastEvent('InnerTubeエラー');
+          }
+        });
+
+        unlistenGrpc = await listen<GrpcStatusEvent>('grpc-status', (event) => {
+          if (!isMountedRef.current) return;
+          const { connected, error: statusError } = event.payload;
+          if (connected) {
+            setConnectionStatus('connected');
+            setError(null);
+            setLastEvent('gRPC接続成功');
+          } else if (statusError) {
+            setConnectionStatus('error');
+            setError(statusError);
+            setLastEvent('gRPCエラー');
+          } else {
+            setConnectionStatus('disconnected');
+            setLastEvent('gRPC切断');
+          }
+        });
+      } catch (err) {
+        console.error('Failed to setup status listeners:', err);
+      }
+    }
+
+    setupStatusListeners();
+
+    return () => {
+      unlistenInnerTube?.();
+      unlistenGrpc?.();
     };
   }, []);
 
@@ -199,26 +274,38 @@ export function CommentControlPanel({
     }
   }, [liveChatId]);
 
+  // 現在のモードでAPIキーが必要かどうか
+  const currentModeRequiresApiKey = API_MODE_INFO[apiMode].requiresApiKey;
+  const hasValidApiKey = apiKey && apiKey.length > 0;
+  const canStartPolling = videoId && (apiMode === 'innertube' || hasValidApiKey);
+
+  // 統合ポーラーを使った開始処理
   const handleStartPolling = useCallback(
-    async (useSavedState: boolean = false) => {
-      if (!apiKey || !liveChatId) {
-        setError('APIキーとLive Chat IDが必要です');
+    async (_useSavedState: boolean = false) => {
+      // NOTE: 保存状態からの再開は公式APIポーリングモードでのみサポート
+      // 現在は統合ポーラーを使用するため、この機能は将来的に再実装予定
+      if (!videoId) {
+        setError('動画IDが必要です');
         return;
       }
 
-      // useSavedState=trueでも、savedStateが存在しない場合は新規開始として扱う
-      const shouldUseSavedState = useSavedState && savedState !== null;
+      // 公式APIモードではAPIキーが必要
+      if (currentModeRequiresApiKey && !useBundledKey && !hasValidApiKey) {
+        setError('APIキーが設定されていません');
+        return;
+      }
 
       setLoading(true);
       setError(null);
+      setConnectionStatus('disconnected');
 
       try {
-        await invoke('start_polling', {
-          apiKey: apiKey,
-          liveChatId: liveChatId,
-          nextPageToken: shouldUseSavedState ? savedState.next_page_token : null,
-          quotaUsed: shouldUseSavedState ? savedState.quota_used : null,
-          pollingIntervalMillis: shouldUseSavedState ? savedState.polling_interval_millis : null,
+        // 統合ポーラーを使用
+        await invoke('start_unified_polling', {
+          videoId: videoId,
+          mode: apiMode,
+          useBundledKey: useBundledKey,
+          userApiKey: hasValidApiKey ? apiKey : null,
         });
         if (isMountedRef.current) {
           setIsPolling(true);
@@ -228,6 +315,7 @@ export function CommentControlPanel({
         if (isMountedRef.current) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           setError(`ポーリング開始エラー: ${errorMessage}`);
+          setConnectionStatus('error');
         }
       } finally {
         if (isMountedRef.current) {
@@ -235,30 +323,19 @@ export function CommentControlPanel({
         }
       }
     },
-    [apiKey, liveChatId, savedState]
+    [videoId, apiMode, useBundledKey, apiKey, hasValidApiKey, currentModeRequiresApiKey]
   );
 
+  // 統合ポーラーを使った停止処理
   const handleStopPolling = useCallback(async () => {
     setLoading(true);
 
     try {
-      // 停止前に最新の状態を取得して保存
-      // （stateUpdateイベントは10回に1回しか送信されないため、get_polling_stateで最新を取得）
-      if (liveChatId) {
-        const latestState = await invoke<PollingState | null>('get_polling_state');
-        if (latestState) {
-          await invoke('save_polling_state', {
-            liveChatId: liveChatId,
-            nextPageToken: latestState.next_page_token,
-            quotaUsed: latestState.quota_used,
-            pollingIntervalMillis: latestState.polling_interval_millis,
-          });
-        }
-      }
-
-      await invoke('stop_polling');
+      // 統合ポーラーを停止
+      await invoke('stop_unified_polling');
       if (isMountedRef.current) {
         setIsPolling(false);
+        setConnectionStatus('disconnected');
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -270,7 +347,25 @@ export function CommentControlPanel({
         setLoading(false);
       }
     }
-  }, [liveChatId]);
+  }, []);
+
+  // APIモード変更ハンドラ
+  const handleApiModeChange = useCallback(async (newMode: ApiMode) => {
+    if (isPolling) {
+      setError('ポーリング中はモードを変更できません。停止してから変更してください。');
+      return;
+    }
+
+    try {
+      await invoke('save_api_mode', { mode: newMode });
+      setApiMode(newMode);
+      setError(null);
+      setLastEvent(`モードを${API_MODE_INFO[newMode].label}に変更しました`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`モード変更エラー: ${errorMessage}`);
+    }
+  }, [isPolling]);
 
   // 動画ID/URLから動画IDを抽出
   const extractVideoId = (input: string): string => {
@@ -350,6 +445,71 @@ export function CommentControlPanel({
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-bold mb-4">コメント取得制御</h2>
 
+      {/* APIモード選択 */}
+      <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">取得モード</h3>
+        <div className="space-y-2">
+          {(Object.keys(API_MODE_INFO) as ApiMode[]).map((mode) => {
+            const info = API_MODE_INFO[mode];
+            return (
+              <label
+                key={mode}
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  apiMode === mode
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                } ${isPolling ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="apiMode"
+                  value={mode}
+                  checked={apiMode === mode}
+                  onChange={() => handleApiModeChange(mode)}
+                  disabled={isPolling}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-800">{info.label}</span>
+                    {info.recommended && (
+                      <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">
+                        推奨
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{info.description}</p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* APIキー設定（公式APIモード時） */}
+        {currentModeRequiresApiKey && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                id="useBundledKey"
+                checked={useBundledKey}
+                onChange={(e) => setUseBundledKey(e.target.checked)}
+                disabled={isPolling}
+                className="rounded"
+              />
+              <label htmlFor="useBundledKey" className="text-sm text-gray-700">
+                アプリ同梱キーを使用
+              </label>
+            </div>
+            {!useBundledKey && !hasValidApiKey && (
+              <p className="text-xs text-orange-600">
+                ※ APIキーが設定されていません。設定画面でAPIキーを入力してください。
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* 接続情報 */}
       <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
         <div className="grid grid-cols-2 gap-2 mb-3">
@@ -398,19 +558,32 @@ export function CommentControlPanel({
         )}
       </div>
 
-      {/* ポーリング状態 */}
+      {/* 接続状態 */}
       <div className="mb-4 flex items-center gap-3">
         <div
-          className={`w-3 h-3 rounded-full ${isPolling ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}
+          className={`w-3 h-3 rounded-full ${
+            connectionStatus === 'connected'
+              ? 'bg-green-500 animate-pulse'
+              : connectionStatus === 'error'
+                ? 'bg-red-500'
+                : 'bg-gray-400'
+          }`}
         />
         <span className="font-medium">
-          {isPolling ? '取得中' : '停止中'}
+          {connectionStatus === 'connected'
+            ? '接続中'
+            : connectionStatus === 'error'
+              ? 'エラー'
+              : '停止中'}
         </span>
-        {lastEvent && <span className="text-sm text-gray-500">{lastEvent}</span>}
+        <span className="text-sm text-gray-500">
+          [{API_MODE_INFO[apiMode].label}]
+        </span>
+        {lastEvent && <span className="text-sm text-gray-500">- {lastEvent}</span>}
       </div>
 
-      {/* 保存された状態がある場合の再開オプション */}
-      {savedState && !isPolling && (
+      {/* 保存された状態がある場合の再開オプション（公式APIモードのみ） */}
+      {savedState && !isPolling && apiMode === 'official' && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
@@ -424,9 +597,9 @@ export function CommentControlPanel({
             </div>
             <button
               onClick={() => handleStartPolling(true)}
-              disabled={loading || !apiKey || !liveChatId}
+              disabled={loading || !canStartPolling}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                loading || !apiKey || !liveChatId
+                loading || !canStartPolling
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   : 'bg-yellow-600 text-white hover:bg-yellow-700'
               }`}
@@ -441,14 +614,14 @@ export function CommentControlPanel({
       <div className="flex gap-3 mb-4">
         <button
           onClick={() => handleStartPolling(false)}
-          disabled={loading || isPolling || !apiKey || !liveChatId}
+          disabled={loading || isPolling || !canStartPolling}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            loading || isPolling || !apiKey || !liveChatId
+            loading || isPolling || !canStartPolling
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-green-600 text-white hover:bg-green-700'
           }`}
         >
-          {loading ? '処理中...' : '最初から開始'}
+          {loading ? '処理中...' : '開始'}
         </button>
         <button
           onClick={handleStopPolling}
@@ -463,8 +636,8 @@ export function CommentControlPanel({
         </button>
       </div>
 
-      {/* クォータ情報 */}
-      {pollingState && (
+      {/* クォータ情報（公式APIモードのみ） */}
+      {pollingState && apiMode === 'official' && (
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-blue-800">

@@ -8,6 +8,8 @@ interface UpdateState {
   downloading: boolean;
   downloaded: boolean;
   progress: number;
+  totalDownloaded: number;
+  contentLength: number;
   error: string | null;
   update: Update | null;
 }
@@ -19,6 +21,8 @@ export function UpdateChecker() {
     downloading: false,
     downloaded: false,
     progress: 0,
+    totalDownloaded: 0,
+    contentLength: 0,
     error: null,
     update: null,
   });
@@ -53,17 +57,20 @@ export function UpdateChecker() {
 
     setState((prev) => ({ ...prev, downloading: true, error: null }));
     try {
+      let totalDownloaded = 0;
+      let contentLength = 0;
       await state.update.downloadAndInstall((event) => {
         switch (event.event) {
           case 'Started':
-            setState((prev) => ({ ...prev, progress: 0 }));
+            totalDownloaded = 0;
+            contentLength = event.data.contentLength ?? 0;
+            setState((prev) => ({ ...prev, progress: 0, totalDownloaded: 0, contentLength }));
             break;
           case 'Progress':
-            if (event.data.contentLength) {
-              const progress = Math.round(
-                (event.data.chunkLength / event.data.contentLength) * 100
-              );
-              setState((prev) => ({ ...prev, progress }));
+            totalDownloaded += event.data.chunkLength;
+            if (contentLength > 0) {
+              const progress = Math.round((totalDownloaded / contentLength) * 100);
+              setState((prev) => ({ ...prev, progress, totalDownloaded }));
             }
             break;
           case 'Finished':

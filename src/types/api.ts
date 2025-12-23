@@ -41,6 +41,24 @@ export interface GrpcStatusEvent {
 }
 
 /**
+ * Officialステータスイベント
+ * @see src-tauri/src/youtube/unified_poller.rs start_official
+ */
+export interface OfficialStatusEvent {
+  connected: boolean;
+  liveChatId?: string;
+  error?: string;
+  stopped?: boolean;
+  reason?: string;
+  retrying?: boolean;
+  quotaExceeded?: boolean;
+  streamEnded?: boolean;
+  quotaUsed?: number;
+  remainingQuota?: number;
+  pollCount?: number;
+}
+
+/**
  * APIモードの表示情報
  */
 export const API_MODE_INFO: Record<ApiMode, {

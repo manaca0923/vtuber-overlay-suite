@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ChatMessage } from '../types/chat';
-import type { ApiMode, InnerTubeStatusEvent, GrpcStatusEvent } from '../types/api';
+import type { ApiMode, InnerTubeStatusEvent, GrpcStatusEvent, OfficialStatusEvent } from '../types/api';
 import { API_MODE_INFO } from '../types/api';
 
 // YouTube API クォータ定数
@@ -116,10 +116,11 @@ export function CommentControlPanel({
     loadApiMode();
   }, []);
 
-  // InnerTube/gRPCステータスイベントを監視
+  // InnerTube/gRPC/Officialステータスイベントを監視
   useEffect(() => {
     let unlistenInnerTube: UnlistenFn | null = null;
     let unlistenGrpc: UnlistenFn | null = null;
+    let unlistenOfficial: UnlistenFn | null = null;
 
     async function setupStatusListeners() {
       try {
@@ -156,6 +157,33 @@ export function CommentControlPanel({
             setLastEvent('gRPC切断');
           }
         });
+
+        unlistenOfficial = await listen<OfficialStatusEvent>('official-status', (event) => {
+          if (!isMountedRef.current) return;
+          const { connected, error: statusError, stopped, quotaExceeded, streamEnded, retrying } = event.payload;
+          if (connected) {
+            setConnectionStatus('connected');
+            setError(null);
+            setLastEvent('公式API接続成功');
+          } else if (stopped) {
+            setConnectionStatus('disconnected');
+            setLastEvent('公式API停止');
+          } else if (quotaExceeded) {
+            setConnectionStatus('error');
+            setError('クォータ超過 - 翌日まで待機してください');
+            setLastEvent('クォータ超過');
+          } else if (streamEnded) {
+            setConnectionStatus('disconnected');
+            setLastEvent('配信終了');
+          } else if (statusError) {
+            setConnectionStatus(retrying ? 'connected' : 'error');
+            if (!retrying) setError(statusError);
+            setLastEvent(retrying ? `リトライ中: ${statusError}` : `公式APIエラー: ${statusError}`);
+          } else {
+            setConnectionStatus('disconnected');
+            setLastEvent('公式API切断');
+          }
+        });
       } catch (err) {
         console.error('Failed to setup status listeners:', err);
       }
@@ -166,6 +194,7 @@ export function CommentControlPanel({
     return () => {
       unlistenInnerTube?.();
       unlistenGrpc?.();
+      unlistenOfficial?.();
     };
   }, []);
 

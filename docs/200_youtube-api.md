@@ -501,6 +501,8 @@ const mode = await invoke<ApiMode | null>('get_unified_polling_mode');
 
 ### ステータスイベント
 
+各モードは専用のステータスイベントを発行し、フロントエンドで接続状態を監視できる。
+
 ```typescript
 // InnerTubeモード
 listen<InnerTubeStatusEvent>('innertube-status', (event) => {
@@ -511,6 +513,40 @@ listen<InnerTubeStatusEvent>('innertube-status', (event) => {
 listen<GrpcStatusEvent>('grpc-status', (event) => {
   const { connected, liveChatId, error } = event.payload;
 });
+
+// Officialモード（ポーリング）
+listen<OfficialStatusEvent>('official-status', (event) => {
+  const { connected, error, stopped, quotaExceeded, streamEnded, retrying } = event.payload;
+});
+```
+
+### フロントエンドでのエラーハンドリング
+
+ステータスイベントを使用して、モードに応じた適切なエラー表示を行う。
+
+| イベント | フィールド | 対処方法 |
+|----------|------------|----------|
+| `connected: true` | - | 正常接続を表示 |
+| `error` + `retrying: true` | error | リトライ中を表示（警告レベル） |
+| `error` + `retrying: false` | error | エラー表示、手動対処を促す |
+| `quotaExceeded` | - | クォータ超過を通知、翌日まで待機 |
+| `streamEnded` | - | 配信終了を通知 |
+| `stopped` | reason | 停止理由を表示 |
+
+```typescript
+// 実装例（CommentControlPanel.tsx）
+if (connected) {
+  setConnectionStatus('connected');
+  setError(null);
+} else if (quotaExceeded) {
+  setConnectionStatus('error');
+  setError('クォータ超過 - 翌日まで待機してください');
+} else if (streamEnded) {
+  setConnectionStatus('disconnected');
+} else if (statusError) {
+  setConnectionStatus(retrying ? 'connected' : 'error');
+  if (!retrying) setError(statusError);
+}
 ```
 
 ### 実装

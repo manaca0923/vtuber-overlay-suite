@@ -18,9 +18,34 @@ class ChannelBadge extends BaseComponent {
   constructor(config) {
     super(config);
     this.label = this.style.label || 'LIVE';
-    this.iconUrl = this.style.iconUrl || '';
+    this.iconUrl = this.validateUrl(this.style.iconUrl) || '';
     this.showIcon = this.style.showIcon || false;
     this.blinking = this.style.blinking || false;
+  }
+
+  /**
+   * URLが安全なスキームか検証
+   * @param {string} url
+   * @returns {string} 安全なURLまたは空文字列
+   */
+  validateUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    try {
+      const parsed = new URL(url, window.location.href);
+      // http, https, data スキームのみ許可
+      if (['http:', 'https:', 'data:'].includes(parsed.protocol)) {
+        return url;
+      }
+      console.warn('ChannelBadge: 無効なURLスキーム:', parsed.protocol);
+      return '';
+    } catch (e) {
+      // 相対パスの場合は許可
+      if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+        return url;
+      }
+      console.warn('ChannelBadge: 無効なURL:', url);
+      return '';
+    }
   }
 
   render() {
@@ -72,8 +97,9 @@ class ChannelBadge extends BaseComponent {
     }
 
     if (data.iconUrl !== undefined && this.iconEl) {
-      this.iconUrl = data.iconUrl;
-      this.iconEl.src = data.iconUrl;
+      const validatedUrl = this.validateUrl(data.iconUrl);
+      this.iconUrl = validatedUrl;
+      this.iconEl.src = validatedUrl;
     }
 
     if (data.blinking !== undefined) {

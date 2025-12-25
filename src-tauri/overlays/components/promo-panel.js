@@ -116,9 +116,10 @@ class PromoPanel extends BaseComponent {
         this.contentEl.appendChild(iconEl);
       }
 
+      // textContentはHTMLを解釈しないため、escapeHtmlは不要
       const textEl = this.createElement('span', {
         className: 'promo-text',
-        textContent: this.escapeHtml(item.text || ''),
+        textContent: item.text || '',
       });
       this.contentEl.appendChild(textEl);
 

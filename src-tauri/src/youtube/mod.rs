@@ -1,6 +1,7 @@
 pub mod api_key_manager;
 pub mod backoff;
 pub mod client;
+pub mod db;
 pub mod errors;
 pub mod grpc;
 pub mod innertube;

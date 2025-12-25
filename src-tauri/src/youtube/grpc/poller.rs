@@ -1,17 +1,26 @@
 //! gRPC Streaming Poller
 //!
 //! Manages gRPC streaming connection lifecycle and broadcasts messages via WebSocket.
+//!
+//! ## WS/DB連携
+//! 取得したコメントは以下の経路で配信される：
+//! 1. Tauriイベント（chat-messages）→ フロントエンドUI
+//! 2. WebSocketブロードキャスト（comment:add）→ OBSオーバーレイ
+//! 3. SQLite保存 → コメントログ
 
 use super::client::GrpcChatClient;
 use crate::server::types::WsMessage;
+use crate::server::WebSocketState;
 use crate::youtube::api_key_manager::get_api_key_manager;
 use crate::youtube::backoff::ExponentialBackoff;
+use crate::youtube::db::save_comments_to_db;
 use crate::youtube::errors::YouTubeError;
-use crate::AppState;
+use sqlx::SqlitePool;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
+use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 
 /// gRPC polling state
@@ -37,6 +46,8 @@ impl GrpcPoller {
         live_chat_id: String,
         api_key: String,
         app_handle: AppHandle,
+        db_pool: SqlitePool,
+        server_state: Arc<RwLock<WebSocketState>>,
     ) -> Result<(), YouTubeError> {
         // Stop any existing polling
         self.stop().await;
@@ -48,7 +59,7 @@ impl GrpcPoller {
 
         // Spawn streaming task
         let handle = tauri::async_runtime::spawn(async move {
-            if let Err(e) = run_grpc_stream(live_chat_id, api_key, stop_signal, app_handle).await {
+            if let Err(e) = run_grpc_stream(live_chat_id, api_key, stop_signal, app_handle, db_pool, server_state).await {
                 log::error!("gRPC streaming error: {:?}", e);
             }
         });
@@ -112,6 +123,8 @@ async fn run_grpc_stream(
     api_key: String,
     stop_signal: Arc<AtomicBool>,
     app_handle: AppHandle,
+    db_pool: SqlitePool,
+    server_state: Arc<RwLock<WebSocketState>>,
 ) -> Result<(), YouTubeError> {
     let mut current_api_key = api_key;
     let mut retry_with_secondary = false;
@@ -242,11 +255,13 @@ async fn run_grpc_stream(
                         // Emit to frontend via Tauri event
                         let _ = app_handle.emit("chat-messages", &messages);
 
+                        // DBに保存
+                        save_comments_to_db(&db_pool, &messages).await;
+
                         // Broadcast to WebSocket clients (for overlays)
-                        let state = app_handle.state::<AppState>();
-                        let server_state = state.server.read().await;
-                        for msg in messages {
-                            server_state.broadcast(WsMessage::CommentAdd { payload: msg }).await;
+                        let state_lock = server_state.read().await;
+                        for msg in &messages {
+                            state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone() }).await;
                         }
 
                         log::info!("Broadcast {} chat messages to WebSocket (total: {})", broadcast_count, message_count);

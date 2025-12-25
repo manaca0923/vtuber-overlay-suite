@@ -2,21 +2,31 @@
 //!
 //! 3つのAPIモード（InnerTube / Official / gRPC）を統一管理する。
 //! モードに応じて適切なポーラーを起動し、メッセージをブロードキャストする。
+//!
+//! ## WS/DB連携
+//! 取得したコメントは以下の経路で配信される：
+//! 1. Tauriイベント（chat-messages）→ フロントエンドUI
+//! 2. WebSocketブロードキャスト（comment:add）→ OBSオーバーレイ
+//! 3. SQLite保存 → コメントログ
 
 use super::api_key_manager::get_api_key_manager;
 use super::backoff::ExponentialBackoff;
+use super::db::save_comments_to_db;
 use super::errors::YouTubeError;
 use super::grpc::GrpcPoller;
 use super::innertube::InnerTubeClient;
 use super::poller::{ChatPoller, PollingEvent};
 use super::types::ChatMessage;
 use crate::commands::youtube::ApiMode;
+use crate::server::types::WsMessage;
+use crate::server::WebSocketState;
+use sqlx::SqlitePool;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 /// 重複排除用のメッセージIDの最大保持数
 const MAX_SEEN_IDS: usize = 10000;
@@ -91,6 +101,8 @@ impl UnifiedPoller {
         &self,
         video_id: String,
         app_handle: AppHandle,
+        db_pool: SqlitePool,
+        server_state: Arc<RwLock<WebSocketState>>,
     ) -> Result<(), YouTubeError> {
         self.stop().await;
 
@@ -100,7 +112,7 @@ impl UnifiedPoller {
         let running = Arc::clone(&self.running);
 
         let handle = tauri::async_runtime::spawn(async move {
-            if let Err(e) = run_innertube_loop(video_id, running.clone(), app_handle).await {
+            if let Err(e) = run_innertube_loop(video_id, running.clone(), app_handle, db_pool, server_state).await {
                 log::error!("InnerTube polling error: {:?}", e);
             }
             running.store(false, Ordering::SeqCst);
@@ -118,6 +130,8 @@ impl UnifiedPoller {
         live_chat_id: String,
         api_key: String,
         app_handle: AppHandle,
+        db_pool: SqlitePool,
+        server_state: Arc<RwLock<WebSocketState>>,
     ) -> Result<(), YouTubeError> {
         self.stop().await;
 
@@ -126,12 +140,31 @@ impl UnifiedPoller {
 
         let poller = ChatPoller::new(api_key);
         let handle = app_handle.clone();
+        let db_pool_for_callback = db_pool.clone();
+        let server_state_for_callback: Arc<RwLock<WebSocketState>> = Arc::clone(&server_state);
 
         poller
             .start(live_chat_id, move |event: PollingEvent| {
+                let db_pool = db_pool_for_callback.clone();
+                let server_state = Arc::clone(&server_state_for_callback);
+
                 match event {
                     PollingEvent::Messages { messages } => {
+                        // フロントエンドへのイベント発火
                         let _ = handle.emit("chat-messages", &messages);
+
+                        // WS/DB連携（非同期タスクで処理）
+                        let messages_clone = messages.clone();
+                        tokio::spawn(async move {
+                            // DBに保存
+                            save_comments_to_db(&db_pool, &messages_clone).await;
+
+                            // WebSocketでブロードキャスト
+                            let state_lock = server_state.read().await;
+                            for msg in messages_clone {
+                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg }).await;
+                            }
+                        });
                     }
                     PollingEvent::Started { live_chat_id } => {
                         let _ = handle.emit("official-status", serde_json::json!({
@@ -190,6 +223,8 @@ impl UnifiedPoller {
         live_chat_id: String,
         api_key: String,
         app_handle: AppHandle,
+        db_pool: SqlitePool,
+        server_state: Arc<RwLock<WebSocketState>>,
     ) -> Result<(), YouTubeError> {
         self.stop().await;
 
@@ -197,7 +232,7 @@ impl UnifiedPoller {
         self.running.store(true, Ordering::SeqCst);
 
         let mut poller = GrpcPoller::new();
-        poller.start(live_chat_id, api_key, app_handle).await?;
+        poller.start(live_chat_id, api_key, app_handle, db_pool, server_state).await?;
 
         *self.grpc_poller.lock().await = Some(poller);
 
@@ -206,6 +241,15 @@ impl UnifiedPoller {
     }
 
     /// モードに応じてポーリングを開始（統一インターフェース）
+    ///
+    /// ## 引数
+    /// - `video_id`: YouTube動画ID
+    /// - `mode`: APIモード（InnerTube / Official / Grpc）
+    /// - `use_bundled_key`: 同梱APIキーを使用するか
+    /// - `user_api_key`: ユーザー指定のAPIキー（BYOK）
+    /// - `app_handle`: Tauriアプリケーションハンドル
+    /// - `db_pool`: SQLiteデータベースプール（コメントログ保存用）
+    /// - `server_state`: WebSocketサーバー状態（オーバーレイへのブロードキャスト用）
     pub async fn start(
         &self,
         video_id: String,
@@ -213,11 +257,13 @@ impl UnifiedPoller {
         use_bundled_key: bool,
         user_api_key: Option<String>,
         app_handle: AppHandle,
+        db_pool: SqlitePool,
+        server_state: Arc<RwLock<WebSocketState>>,
     ) -> Result<(), YouTubeError> {
         match mode {
             ApiMode::InnerTube => {
                 // InnerTubeモードはAPIキー不要
-                self.start_innertube(video_id, app_handle).await
+                self.start_innertube(video_id, app_handle, db_pool, server_state).await
             }
             ApiMode::Official => {
                 // APIキーを取得
@@ -225,7 +271,7 @@ impl UnifiedPoller {
                 // video_idからlive_chat_idを取得
                 let client = super::client::YouTubeClient::new(api_key.clone());
                 let live_chat_id = client.get_live_chat_id(&video_id).await?;
-                self.start_official(live_chat_id, api_key, app_handle).await
+                self.start_official(live_chat_id, api_key, app_handle, db_pool, server_state).await
             }
             ApiMode::Grpc => {
                 // APIキーを取得
@@ -233,7 +279,7 @@ impl UnifiedPoller {
                 // video_idからlive_chat_idを取得
                 let client = super::client::YouTubeClient::new(api_key.clone());
                 let live_chat_id = client.get_live_chat_id(&video_id).await?;
-                self.start_grpc(live_chat_id, api_key, app_handle).await
+                self.start_grpc(live_chat_id, api_key, app_handle, db_pool, server_state).await
             }
         }
     }
@@ -295,6 +341,8 @@ async fn run_innertube_loop(
     video_id: String,
     running: Arc<AtomicBool>,
     app_handle: AppHandle,
+    db_pool: SqlitePool,
+    server_state: Arc<RwLock<WebSocketState>>,
 ) -> Result<(), YouTubeError> {
     use super::innertube::parse_chat_response;
 
@@ -344,8 +392,19 @@ async fn run_innertube_loop(
                 }
 
                 if !new_messages.is_empty() {
+                    // フロントエンドへのイベント発火
                     let _ = app_handle.emit("chat-messages", &new_messages);
                     log::debug!("InnerTube: {} new messages", new_messages.len());
+
+                    // WS/DB連携
+                    // DBに保存
+                    save_comments_to_db(&db_pool, &new_messages).await;
+
+                    // WebSocketでブロードキャスト
+                    let state_lock = server_state.read().await;
+                    for msg in &new_messages {
+                        state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone() }).await;
+                    }
                 }
 
                 // 次のポーリングまで待機

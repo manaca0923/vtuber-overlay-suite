@@ -11,10 +11,10 @@ export interface Song {
 
 export interface CreateSongInput {
   title: string;
-  artist?: string;
-  category?: string;
-  tags?: string[];
-  duration_seconds?: number;
+  artist?: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+  duration_seconds?: number | null;
   [key: string]: unknown;
 }
 

@@ -220,10 +220,10 @@ impl MessageType {
     pub fn to_string(&self) -> String {
         match self {
             Self::Text => "text".to_string(),
-            Self::SuperChat { .. } => "superchat".to_string(),
-            Self::SuperSticker { .. } => "supersticker".to_string(),
+            Self::SuperChat { .. } => "superChat".to_string(),
+            Self::SuperSticker { .. } => "superSticker".to_string(),
             Self::Membership { .. } => "membership".to_string(),
-            Self::MembershipGift { .. } => "membership_gift".to_string(),
+            Self::MembershipGift { .. } => "membershipGift".to_string(),
         }
     }
 
@@ -286,27 +286,30 @@ export interface Song {
   title: string;
   artist: string | null;
   category: string | null;
-  tags: string[];
+  tags: string | null;  // JSON array from Rust (要パース)
   durationSeconds: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
+// Song.tags の型変換について:
+// - DB: TEXT (JSON array string)
+// - Rust → Frontend (Song): string | null (JSONシリアライズ済み)
+// - Frontend → Rust (CreateSongInput): string[] | null (配列)
+// - Rustがserde_json::to_string()でJSON化してDB保存
+// - Frontendは parseTags() 関数でパース
+
 export interface CreateSongInput {
   title: string;
-  artist?: string;
-  category?: string;
-  tags?: string[];
-  durationSeconds?: number;
-}
-
-export interface UpdateSongInput {
-  id: string;
-  title?: string;
   artist?: string | null;
   category?: string | null;
-  tags?: string[];
-  durationSeconds?: number | null;
+  tags?: string[] | null;  // 配列で渡す。Rust側でJSON文字列に変換
+  duration_seconds?: number | null;  // snake_case (Tauriコマンド引数名)
+  [key: string]: unknown;
+}
+
+export interface UpdateSongInput extends CreateSongInput {
+  id: string;
 }
 ```
 
@@ -371,8 +374,8 @@ export interface ChatMessage {
 
 export type MessageType =
   | { type: 'text' }
-  | { type: 'superchat'; amount: string; currency: string }
-  | { type: 'supersticker'; stickerId: string }
+  | { type: 'superChat'; amount: string; currency: string }
+  | { type: 'superSticker'; stickerId: string }
   | { type: 'membership'; level: string }
   | { type: 'membershipGift'; count: number };
 

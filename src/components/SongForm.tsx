@@ -59,12 +59,14 @@ export function SongForm({ song, onClose }: SongFormProps) {
         (durationMinutes ? parseInt(durationMinutes, 10) * 60 : 0) +
         (durationSeconds ? parseInt(durationSeconds, 10) : 0);
 
+      // 空文字列はnullとして送信（フィールドをクリア可能にする）
+      // undefinedではなくnullを使用することで、バックエンドでNULLとして保存される
       const input = {
         title: title.trim(),
-        artist: artist.trim() || undefined,
-        category: category.trim() || undefined,
-        tags: tags.length > 0 ? tags : undefined,
-        duration_seconds: durationSecondsTotal > 0 ? durationSecondsTotal : undefined,
+        artist: artist.trim() || null,
+        category: category.trim() || null,
+        tags: tags.length > 0 ? tags : null,
+        duration_seconds: durationSecondsTotal > 0 ? durationSecondsTotal : null,
       };
 
       if (song) {

@@ -77,7 +77,10 @@ export function CommentControlPanel({
 }: CommentControlPanelProps) {
   const [isPolling, setIsPolling] = useState(false);
   const [pollingState, setPollingState] = useState<PollingState | null>(null);
-  const [savedState, setSavedState] = useState<SavedPollingState | null>(null);
+  // NOTE: savedState は「続きから開始」ボタン用（現在統合ポーラー未サポートのためUI非表示）
+  // 将来的に保存状態復元機能を実装する際に復活させる
+  // TODO: 統合ポーラーで保存状態復元をサポートしたら [savedState, setSavedState] に変更
+  const [, setSavedState] = useState<SavedPollingState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastEvent, setLastEvent] = useState<string>('');
@@ -611,7 +614,10 @@ export function CommentControlPanel({
         {lastEvent && <span className="text-sm text-gray-500">- {lastEvent}</span>}
       </div>
 
-      {/* 保存された状態がある場合の再開オプション（公式APIモードのみ） */}
+      {/* NOTE: 「続きから開始」ボタンは統合ポーラーでは非サポート
+          統合ポーラー（start_unified_polling）が保存状態復元をサポートするまで非表示。
+          将来的に保存状態復元機能を実装する場合はここを復活させる。
+          関連: docs/900_tasks.md - T16: 技術的負債「公式APIモードの保存状態再開機能」
       {savedState && !isPolling && apiMode === 'official' && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center justify-between">
@@ -638,6 +644,7 @@ export function CommentControlPanel({
           </div>
         </div>
       )}
+      */}
 
       {/* 制御ボタン */}
       <div className="flex gap-3 mb-4">

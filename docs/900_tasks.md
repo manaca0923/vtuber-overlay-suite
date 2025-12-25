@@ -827,6 +827,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### パフォーマンス
 
+- [ ] **コメントDB保存のバッチ処理最適化** (PR#53)
+  - 現在: コメントを1件ずつINSERT
+  - 問題: 高頻度チャットでI/O負荷が増加する可能性
+  - 対応: バッチINSERTまたはトランザクション内での複数INSERT
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現時点ではパフォーマンス問題は未発生）
+
 - [ ] **オーバーレイパフォーマンステスト** (PR#19)
   - MAX_COMMENTSを10→30に増加済み
   - OBSブラウザソースでの長時間使用テスト
@@ -1032,6 +1039,31 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [ ] 再接続テスト（ネットワーク断）（手動テスト）
 - [x] `docs/200_youtube-api.md` 更新 ✅ 2025-12-23
 
+### PRレビュー対応（2025-12-25）
+
+- [x] **統合ポーラーにWS/DB連携を追加** (PR#52レビュー)
+  - 統合ポーラー（InnerTube/gRPC両方）からのコメントがWebSocketブロードキャストとSQLite保存されるよう修正
+  - `unified_poller.rs`に`server_state`と`db_pool`パラメータを追加
+  - `grpc/poller.rs`にDB保存処理を追加
+
+- [x] **「続きから開始」ボタンの非表示化** (PR#52レビュー)
+  - 統合ポーラーが保存状態復元をサポートするまでUIを非表示
+  - `CommentControlPanel.tsx`でボタンセクションをコメントアウト
+
+- [x] **楽曲編集でフィールドをクリア可能に** (PR#52レビュー)
+  - `setlist.rs`のCOALESCEを削除し、オプショナルフィールドのクリアを許可
+  - `SongForm.tsx`で空文字列を`null`として送信
+  - `song.ts`の型定義を`null`許容に更新
+
+- [x] **ドキュメント整合性修正** (PR#52レビュー)
+  - `docs/400_data-models.md`: MessageType表記をcamelCaseに修正（superChat, superSticker）
+  - `docs/400_data-models.md`: Song.tags型を`string | null`に修正
+  - `docs/200_youtube-api.md`: gRPC優先・InnerTubeバックアップ方針に更新
+
+- [x] **console.log整理（comment.html）** (PR#52レビュー)
+  - 本番オーバーレイ用にデバッグログを削除
+  - エラーハンドリングはコメントで説明
+
 ### 技術的負債（次イテレーションで対応予定）
 
 以下はPR#40レビューで指摘された改善項目。機能実装完了後に対応予定。
@@ -1173,6 +1205,32 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] コンポーネントID一意性チェック（TypeScript/Rust両方）
 - [x] clampOffsetX/clampOffsetYに整数丸め処理追加
 - [x] DEFAULT_TEMPLATEの空components配列についてコメント追加
+
+### PR#53 追加レビュー対応（2025-12-25）
+- [x] 中: comment_logs保存形式の統一（db.rsを旧形式に統一）
+  - message_type=短い文字列、message_data=詳細JSON、published_at=RFC3339
+  - youtube.rsの重複関数を削除し、db.rsの共通関数を使用
+- [x] 中: published_at保存形式の統一（RFC3339）
+- [x] 中: 統合ポーラー開始時に旧ポーラーを停止（二重ポーリング防止）
+- [x] 低: _savedStateのlint警告対応（[, setSavedState]に変更）
+- [x] 低: MessageType文字列表記をcamelCaseに統一（docs/400_data-models.md）
+- [x] 低: InnerTubeドキュメント整合性修正（非対象→バックアップとして実装済み）
+
+### PR#53 追加レビュー対応②（2025-12-26）
+- [x] 中: start_polling_innertubeに統合ポーラー停止処理を追加
+  - 旧経路（InnerTube単体）起動時にも統合ポーラーを停止するよう修正
+  - 相互排他の双方向化完了
+- [x] 低: gRPC優先/InnerTubeバックアップのドキュメント統一
+  - 001_requirements.md: gRPC Streaming優先、InnerTube=バックアップに更新
+  - 100_architecture.md: 技術スタック表とシステム構成図を更新
+
+### PR#53 追加レビュー対応③（2025-12-26）
+- [x] 中: start_polling（旧Official/REST）にも統合ポーラー停止処理を追加
+  - 3経路すべて（統合/InnerTube/Official）で相互排他が完成
+- [x] 低: 001_requirements.md制約・前提セクションをgRPC優先に統一
+  - line 75「InnerTube優先」→「gRPC優先」に修正
+- [x] 低: 100_architecture.mdシステム構成図をgRPC優先に統一
+  - line 49「YouTube InnerTube」→「YouTube API(gRPC)」に修正
 
 ---
 

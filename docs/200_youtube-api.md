@@ -2,18 +2,19 @@
 
 ## 概要
 
-本アプリは**InnerTube API（非公式）**を優先使用し、**YouTube Data API v3（公式）**はデバッグモードで利用可能。
+本アプリは**gRPCストリーミング（公式API）**を優先使用し、**InnerTube API（非公式）**はバックアップとして利用可能。
 
-| API | 用途 | 認証 | クォータ制限 |
-|-----|------|------|-------------|
-| InnerTube API | **メイン機能** | 不要 | なし |
-| YouTube Data API v3 | デバッグ・フォールバック | APIキー(BYOK) | 10,000 units/日 |
+| API | 用途 | 認証 | クォータ制限 | 推奨 |
+|-----|------|------|-------------|------|
+| gRPC Streaming (公式) | **メイン機能** | APIキー | あり（低消費） | ✅ |
+| InnerTube API (非公式) | バックアップ・認証不要時 | 不要 | なし | - |
+| YouTube Data API v3 ポーリング | 互換モード | APIキー(BYOK) | あり（高消費） | - |
 
-> **注意**: InnerTubeは非公式APIのため、YouTube側の仕様変更で動作しなくなる可能性があります。
+> **推奨理由**: gRPCは公式APIであり安定性が高く、ストリーミング方式のためクォータ消費も低い。InnerTubeは非公式APIのため仕様変更リスクがあり、バックアップとして位置付ける。
 
 ---
 
-## InnerTube API（メイン）
+## InnerTube API（バックアップ）
 
 ### 特徴
 - **認証不要**: APIキーなしで動作
@@ -194,9 +195,9 @@ pub async fn get_initial_continuation(video_id: &str) -> Result<String> {
 
 ---
 
-## YouTube Data API v3（デバッグモード）
+## YouTube Data API v3（ポーリングモード）
 
-> **Note**: このAPIは開発時のデバッグ・検証用です。本番環境ではInnerTube APIを使用します。
+> **Note**: このAPIはgRPCストリーミングが利用できない環境向けの互換モードです。クォータ消費が高いため、可能な限りgRPCモードを使用してください。
 
 ### BYOK（Bring Your Own Key）
 
@@ -474,9 +475,14 @@ impl CommandParser {
 
 | モード | 説明 | 認証 | クォータ | 推奨 |
 |--------|------|------|----------|------|
-| `innertube` | 非公式API | 不要 | なし | - |
 | `grpc` | 公式API gRPCストリーミング | APIキー | あり（低消費） | ✅ |
-| `official` | 公式API ポーリング | APIキー | あり（高消費） | - |
+| `innertube` | 非公式API（バックアップ） | 不要 | なし | - |
+| `official` | 公式API ポーリング（互換） | APIキー | あり（高消費） | - |
+
+**モード選択ガイド**:
+- **gRPC（推奨）**: 公式APIで安定性が高く、ストリーミング方式によりクォータ消費が低い
+- **InnerTube**: APIキーなしで動作するため認証設定不要だが、非公式のため仕様変更リスクあり
+- **Official**: gRPCが利用できない環境向けの互換モード。クォータ消費が高い
 
 ### Tauriコマンド
 

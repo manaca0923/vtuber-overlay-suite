@@ -1206,6 +1206,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] clampOffsetX/clampOffsetYに整数丸め処理追加
 - [x] DEFAULT_TEMPLATEの空components配列についてコメント追加
 
+### PR#53 追加レビュー対応（2025-12-25）
+- [x] 中: comment_logs保存形式の統一（db.rsを旧形式に統一）
+  - message_type=短い文字列、message_data=詳細JSON、published_at=RFC3339
+  - youtube.rsの重複関数を削除し、db.rsの共通関数を使用
+- [x] 中: published_at保存形式の統一（RFC3339）
+- [x] 中: 統合ポーラー開始時に旧ポーラーを停止（二重ポーリング防止）
+- [x] 低: _savedStateのlint警告対応（[, setSavedState]に変更）
+- [x] 低: MessageType文字列表記をcamelCaseに統一（docs/400_data-models.md）
+- [x] 低: InnerTubeドキュメント整合性修正（非対象→バックアップとして実装済み）
+
 ---
 
 ## T23: 新コンポーネント追加

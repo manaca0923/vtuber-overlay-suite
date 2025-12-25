@@ -220,10 +220,10 @@ impl MessageType {
     pub fn to_string(&self) -> String {
         match self {
             Self::Text => "text".to_string(),
-            Self::SuperChat { .. } => "superchat".to_string(),
-            Self::SuperSticker { .. } => "supersticker".to_string(),
+            Self::SuperChat { .. } => "superChat".to_string(),
+            Self::SuperSticker { .. } => "superSticker".to_string(),
             Self::Membership { .. } => "membership".to_string(),
-            Self::MembershipGift { .. } => "membership_gift".to_string(),
+            Self::MembershipGift { .. } => "membershipGift".to_string(),
         }
     }
 

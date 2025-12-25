@@ -79,7 +79,8 @@ export function CommentControlPanel({
   const [pollingState, setPollingState] = useState<PollingState | null>(null);
   // NOTE: savedState は「続きから開始」ボタン用（現在統合ポーラー未サポートのためUI非表示）
   // 将来的に保存状態復元機能を実装する際に復活させる
-  const [_savedState, setSavedState] = useState<SavedPollingState | null>(null);
+  // TODO: 統合ポーラーで保存状態復元をサポートしたら [savedState, setSavedState] に変更
+  const [, setSavedState] = useState<SavedPollingState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastEvent, setLastEvent] = useState<string>('');

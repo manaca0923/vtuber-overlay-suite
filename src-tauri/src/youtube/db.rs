@@ -1,42 +1,56 @@
 //! YouTube関連のDB操作を共通化したモジュール
 
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
-use super::types::ChatMessage;
+use super::types::{ChatMessage, MessageType};
 
 /// コメントをDBに保存
 ///
 /// INSERT OR IGNOREで重複を無視し、既存レコードはスキップする
 /// youtube_idのUNIQUE制約により重複コメントは自動的にスキップされる
+///
+/// ## 保存形式
+/// - `message_type`: 短い文字列 ("text", "superChat", "superSticker", "membership", "membershipGift")
+/// - `message_data`: MessageTypeの詳細データをJSON（TextはNULL）
+/// - `published_at`: RFC3339形式の文字列
 pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
     for msg in messages {
-        let id = Uuid::new_v4().to_string();
-        let is_owner = if msg.is_owner { 1 } else { 0 };
-        let is_moderator = if msg.is_moderator { 1 } else { 0 };
-        let is_member = if msg.is_member { 1 } else { 0 };
+        // MessageTypeを短い文字列に変換
+        let message_type = match &msg.message_type {
+            MessageType::Text => "text",
+            MessageType::SuperChat { .. } => "superChat",
+            MessageType::SuperSticker { .. } => "superSticker",
+            MessageType::Membership { .. } => "membership",
+            MessageType::MembershipGift { .. } => "membershipGift",
+        };
 
-        // message_typeをJSON文字列に変換
-        let message_type_str = serde_json::to_string(&msg.message_type)
-            .unwrap_or_else(|_| r#"{"type":"text"}"#.to_string());
+        // MessageTypeの詳細データをJSONに変換（Textの場合はNULL）
+        let message_data = match &msg.message_type {
+            MessageType::Text => None,
+            other => serde_json::to_string(other).ok(),
+        };
 
-        let result = sqlx::query!(
+        // published_atをRFC3339形式に変換
+        let published_at_str = msg.published_at.to_rfc3339();
+
+        let result = sqlx::query(
             r#"INSERT OR IGNORE INTO comment_logs
             (id, youtube_id, message, author_name, author_channel_id, author_image_url,
-             is_owner, is_moderator, is_member, message_type, published_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            id,
-            msg.id,
-            msg.message,
-            msg.author_name,
-            msg.author_channel_id,
-            msg.author_image_url,
-            is_owner,
-            is_moderator,
-            is_member,
-            message_type_str,
-            msg.published_at
+             is_owner, is_moderator, is_member, message_type, message_data, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
+        .bind(&msg.id)           // id (youtube_idと同じ値を使用)
+        .bind(&msg.id)           // youtube_id
+        .bind(&msg.message)
+        .bind(&msg.author_name)
+        .bind(&msg.author_channel_id)
+        .bind(&msg.author_image_url)
+        .bind(msg.is_owner)
+        .bind(msg.is_moderator)
+        .bind(msg.is_member)
+        .bind(message_type)
+        .bind(&message_data)
+        .bind(&published_at_str)
         .execute(pool)
         .await;
 

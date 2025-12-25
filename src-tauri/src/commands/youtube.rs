@@ -1,66 +1,19 @@
 use crate::youtube::{
     api_key_manager::get_api_key_manager,
-    client::YouTubeClient, innertube, poller::ChatPoller, poller::PollingEvent, state::PollingState,
+    client::YouTubeClient,
+    db::save_comments_to_db,
+    innertube,
+    poller::ChatPoller,
+    poller::PollingEvent,
+    state::PollingState,
     types::ChatMessage,
 };
 use crate::{server::types::WsMessage, AppState};
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 /// ポーラー停止後のグレースフルシャットダウン待機時間（ミリ秒）
 const POLLER_GRACEFUL_SHUTDOWN_MS: u64 = 200;
-
-/// コメントをDBに保存する（重複は無視）
-async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
-    for msg in messages {
-        // MessageTypeをJSON文字列に変換
-        let message_type = match &msg.message_type {
-            crate::youtube::types::MessageType::Text => "text".to_string(),
-            crate::youtube::types::MessageType::SuperChat { .. } => "superChat".to_string(),
-            crate::youtube::types::MessageType::SuperSticker { .. } => "superSticker".to_string(),
-            crate::youtube::types::MessageType::Membership { .. } => "membership".to_string(),
-            crate::youtube::types::MessageType::MembershipGift { .. } => "membershipGift".to_string(),
-        };
-
-        // MessageTypeの詳細データをJSONに変換
-        let message_data = match &msg.message_type {
-            crate::youtube::types::MessageType::Text => None,
-            other => serde_json::to_string(other).ok(),
-        };
-
-        // published_atをRFC3339形式に変換
-        let published_at_str = msg.published_at.to_rfc3339();
-
-        let result = sqlx::query(
-            r#"
-            INSERT OR IGNORE INTO comment_logs (
-                id, youtube_id, message, author_name, author_channel_id,
-                author_image_url, is_owner, is_moderator, is_member,
-                message_type, message_data, published_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&msg.id)
-        .bind(&msg.id) // youtube_idとidは同じ
-        .bind(&msg.message)
-        .bind(&msg.author_name)
-        .bind(&msg.author_channel_id)
-        .bind(&msg.author_image_url)
-        .bind(msg.is_owner)
-        .bind(msg.is_moderator)
-        .bind(msg.is_member)
-        .bind(&message_type)
-        .bind(&message_data)
-        .bind(&published_at_str)
-        .execute(pool)
-        .await;
-
-        if let Err(e) = result {
-            log::warn!("Failed to save comment to DB: {}", e);
-        }
-    }
-}
 
 #[tauri::command]
 pub async fn validate_api_key(api_key: String) -> Result<bool, String> {
@@ -1088,6 +1041,25 @@ pub async fn start_unified_polling(
         video_id,
         use_bundled_key
     );
+
+    // 旧ポーラーを停止（二重ポーリング防止）
+    // 1. 公式APIポーラー（ChatPoller）を停止
+    if let Ok(poller_lock) = state.poller.lock() {
+        if let Some(poller) = poller_lock.as_ref() {
+            poller.stop();
+            log::info!("Stopped legacy Official API poller before starting unified polling");
+        }
+    }
+
+    // 2. InnerTubeポーラーを停止
+    get_innertube_running().store(false, Ordering::SeqCst);
+    {
+        let mut handle_lock = get_innertube_handle().lock().await;
+        if let Some(handle) = handle_lock.take() {
+            handle.abort();
+            log::info!("Stopped legacy InnerTube poller before starting unified polling");
+        }
+    }
 
     let poller = get_unified_poller().lock().await;
 

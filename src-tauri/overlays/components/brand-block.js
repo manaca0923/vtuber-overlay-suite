@@ -42,6 +42,18 @@ class BrandBlock extends BaseComponent {
           objectFit: 'contain',
         },
       });
+      // 画像読み込みエラー時のフォールバック
+      this.logoEl.onerror = () => {
+        this.logoEl.style.display = 'none';
+        // フォールバックテキストがあれば表示
+        if (this.text && !this.textEl) {
+          this.textEl = this.createElement('div', {
+            className: 'brand-text dt-text-shadow',
+            textContent: this.text,
+          });
+          container.appendChild(this.textEl);
+        }
+      };
       container.appendChild(this.logoEl);
     } else if (this.text) {
       this.textEl = this.createElement('div', {
@@ -62,6 +74,7 @@ class BrandBlock extends BaseComponent {
       } else if (data.logoUrl) {
         // テキストからロゴへの切り替え
         this.element.innerHTML = '';
+        this.textEl = null;
         this.logoEl = this.createElement('img', {
           className: 'brand-logo',
           attrs: {
@@ -74,6 +87,17 @@ class BrandBlock extends BaseComponent {
             objectFit: 'contain',
           },
         });
+        // 画像読み込みエラー時のフォールバック
+        this.logoEl.onerror = () => {
+          this.logoEl.style.display = 'none';
+          if (this.text && !this.textEl) {
+            this.textEl = this.createElement('div', {
+              className: 'brand-text dt-text-shadow',
+              textContent: this.text,
+            });
+            this.element.appendChild(this.textEl);
+          }
+        };
         this.element.appendChild(this.logoEl);
       }
     }

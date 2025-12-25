@@ -106,9 +106,9 @@
   <script src="shared/slots.js"></script>
   <script src="shared/comment-renderer.js?v=2"></script>
 
-  <!-- コンポーネントシステム -->
-  <script src="shared/component-registry.js"></script>
+  <!-- コンポーネントシステム（base-component.jsは他のコンポーネントが継承するため先に読み込む） -->
   <script src="components/base-component.js"></script>
+  <script src="shared/component-registry.js"></script>
 
   <!-- コンポーネント -->
   <script src="components/clock-widget.js"></script>

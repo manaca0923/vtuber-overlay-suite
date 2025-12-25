@@ -22,11 +22,14 @@ class PromoPanel extends BaseComponent {
     this.items = this.style.items || [];
 
     // サイクル設定（クランプ適用）
+    // cycleSec: 将来的にサイクル間の休憩時間として使用予定（現在未使用）
     this.cycleSec = this.clamp(this.rules.cycleSec || 30, 10, 120);
+    // showSec: 各アイテムの表示間隔
     this.showSec = this.clamp(this.rules.showSec || 6, 3, 15);
 
     this.currentIndex = 0;
     this.cycleTimerId = null;
+    this.showTimeoutId = null;
   }
 
   render() {
@@ -95,7 +98,12 @@ class PromoPanel extends BaseComponent {
     // フェードアウト
     this.contentEl.style.opacity = '0';
 
-    setTimeout(() => {
+    // 既存のタイムアウトをクリア
+    if (this.showTimeoutId) {
+      clearTimeout(this.showTimeoutId);
+    }
+
+    this.showTimeoutId = setTimeout(() => {
       // コンテンツ更新
       this.contentEl.innerHTML = '';
 
@@ -141,6 +149,10 @@ class PromoPanel extends BaseComponent {
     if (this.cycleTimerId) {
       this.clearInterval(this.cycleTimerId);
       this.cycleTimerId = null;
+    }
+    if (this.showTimeoutId) {
+      clearTimeout(this.showTimeoutId);
+      this.showTimeoutId = null;
     }
     super.destroy();
   }

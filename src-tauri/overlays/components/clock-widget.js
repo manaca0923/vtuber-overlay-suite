@@ -74,7 +74,9 @@ class ClockWidget extends BaseComponent {
     }
     if (data.showDate !== undefined) {
       this.showDate = data.showDate;
-      this.dateEl.style.display = data.showDate ? '' : 'none';
+      if (this.dateEl) {
+        this.dateEl.style.display = data.showDate ? '' : 'none';
+      }
     }
   }
 }

@@ -17,10 +17,35 @@
 class BrandBlock extends BaseComponent {
   constructor(config) {
     super(config);
-    this.logoUrl = this.style.logoUrl || '';
+    this.logoUrl = this.validateUrl(this.style.logoUrl) || '';
     this.text = this.style.text || '';
     this.maxHeight = this.style.maxHeight || 60;
     this.opacity = this.style.opacity ?? 1;
+  }
+
+  /**
+   * URLが安全なスキームか検証
+   * @param {string} url
+   * @returns {string} 安全なURLまたは空文字列
+   */
+  validateUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    try {
+      const parsed = new URL(url, window.location.href);
+      // http, https, data スキームのみ許可
+      if (['http:', 'https:', 'data:'].includes(parsed.protocol)) {
+        return url;
+      }
+      console.warn('BrandBlock: 無効なURLスキーム:', parsed.protocol);
+      return '';
+    } catch (e) {
+      // 相対パスの場合は許可
+      if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+        return url;
+      }
+      console.warn('BrandBlock: 無効なURL:', url);
+      return '';
+    }
   }
 
   render() {
@@ -68,17 +93,18 @@ class BrandBlock extends BaseComponent {
 
   update(data) {
     if (data.logoUrl !== undefined) {
-      this.logoUrl = data.logoUrl;
+      const validatedUrl = this.validateUrl(data.logoUrl);
+      this.logoUrl = validatedUrl;
       if (this.logoEl) {
-        this.logoEl.src = data.logoUrl;
-      } else if (data.logoUrl) {
+        this.logoEl.src = validatedUrl;
+      } else if (validatedUrl) {
         // テキストからロゴへの切り替え
         this.element.innerHTML = '';
         this.textEl = null;
         this.logoEl = this.createElement('img', {
           className: 'brand-logo',
           attrs: {
-            src: data.logoUrl,
+            src: validatedUrl,
             alt: 'Logo',
           },
           style: {

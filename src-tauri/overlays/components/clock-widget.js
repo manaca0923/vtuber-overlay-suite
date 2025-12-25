@@ -46,10 +46,11 @@ class ClockWidget extends BaseComponent {
   updateTime() {
     const now = new Date();
 
-    // 時刻フォーマット
+    // 時刻フォーマット（hour12: falseで24時間表示を保証）
     const timeOptions = {
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     };
     if (this.showSeconds) {
       timeOptions.second = '2-digit';

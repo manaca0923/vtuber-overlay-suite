@@ -85,9 +85,9 @@ class QueueList extends BaseComponent {
         li.setAttribute('data-id', item.id);
       }
 
-      // テキスト構築
+      // テキスト構築（textContentはHTMLを解釈しないため、escapeHtmlは不要）
       const text = this.showNumber ? `${idx + 1}. ${item.text || item}` : item.text || item;
-      li.textContent = this.escapeHtml(text);
+      li.textContent = text;
 
       this.listEl.appendChild(li);
     });

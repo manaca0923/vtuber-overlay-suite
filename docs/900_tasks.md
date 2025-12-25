@@ -705,6 +705,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `SetlistPosition`: Top, Bottom, Left, Right
   - TypeScript側の型定義と一致（serde rename_allで変換）
 
+- [ ] **オーバーレイ共通ロジックの抽出** (PR#49)
+  - `combined.html`と`combined-v2.html`でJavaScriptロジックが重複（約300行）
+  - 将来的に`shared/overlay-core.js`への抽出を検討
+  - 対象ロジック:
+    - WebSocket接続管理
+    - 設定適用ロジック
+    - セットリスト更新処理
+
 ### 機能改善（中優先度）
 
 - [x] **スーパーチャット金額別色分け** (PR#7, PR#28で対応済み)

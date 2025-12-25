@@ -17,6 +17,11 @@ pub fn validate_template(mut template: Template) -> Result<Template, String> {
         return Err("有効なコンポーネントでslotが重複しています".to_string());
     }
 
+    // コンポーネントID重複チェック
+    if template.has_id_duplicates() {
+        return Err("コンポーネントIDが重複しています".to_string());
+    }
+
     // コンポーネントが少なくとも1つあるかチェック
     if template.components.is_empty() {
         return Err("コンポーネントが1つも定義されていません".to_string());
@@ -170,6 +175,66 @@ mod tests {
         let result = validate_template(template);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("slotが重複"));
+    }
+
+    #[test]
+    fn test_validate_template_rejects_id_duplicates() {
+        let template = Template {
+            layout: TemplateLayout::default(),
+            safe_area_pct: TemplateSafeArea::default(),
+            theme: None,
+            components: vec![
+                TemplateComponent {
+                    id: "same-id".to_string(), // duplicate ID!
+                    component_type: ComponentType::ChatLog,
+                    slot: SlotId::LeftMiddle,
+                    enabled: true,
+                    style: None,
+                    rules: None,
+                    tuning: None,
+                },
+                TemplateComponent {
+                    id: "same-id".to_string(), // duplicate ID!
+                    component_type: ComponentType::SetList,
+                    slot: SlotId::RightUpper,
+                    enabled: true,
+                    style: None,
+                    rules: None,
+                    tuning: None,
+                },
+            ],
+        };
+
+        let result = validate_template(template);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("コンポーネントIDが重複"));
+    }
+
+    #[test]
+    fn test_validate_template_forces_layout_type() {
+        let template = Template {
+            layout: TemplateLayout {
+                layout_type: "invalid".to_string(), // should be forced to threeColumn
+                left_pct: 0.22,
+                center_pct: 0.56,
+                right_pct: 0.22,
+                gutter_px: 24,
+            },
+            safe_area_pct: TemplateSafeArea::default(),
+            theme: None,
+            components: vec![TemplateComponent {
+                id: "test".to_string(),
+                component_type: ComponentType::ChatLog,
+                slot: SlotId::LeftMiddle,
+                enabled: true,
+                style: None,
+                rules: None,
+                tuning: None,
+            }],
+        };
+
+        let result = validate_template(template).unwrap();
+        assert_eq!(result.layout.layout_type, "threeColumn");
     }
 
     #[test]

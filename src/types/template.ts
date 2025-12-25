@@ -207,14 +207,104 @@ export function clampSafeArea(value: number): number {
   return clamp(value, CLAMP_RANGES.safeArea.min, CLAMP_RANGES.safeArea.max);
 }
 
+// ===== クランプ関数（theme.panel） =====
+
+export function clampBlurPx(value: number): number {
+  return clamp(Math.round(value), CLAMP_RANGES.blurPx.min, CLAMP_RANGES.blurPx.max);
+}
+
+export function clampRadiusPx(value: number): number {
+  return clamp(Math.round(value), CLAMP_RANGES.radiusPx.min, CLAMP_RANGES.radiusPx.max);
+}
+
+// ===== クランプ関数（theme.shadow） =====
+
+export function clampShadowBlur(value: number): number {
+  return clamp(Math.round(value), CLAMP_RANGES.shadowBlur.min, CLAMP_RANGES.shadowBlur.max);
+}
+
+export function clampShadowOpacity(value: number): number {
+  return clamp(value, CLAMP_RANGES.shadowOpacity.min, CLAMP_RANGES.shadowOpacity.max);
+}
+
+export function clampShadowOffset(value: number): number {
+  return clamp(Math.round(value), CLAMP_RANGES.shadowOffset.min, CLAMP_RANGES.shadowOffset.max);
+}
+
+// ===== クランプ関数（theme.outline） =====
+
+export function clampOutlineWidth(value: number): number {
+  return clamp(Math.round(value), CLAMP_RANGES.outlineWidth.min, CLAMP_RANGES.outlineWidth.max);
+}
+
 // ===== バリデーション =====
+
+/**
+ * themeをクランプ
+ */
+function clampTheme(theme: TemplateTheme | undefined): TemplateTheme | undefined {
+  if (!theme) return undefined;
+
+  const clamped: TemplateTheme = {
+    fontFamily: theme.fontFamily,
+    textColor: theme.textColor,
+  };
+
+  // panel クランプ
+  if (theme.panel) {
+    clamped.panel = {
+      bg: theme.panel.bg,
+    };
+    if (theme.panel.blurPx !== undefined) {
+      clamped.panel.blurPx = clampBlurPx(theme.panel.blurPx);
+    }
+    if (theme.panel.radiusPx !== undefined) {
+      clamped.panel.radiusPx = clampRadiusPx(theme.panel.radiusPx);
+    }
+  }
+
+  // shadow クランプ
+  if (theme.shadow) {
+    clamped.shadow = {
+      enabled: theme.shadow.enabled,
+    };
+    if (theme.shadow.blur !== undefined) {
+      clamped.shadow.blur = clampShadowBlur(theme.shadow.blur);
+    }
+    if (theme.shadow.opacity !== undefined) {
+      clamped.shadow.opacity = clampShadowOpacity(theme.shadow.opacity);
+    }
+    if (theme.shadow.offsetX !== undefined) {
+      clamped.shadow.offsetX = clampShadowOffset(theme.shadow.offsetX);
+    }
+    if (theme.shadow.offsetY !== undefined) {
+      clamped.shadow.offsetY = clampShadowOffset(theme.shadow.offsetY);
+    }
+  }
+
+  // outline クランプ
+  if (theme.outline) {
+    clamped.outline = {
+      enabled: theme.outline.enabled,
+      color: theme.outline.color,
+    };
+    if (theme.outline.width !== undefined) {
+      clamped.outline.width = clampOutlineWidth(theme.outline.width);
+    }
+  }
+
+  return clamped;
+}
 
 /**
  * テンプレートをバリデーション＆クランプ
  * 不正な値はクランプして適用
+ *
+ * 注: フロントエンドでの簡易バリデーション用。
+ * 本番ではRust側のvalidate_templateコマンドを使用することを推奨。
  */
 export function validateAndClampTemplate(template: Template): Template {
-  // layout クランプ
+  // layout クランプ（typeは'threeColumn'に強制）
   const layout: TemplateLayout = {
     type: 'threeColumn',
     leftPct: clampLeftPct(template.layout.leftPct),
@@ -230,6 +320,9 @@ export function validateAndClampTemplate(template: Template): Template {
     bottom: clampSafeArea(template.safeAreaPct.bottom),
     left: clampSafeArea(template.safeAreaPct.left),
   };
+
+  // theme クランプ
+  const theme = clampTheme(template.theme);
 
   // components クランプ
   const components = template.components.map((comp) => {
@@ -275,7 +368,7 @@ export function validateAndClampTemplate(template: Template): Template {
   return {
     layout,
     safeAreaPct,
-    theme: template.theme,
+    theme,
     components,
   };
 }
@@ -289,6 +382,7 @@ export function isValidComponentSlot(comp: TemplateComponent): boolean {
 
 /**
  * テンプレート内でslotの重複がないかチェック
+ * （enabled=trueのコンポーネントのみ対象）
  */
 export function hasSlotDuplicates(components: TemplateComponent[]): boolean {
   const usedSlots = new Set<SlotId>();
@@ -303,8 +397,30 @@ export function hasSlotDuplicates(components: TemplateComponent[]): boolean {
   return false;
 }
 
+/**
+ * テンプレート内でコンポーネントIDの重複がないかチェック
+ */
+export function hasIdDuplicates(components: TemplateComponent[]): boolean {
+  const usedIds = new Set<string>();
+  for (const comp of components) {
+    if (usedIds.has(comp.id)) {
+      return true;
+    }
+    usedIds.add(comp.id);
+  }
+  return false;
+}
+
 // ===== デフォルトテンプレート =====
 
+/**
+ * デフォルトテンプレート
+ *
+ * 注: componentsは空配列で初期化。
+ * これはJSON Schema（minItems: 1）に違反しますが、
+ * テンプレート作成UIの初期状態として使用するため意図的です。
+ * 実際のテンプレート保存時はcomponentsが追加されることを想定しています。
+ */
 export const DEFAULT_TEMPLATE: Template = {
   layout: {
     type: 'threeColumn',

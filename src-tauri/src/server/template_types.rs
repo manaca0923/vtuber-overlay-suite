@@ -228,6 +228,12 @@ pub struct Template {
     pub components: Vec<TemplateComponent>,
 }
 
+/// デフォルトテンプレート
+///
+/// 注: componentsは空のVecで初期化。
+/// これはJSON Schema（minItems: 1）に違反しますが、
+/// テンプレート作成UIの初期状態として使用するため意図的です。
+/// 実際のテンプレート保存時はcomponentsが追加されることを想定しています。
 impl Default for Template {
     fn default() -> Self {
         Self {
@@ -330,6 +336,9 @@ impl Template {
     /// テンプレートをバリデーション＆クランプ
     /// 不正な値はクランプして適用
     pub fn validate_and_clamp(&mut self) {
+        // layout_typeを強制（現在はthreeColumnのみサポート）
+        self.layout.layout_type = "threeColumn".to_string();
+
         // layout クランプ
         self.layout.left_pct = clamp::left_pct(self.layout.left_pct);
         self.layout.center_pct = clamp::center_pct(self.layout.center_pct);
@@ -401,6 +410,7 @@ impl Template {
     }
 
     /// 有効なコンポーネントでslotの重複がないかチェック
+    /// （enabled=trueのコンポーネントのみ対象）
     pub fn has_slot_duplicates(&self) -> bool {
         use std::collections::HashSet;
         let mut used_slots = HashSet::new();
@@ -411,6 +421,19 @@ impl Template {
                 }
                 used_slots.insert(comp.slot);
             }
+        }
+        false
+    }
+
+    /// コンポーネントIDの重複がないかチェック
+    pub fn has_id_duplicates(&self) -> bool {
+        use std::collections::HashSet;
+        let mut used_ids = HashSet::new();
+        for comp in &self.components {
+            if used_ids.contains(&comp.id) {
+                return true;
+            }
+            used_ids.insert(&comp.id);
         }
         false
     }
@@ -568,5 +591,86 @@ mod tests {
         };
 
         assert!(!template.has_slot_duplicates());
+    }
+
+    #[test]
+    fn test_id_duplicates() {
+        let template = Template {
+            layout: TemplateLayout::default(),
+            safe_area_pct: TemplateSafeArea::default(),
+            theme: None,
+            components: vec![
+                TemplateComponent {
+                    id: "same-id".to_string(), // duplicate!
+                    component_type: ComponentType::ChatLog,
+                    slot: SlotId::LeftMiddle,
+                    enabled: true,
+                    style: None,
+                    rules: None,
+                    tuning: None,
+                },
+                TemplateComponent {
+                    id: "same-id".to_string(), // duplicate!
+                    component_type: ComponentType::SetList,
+                    slot: SlotId::RightUpper,
+                    enabled: true,
+                    style: None,
+                    rules: None,
+                    tuning: None,
+                },
+            ],
+        };
+
+        assert!(template.has_id_duplicates());
+    }
+
+    #[test]
+    fn test_no_id_duplicates() {
+        let template = Template {
+            layout: TemplateLayout::default(),
+            safe_area_pct: TemplateSafeArea::default(),
+            theme: None,
+            components: vec![
+                TemplateComponent {
+                    id: "comp1".to_string(),
+                    component_type: ComponentType::ChatLog,
+                    slot: SlotId::LeftMiddle,
+                    enabled: true,
+                    style: None,
+                    rules: None,
+                    tuning: None,
+                },
+                TemplateComponent {
+                    id: "comp2".to_string(),
+                    component_type: ComponentType::SetList,
+                    slot: SlotId::RightUpper,
+                    enabled: true,
+                    style: None,
+                    rules: None,
+                    tuning: None,
+                },
+            ],
+        };
+
+        assert!(!template.has_id_duplicates());
+    }
+
+    #[test]
+    fn test_layout_type_forced_to_three_column() {
+        let mut template = Template {
+            layout: TemplateLayout {
+                layout_type: "invalid".to_string(),
+                left_pct: 0.22,
+                center_pct: 0.56,
+                right_pct: 0.22,
+                gutter_px: 24,
+            },
+            safe_area_pct: TemplateSafeArea::default(),
+            theme: None,
+            components: Vec::new(),
+        };
+
+        template.validate_and_clamp();
+        assert_eq!(template.layout.layout_type, "threeColumn");
     }
 }

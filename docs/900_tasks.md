@@ -899,6 +899,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: Vitest/Jestなどでユニットテストを追加
   - 対象ファイル: `src/types/template.ts`
 
+- [ ] **UpdateBatcher/DensityManagerのユニットテスト** (PR#54)
+  - パフォーマンス最適化モジュールのテストカバレッジ追加
+  - テスト対象:
+    - バッチタイミング（150ms間隔でまとめられるか）
+    - 閾値判定のエッジケース（5回の更新でdensity:highが発火するか）
+    - 復元動作（density:normalで設定が戻るか）
+  - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
+  - 優先度: 低
+
 ### ドキュメント
 
 - [x] **README更新** (2025-12-22対応済み)

@@ -877,6 +877,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
   - 優先度: 低（現時点では配列サイズは最大で閾値程度に収まる）
 
+- [ ] **DensityManager閾値の設定可能化** (PR#54)
+  - 現在: `highDensityThreshold: 5`（2秒間に5回）がハードコード
+  - 問題: 低スペック環境では閾値を下げたい場合がある
+  - 対応: テンプレート設定またはURLパラメータで動的変更可能に
+  - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
+  - 優先度: 低
+
 - [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ

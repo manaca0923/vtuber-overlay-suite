@@ -98,6 +98,73 @@ ws.onopen = () => {
 }
 ```
 
+### 拡張メッセージ形式（3カラムレイアウト用）- 将来実装予定
+
+```typescript
+// テンプレート適用
+{
+  type: 'template:apply',
+  payload: {
+    templateId: string,
+    config: TemplateConfig  // 後述の型定義参照
+  }
+}
+
+// コンポーネント更新（個別）
+{
+  type: 'component:update',
+  payload: {
+    componentId: string,
+    data: {
+      // ClockWidget用
+      time?: string,
+      date?: string,
+      // WeatherWidget用
+      weather?: {
+        temp: number,
+        condition: string,
+        icon: string
+      },
+      // KPIBlock用
+      kpi?: {
+        primary: { value: number, label: string },
+        secondary?: { value: number, label: string }
+      },
+      // PromoPanel用
+      promo?: {
+        items: Array<{ text: string, url?: string }>,
+        currentIndex: number
+      },
+      // QueueList用
+      queue?: {
+        items: Array<{ id: string, name: string, message?: string }>,
+        totalCount: number
+      }
+    }
+  }
+}
+
+// slot可視性変更
+{
+  type: 'slot:visibility',
+  payload: {
+    slotId: SlotId,  // 後述の型定義参照
+    visible: boolean
+  }
+}
+
+// レイアウト動的変更
+{
+  type: 'layout:update',
+  payload: {
+    leftPct?: number,    // 0.18-0.28
+    centerPct?: number,  // 0.44-0.64
+    rightPct?: number,   // 0.18-0.28
+    gutterPx?: number    // 0-64
+  }
+}
+```
+
 ### 再接続ロジック
 
 ```javascript
@@ -312,7 +379,7 @@ class WebSocketManager {
 - コメントとセットリストの配置を連動させたい場合
 - レイアウトプリセットを活用したい場合
 
-### レイアウトプリセット
+### レイアウトプリセット（v1）
 
 | プリセット | 用途 | コメント位置 | セットリスト位置 |
 |-----------|------|-------------|-----------------|
@@ -322,7 +389,7 @@ class WebSocketManager {
 | `gaming` | ゲーム配信向け | top-left | right |
 | `custom` | カスタム | ユーザー指定 | ユーザー指定 |
 
-### HTML構造
+### HTML構造（v1）
 
 ```html
 <!DOCTYPE html>
@@ -350,7 +417,7 @@ class WebSocketManager {
 </html>
 ```
 
-### CSS Grid レイアウト
+### CSS Grid レイアウト（v1）
 
 ```css
 /* レイアウトプリセット: streaming */
@@ -385,6 +452,169 @@ class WebSocketManager {
   grid-template-areas: "comment main setlist";
 }
 ```
+
+---
+
+## 3カラムレイアウト（v2）- 将来実装予定
+
+> **ステータス**: 設計完了、実装予定
+>
+> v1のプリセットレイアウトに加えて、より柔軟な3カラム固定レイアウトを提供する。
+
+### 概要
+
+- **3カラム固定比率**: 左22% / 中央56% / 右22%
+- **セーフエリア**: 上4% / 右4% / 下5% / 左4%
+- **slot配置**: 11個の固定配置領域
+- **OBS推奨**: 1920×1080（16:9）
+
+### CSS変数（3カラム用）
+
+```css
+:root {
+  /* レイアウト */
+  --gutter: 24px;
+  --safe-top: 4vh;
+  --safe-right: 4vw;
+  --safe-bottom: 5vh;
+  --safe-left: 4vw;
+  --left-col: 22%;
+  --center-col: 56%;
+  --right-col: 22%;
+  --row-gap: 16px;
+
+  /* パネル */
+  --radius: 14px;
+  --panel-bg: rgba(0,0,0,0.25);
+  --panel-blur: 10px;
+}
+```
+
+### slot配置（11個）
+
+| slot | 役割 | 推奨高さ | 破綻防止ルール |
+|------|------|---------|---------------|
+| `left.top` | 時刻/日付 | auto | 2行固定 |
+| `left.topBelow` | 天気 | auto | 情報量最小 |
+| `left.middle` | コメント | 1fr | `maxLines`必須、fade/ellipsis |
+| `left.lower` | スパチャ | auto | 最小表示秒数＋キュー |
+| `left.bottom` | ロゴ/注意 | auto | 小さめ、透過 |
+| `center.full` | 主役ステージ | 1fr | 左右侵食禁止 |
+| `right.top` | ラベル | auto | 1行固定 |
+| `right.upper` | セトリ | 1fr | `maxItems`必須、ellipsis |
+| `right.lowerLeft` | KPI | auto | 更新頻度抑制（2〜5秒） |
+| `right.lowerRight` | 短冊 | auto〜中 | `maxItems`必須、空なら非表示 |
+| `right.bottom` | 告知 | auto | cycle表示 |
+
+### HTML構造（3カラム）
+
+```html
+<div class="layout-root">
+  <div class="col-left">
+    <section id="left.top"></section>
+    <section id="left.topBelow" class="panel"></section>
+    <section id="left.middle" class="clamp-box"></section>
+    <section id="left.lower"></section>
+    <section id="left.bottom"></section>
+  </div>
+
+  <div class="col-center">
+    <section id="center.full"></section>
+  </div>
+
+  <div class="col-right">
+    <section id="right.top"></section>
+    <section id="right.upper" class="clamp-box"></section>
+    <div class="right-lower-grid">
+      <section id="right.lowerLeft"></section>
+      <section id="right.lowerRight" class="clamp-box"></section>
+    </div>
+    <section id="right.bottom"></section>
+  </div>
+</div>
+```
+
+### CSS Grid（3カラム）
+
+```css
+.layout-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: var(--left-col) var(--center-col) var(--right-col);
+  column-gap: var(--gutter);
+}
+
+.col-left, .col-center, .col-right {
+  height: 100%;
+  display: grid;
+  row-gap: var(--row-gap);
+}
+
+.col-left {
+  grid-template-rows: auto auto 1fr auto auto;
+}
+
+.col-center {
+  grid-template-rows: 1fr;
+}
+
+.col-right {
+  grid-template-rows: auto 1fr auto auto;
+}
+
+.right-lower-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+  align-items: end;
+}
+
+.panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(var(--panel-blur));
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.clamp-box { overflow: hidden; }
+```
+
+### コンポーネント定義（11種類）
+
+| type | 説明 | 推奨slot |
+|------|------|---------|
+| `ClockWidget` | 時刻/日付表示 | left.top |
+| `WeatherWidget` | 天気情報 | left.topBelow |
+| `ChatLog` | コメント表示 | left.middle |
+| `SuperChatCard` | スパチャ表示 | left.lower |
+| `BrandBlock` | ロゴ/ブランド | left.bottom |
+| `MainAvatarStage` | 主役ステージ | center.full |
+| `ChannelBadge` | チャンネルバッジ | right.top |
+| `SetList` | セットリスト | right.upper |
+| `KPIBlock` | KPI数値表示 | right.lowerLeft |
+| `QueueList` | 待機キュー | right.lowerRight |
+| `PromoPanel` | 告知/プロモ | right.bottom |
+
+### 実装ルール
+
+#### 更新間引き（必須）
+- コメント高頻度時は100〜200ms単位でまとめて反映
+- requestAnimationFrameまたはバッチ反映
+
+#### 上限値の強制（必須）
+- ChatLog: `maxLines` 必須（推奨10 / 範囲 4〜14）
+- SetList: `maxItems` 必須（推奨14 / 範囲 6〜20）
+- QueueList: `maxItems` 必須（推奨6 / 範囲 3〜10）
+
+#### 右下過密対策（必須）
+- PromoPanel: `displayMode=cycle` デフォルト（cycleSec=30 / showSec=6）
+- QueueList: `showWhenNotEmpty=true` デフォルト
 
 ### URLパラメータ（統合オーバーレイ専用）
 

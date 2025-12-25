@@ -483,3 +483,255 @@ function formatTime(isoString: string): string {
 // 3:45 曲名1 / アーティスト1
 // 8:20 曲名2 / アーティスト2
 ```
+
+---
+
+## 3カラムレイアウト型定義（将来実装予定）
+
+> **ステータス**: 設計完了、実装予定
+
+### TypeScript 型定義
+
+```typescript
+// src/types/template.ts
+
+// slot識別子
+export type SlotId =
+  | 'left.top' | 'left.topBelow' | 'left.middle' | 'left.lower' | 'left.bottom'
+  | 'center.full'
+  | 'right.top' | 'right.upper' | 'right.lowerLeft' | 'right.lowerRight' | 'right.bottom';
+
+// コンポーネント種別
+export type ComponentType =
+  | 'ClockWidget' | 'WeatherWidget' | 'ChatLog' | 'SuperChatCard' | 'BrandBlock'
+  | 'MainAvatarStage' | 'ChannelBadge' | 'SetList' | 'KPIBlock' | 'PromoPanel' | 'QueueList';
+
+// レイアウト設定
+export interface LayoutConfig {
+  type: 'threeColumn';
+  leftPct: number;    // 0.18-0.28
+  centerPct: number;  // 0.44-0.64
+  rightPct: number;   // 0.18-0.28
+  gutterPx: number;   // 0-64
+}
+
+// セーフエリア
+export interface SafeAreaPct {
+  top: number;    // 0.0-0.10
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+// テーマ設定
+export interface ThemeConfig {
+  fontFamily: string;
+  textColor: string;
+  panel: {
+    bg: string;
+    blurPx: number;   // 0-24
+    radiusPx: number; // 0-32
+  };
+  shadow: {
+    enabled: boolean;
+    blur: number;     // 0-24
+    opacity: number;  // 0.0-1.0
+    offsetX: number;  // -20 to 20
+    offsetY: number;
+  };
+  outline: {
+    enabled: boolean;
+    width: number;    // 0-6
+    color: string;
+  };
+}
+
+// チューニング（微調整）
+export interface TuningConfig {
+  offsetX: number;  // -40 to 40
+  offsetY: number;
+}
+
+// コンポーネント設定
+export interface ComponentConfig {
+  id: string;
+  type: ComponentType;
+  slot: SlotId;
+  enabled: boolean;
+  style?: Record<string, unknown>;
+  rules?: ComponentRules;
+  tuning?: TuningConfig;
+}
+
+// コンポーネントルール
+export interface ComponentRules {
+  maxLines?: number;    // 4-14
+  maxItems?: number;    // 6-20
+  cycleSec?: number;    // 10-120
+  showSec?: number;     // 3-15
+  overflow?: 'ellipsis' | 'fade' | 'scroll';
+}
+
+// テンプレート全体
+export interface TemplateConfig {
+  layout: LayoutConfig;
+  safeAreaPct: SafeAreaPct;
+  theme?: ThemeConfig;
+  components: ComponentConfig[];
+}
+```
+
+### Rust 型定義
+
+```rust
+// src-tauri/src/server/template_types.rs
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SlotId {
+    #[serde(rename = "left.top")]
+    LeftTop,
+    #[serde(rename = "left.topBelow")]
+    LeftTopBelow,
+    #[serde(rename = "left.middle")]
+    LeftMiddle,
+    #[serde(rename = "left.lower")]
+    LeftLower,
+    #[serde(rename = "left.bottom")]
+    LeftBottom,
+    #[serde(rename = "center.full")]
+    CenterFull,
+    #[serde(rename = "right.top")]
+    RightTop,
+    #[serde(rename = "right.upper")]
+    RightUpper,
+    #[serde(rename = "right.lowerLeft")]
+    RightLowerLeft,
+    #[serde(rename = "right.lowerRight")]
+    RightLowerRight,
+    #[serde(rename = "right.bottom")]
+    RightBottom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ComponentType {
+    ClockWidget,
+    WeatherWidget,
+    ChatLog,
+    SuperChatCard,
+    BrandBlock,
+    MainAvatarStage,
+    ChannelBadge,
+    SetList,
+    KPIBlock,
+    PromoPanel,
+    QueueList,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutConfig {
+    #[serde(rename = "type")]
+    pub layout_type: String,  // "threeColumn"
+    pub left_pct: f32,
+    pub center_pct: f32,
+    pub right_pct: f32,
+    pub gutter_px: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeAreaPct {
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentRules {
+    pub max_lines: Option<u32>,
+    pub max_items: Option<u32>,
+    pub cycle_sec: Option<u32>,
+    pub show_sec: Option<u32>,
+    pub overflow: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TuningConfig {
+    pub offset_x: i32,
+    pub offset_y: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentConfig {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub component_type: ComponentType,
+    pub slot: SlotId,
+    pub enabled: bool,
+    pub style: Option<serde_json::Value>,
+    pub rules: Option<ComponentRules>,
+    pub tuning: Option<TuningConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateConfig {
+    pub layout: LayoutConfig,
+    pub safe_area_pct: SafeAreaPct,
+    pub theme: Option<serde_json::Value>,
+    pub components: Vec<ComponentConfig>,
+}
+```
+
+### クランプ規約
+
+テンプレート設定の安全範囲。実装時はJSON Schema検証 + Rust側でのクランプを行う。
+
+| パラメータ | 最小値 | 最大値 | 備考 |
+|-----------|--------|--------|------|
+| `offsetX` | -40 | 40 | px相当 |
+| `offsetY` | -40 | 40 | px相当 |
+| `maxLines` | 4 | 14 | ChatLog用 |
+| `maxItems` | 6 | 20 | SetList/QueueList用 |
+| `cycleSec` | 10 | 120 | PromoPanel用 |
+| `showSec` | 3 | 15 | PromoPanel用 |
+| `leftPct` | 0.18 | 0.28 | レイアウト比率 |
+| `centerPct` | 0.44 | 0.64 | レイアウト比率 |
+| `rightPct` | 0.18 | 0.28 | レイアウト比率 |
+| `gutterPx` | 0 | 64 | カラム間隔 |
+| `blurPx` | 0 | 24 | パネルブラー |
+| `radiusPx` | 0 | 32 | 角丸 |
+
+```rust
+// クランプ関数の実装例
+impl TuningConfig {
+    pub fn clamp(&mut self) {
+        self.offset_x = self.offset_x.clamp(-40, 40);
+        self.offset_y = self.offset_y.clamp(-40, 40);
+    }
+}
+
+impl ComponentRules {
+    pub fn clamp(&mut self) {
+        if let Some(ref mut v) = self.max_lines {
+            *v = (*v).clamp(4, 14);
+        }
+        if let Some(ref mut v) = self.max_items {
+            *v = (*v).clamp(6, 20);
+        }
+        if let Some(ref mut v) = self.cycle_sec {
+            *v = (*v).clamp(10, 120);
+        }
+        if let Some(ref mut v) = self.show_sec {
+            *v = (*v).clamp(3, 15);
+        }
+    }
+}
+```

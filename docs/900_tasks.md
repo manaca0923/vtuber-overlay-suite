@@ -994,4 +994,147 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ---
 
+## Phase 2: 3カラムレイアウト実装（将来計画）
+
+> **ステータス**: 設計完了、実装予定
+>
+> 3カラム・テンプレ要件仕様書 v1.1 に基づく段階的実装計画。
+
+---
+
+## T20: 3カラムレイアウト基盤
+**優先度**: P1 | **見積**: 5日 | **依存**: T08
+**ステータス**: ⬜ **未着手**
+
+### 概要
+既存オーバーレイシステムに3カラム固定レイアウト（22%/56%/22%）を追加。v1との後方互換性を維持。
+
+### チェックリスト
+- [ ] CSS変数の拡張（overlay-common.css）
+- [ ] 3カラムHTML構造作成（combined-v2.html）
+- [ ] CSS Grid実装（layout-v2.css）
+- [ ] HTTPエンドポイント追加（/overlay/combined-v2）
+- [ ] v1/v2切替UI追加（LayoutPresetSelector.tsx）
+
+### 成果物
+- `src-tauri/overlays/combined-v2.html`
+- `src-tauri/overlays/shared/layout-v2.css`
+- `src-tauri/src/server/http.rs` - エンドポイント追加
+
+---
+
+## T21: slot・Design Token整備
+**優先度**: P1 | **見積**: 3日 | **依存**: T20
+**ステータス**: ⬜ **未着手**
+
+### 概要
+11個のslot配置システムとCSS変数によるDesign Token。
+
+### チェックリスト
+- [ ] slot管理JavaScript作成（slots.js）
+- [ ] Design Token CSS作成（design-tokens.css）
+- [ ] TypeScript slot型定義（slot.ts）
+- [ ] Rust SlotId列挙型追加（server/types.rs）
+
+### slot定義（11個）
+| slot | 役割 |
+|------|------|
+| left.top | 時刻 |
+| left.topBelow | 天気 |
+| left.middle | コメント |
+| left.lower | スパチャ |
+| left.bottom | ロゴ |
+| center.full | 主役 |
+| right.top | ラベル |
+| right.upper | セトリ |
+| right.lowerLeft | KPI |
+| right.lowerRight | 短冊 |
+| right.bottom | 告知 |
+
+---
+
+## T22: 型定義・JSON Schema
+**優先度**: P1 | **見積**: 3日 | **依存**: T21
+**ステータス**: ⬜ **未着手**
+
+### 概要
+テンプレート設定の型定義とJSON Schema検証。
+
+### チェックリスト
+- [ ] JSON Schema作成（src-tauri/schemas/template-mvp-1.0.json）
+- [ ] TypeScript型定義（src/types/template.ts）
+- [ ] Rust型定義（src-tauri/src/server/template_types.rs）
+- [ ] テンプレート検証コマンド（commands/template.rs）
+- [ ] クランプ関数実装
+
+### クランプ規約
+| パラメータ | 範囲 |
+|-----------|------|
+| offsetX/Y | -40〜+40 |
+| maxLines | 4〜14 |
+| maxItems | 6〜20 |
+| cycleSec | 10〜120 |
+| showSec | 3〜15 |
+
+---
+
+## T23: 新コンポーネント追加
+**優先度**: P2 | **見積**: 10日 | **依存**: T22
+**ステータス**: ⬜ **未着手**
+
+### 概要
+8個の新規コンポーネントを順次追加。
+
+### チェックリスト
+- [ ] ClockWidget - 時刻/日付表示
+- [ ] WeatherWidget - 天気情報
+- [ ] BrandBlock - ロゴ
+- [ ] MainAvatarStage - 中央ステージ
+- [ ] ChannelBadge - チャンネルバッジ
+- [ ] KPIBlock - KPI数値
+- [ ] PromoPanel - 告知（cycle対応）
+- [ ] QueueList - 待機キュー
+- [ ] コンポーネント登録システム（component-registry.js）
+
+### 成果物
+- `src-tauri/overlays/components/*.js` - 各コンポーネント
+
+---
+
+## T24: パフォーマンス最適化
+**優先度**: P2 | **見積**: 3日 | **依存**: T23
+**ステータス**: ⬜ **未着手**
+
+### 概要
+100-200msバッチ更新、クランプ規約強制、縮退処理。
+
+### チェックリスト
+- [ ] バッチ更新実装（requestAnimationFrame）
+- [ ] クランプ規約の強制実装
+- [ ] 右下過密時の縮退処理
+- [ ] パフォーマンステスト
+
+---
+
+## T25: 外部API連携
+**優先度**: P2 | **見積**: 5日 | **依存**: T23
+**ステータス**: ⬜ **未着手**
+
+### 概要
+天気API、YouTube Analytics連携。
+
+### チェックリスト
+- [ ] 天気APIクライアント実装（weather/mod.rs）
+- [ ] 天気情報キャッシュ（15分TTL）
+- [ ] YouTube Analytics連携（analytics/mod.rs）
+- [ ] KPIBlock用データ取得
+- [ ] WeatherSettings UI
+
+### 天気API候補
+- OpenWeatherMap（無料枠あり）
+- WeatherAPI
+- 気象庁API（日本専用）
+
+---
+
 

@@ -661,7 +661,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T21 | ✅ 完了 | 2025-12-25 |
 | T22 | ✅ 完了 | 2025-12-25 |
 | T23 | ✅ 完了 | 2025-12-25 |
-| T24 | ⬜ 未着手 | - |
+| T24 | ✅ 完了 | 2025-12-26 |
 | T25 | ⬜ 未着手 | - |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
@@ -1284,16 +1284,48 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T24: パフォーマンス最適化
 **優先度**: P2 | **見積**: 3日 | **依存**: T23
-**ステータス**: ⬜ **未着手**
+**ステータス**: ✅ **完了**（2025-12-26）
 
 ### 概要
 100-200msバッチ更新、クランプ規約強制、縮退処理。
 
 ### チェックリスト
-- [ ] バッチ更新実装（requestAnimationFrame）
-- [ ] クランプ規約の強制実装
-- [ ] 右下過密時の縮退処理
-- [ ] パフォーマンステスト
+- [x] バッチ更新実装（requestAnimationFrame）
+- [x] クランプ規約の強制実装
+- [x] 右下過密時の縮退処理
+- [ ] パフォーマンステスト（手動テスト必要）
+
+### 成果物
+
+#### 新規作成（3ファイル）
+- `src-tauri/overlays/shared/clamp-constants.js` - クランプ定数（ソース・オブ・トゥルース）
+- `src-tauri/overlays/shared/update-batcher.js` - 100-200msバッチ更新システム
+- `src-tauri/overlays/shared/density-manager.js` - 右下過密検出・縮退処理
+
+#### 変更（5ファイル）
+- `src-tauri/overlays/combined-v2.html` - スクリプト読み込み、WSハンドラ修正
+- `src-tauri/overlays/components/base-component.js` - `clampByKey()`メソッド追加
+- `src-tauri/overlays/components/kpi-block.js` - 共有定数使用、density対応
+- `src-tauri/overlays/components/queue-list.js` - 共有定数使用、density対応
+- `src-tauri/overlays/components/promo-panel.js` - 共有定数使用、density対応
+
+### 実装詳細
+
+#### バッチ更新システム（UpdateBatcher）
+- WebSocket更新を150msでバッチ処理
+- requestAnimationFrameで1フレームにまとめて適用
+- 同一コンポーネントタイプへの複数更新は最新のみ保持
+
+#### クランプ規約統一（clamp-constants.js）
+- CLAMP_RANGES定数でオーバーレイ側の値制限を一元管理
+- TypeScript（template.ts）およびRust（template_types.rs）と同期
+- clampByKey()メソッドで共有定数を参照
+
+#### 右下過密検出（DensityManager）
+- right.lowerLeft（KPI）、right.lowerRight（Queue）、right.bottom（Promo）を監視
+- 2秒間に5回以上の更新で高負荷判定
+- density:high/density:normalイベントで各コンポーネントに縮退処理を通知
+- 縮退時: updateThrottle 2秒→4秒、maxItems 6→4、showSec 6秒→10秒
 
 ---
 

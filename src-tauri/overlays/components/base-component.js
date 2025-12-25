@@ -104,8 +104,8 @@ class BaseComponent {
   applyTuning() {
     if (!this.element) return;
 
-    const offsetX = this.clamp(this.tuning.offsetX || 0, -40, 40);
-    const offsetY = this.clamp(this.tuning.offsetY || 0, -40, 40);
+    const offsetX = this.clampByKey(this.tuning.offsetX || 0, 'offsetX', -40, 40);
+    const offsetY = this.clampByKey(this.tuning.offsetY || 0, 'offsetY', -40, 40);
 
     if (offsetX !== 0 || offsetY !== 0) {
       this.element.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
@@ -168,6 +168,25 @@ class BaseComponent {
    */
   clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  /**
+   * キー指定でクランプ（共有定数を参照）
+   * clamp-constants.jsが読み込まれている場合はそちらを使用、
+   * なければフォールバック値を使用
+   *
+   * @param {number} value - クランプする値
+   * @param {string} key - CLAMP_RANGESのキー
+   * @param {number} fallbackMin - フォールバック最小値
+   * @param {number} fallbackMax - フォールバック最大値
+   * @returns {number}
+   */
+  clampByKey(value, key, fallbackMin = 0, fallbackMax = 100) {
+    if (typeof window.clampValue === 'function') {
+      return window.clampValue(value, key);
+    }
+    // フォールバック
+    return this.clamp(value, fallbackMin, fallbackMax);
   }
 
   /**

@@ -23,13 +23,51 @@ class PromoPanel extends BaseComponent {
 
     // サイクル設定（クランプ適用）
     // cycleSec: 将来的にサイクル間の休憩時間として使用予定（現在未使用）
-    this.cycleSec = this.clamp(this.rules.cycleSec || 30, 10, 120);
+    this.cycleSec = this.clampByKey(this.rules.cycleSec || 30, 'cycleSec', 10, 120);
     // showSec: 各アイテムの表示間隔
-    this.showSec = this.clamp(this.rules.showSec || 6, 3, 15);
+    this.showSec = this.clampByKey(this.rules.showSec || 6, 'showSec', 3, 15);
+    this.originalShowSec = this.showSec; // 縮退モードからの復元用
 
     this.currentIndex = 0;
     this.cycleTimerId = null;
     this.showTimeoutId = null;
+  }
+
+  /**
+   * イベントハンドラ（density対応）
+   * @param {string} eventType
+   * @param {object} payload
+   */
+  onEvent(eventType, payload) {
+    if (eventType === 'density:high') {
+      this.applyDegradedMode(payload);
+    } else if (eventType === 'density:normal') {
+      this.restoreNormalMode(payload);
+    }
+  }
+
+  /**
+   * 縮退モードを適用
+   * @param {object} settings
+   */
+  applyDegradedMode(settings) {
+    if (settings.showSec) {
+      this.showSec = this.clampByKey(settings.showSec, 'showSec', 3, 15);
+      this.startCycle(); // 間隔変更時は再スタート
+    }
+  }
+
+  /**
+   * 通常モードに復元
+   * @param {object} settings
+   */
+  restoreNormalMode(settings) {
+    if (settings.showSec) {
+      this.showSec = this.clampByKey(settings.showSec, 'showSec', 3, 15);
+    } else {
+      this.showSec = this.originalShowSec;
+    }
+    this.startCycle(); // 間隔変更時は再スタート
   }
 
   render() {
@@ -137,11 +175,11 @@ class PromoPanel extends BaseComponent {
     }
 
     if (data.cycleSec !== undefined) {
-      this.cycleSec = this.clamp(data.cycleSec, 10, 120);
+      this.cycleSec = this.clampByKey(data.cycleSec, 'cycleSec', 10, 120);
     }
 
     if (data.showSec !== undefined) {
-      this.showSec = this.clamp(data.showSec, 3, 15);
+      this.showSec = this.clampByKey(data.showSec, 'showSec', 3, 15);
       this.startCycle(); // 間隔変更時は再スタート
     }
   }

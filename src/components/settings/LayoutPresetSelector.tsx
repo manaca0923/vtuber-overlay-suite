@@ -6,8 +6,31 @@ interface LayoutPresetSelectorProps {
   onChange: (preset: LayoutPreset) => void;
 }
 
+// 3カラムプレビュー用SVG
+function ThreeColumnPreview() {
+  return (
+    <svg viewBox="0 0 40 40" className="w-full h-full">
+      {/* 背景 */}
+      <rect x="0" y="0" width="40" height="40" fill="#1f2937" rx="4" />
+      {/* 左カラム（22%） */}
+      <rect x="2" y="2" width="8" height="36" fill="#6366f1" rx="2" opacity="0.8" />
+      {/* 中央カラム（56%）- 空きスペース表示 */}
+      <rect x="12" y="2" width="16" height="36" fill="#374151" rx="2" opacity="0.5" />
+      {/* 右カラム（22%） */}
+      <rect x="30" y="2" width="8" height="36" fill="#10b981" rx="2" opacity="0.8" />
+      {/* 中央ラベル */}
+      <text x="20" y="22" textAnchor="middle" fill="#9ca3af" fontSize="6">主役</text>
+    </svg>
+  );
+}
+
 // プリセットのミニチュアプレビュー用SVG
 function PresetPreview({ preset }: { preset: LayoutPreset }) {
+  // 3カラムは専用プレビュー
+  if (preset === 'three-column') {
+    return <ThreeColumnPreview />;
+  }
+
   const config = LAYOUT_PRESETS[preset];
   const commentPos = config.comment.position;
   const setlistPos = config.setlist.position;

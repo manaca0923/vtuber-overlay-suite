@@ -28,12 +28,16 @@ export type CommentPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom
 export type SetlistPosition = 'top' | 'bottom' | 'left' | 'right';
 
 // レイアウトプリセット
-export type LayoutPreset = 'streaming' | 'talk' | 'music' | 'gaming' | 'custom';
+export type LayoutPreset = 'streaming' | 'talk' | 'music' | 'gaming' | 'custom' | 'three-column';
+
+// レイアウトバージョン
+export type LayoutVersion = 'v1' | 'v2';
 
 // レイアウトプリセット設定
 export interface LayoutPresetConfig {
   name: string;
   description: string;
+  version?: LayoutVersion; // v1（デフォルト）または v2（3カラム）
   comment: {
     position: CommentPosition;
     enabled: boolean;
@@ -75,6 +79,13 @@ export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutPresetConfig> = {
     description: '個別に設定をカスタマイズ',
     comment: { position: 'bottom-right', enabled: true },
     setlist: { position: 'bottom', enabled: true },
+  },
+  'three-column': {
+    name: '3カラム',
+    description: '左22%/中央56%/右22%の固定レイアウト',
+    version: 'v2',
+    comment: { position: 'bottom-left', enabled: true },
+    setlist: { position: 'right', enabled: true },
   },
 };
 

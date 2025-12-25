@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import type { OverlaySettings } from '../../types/overlaySettings';
+import { LAYOUT_PRESETS } from '../../types/overlaySettings';
 
 type PreviewMode = 'combined' | 'individual';
 
@@ -44,6 +45,10 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
     return () => resizeObserver.disconnect();
   }, []);
 
+  // レイアウトバージョンを判定
+  const layoutVersion = LAYOUT_PRESETS[settings.layout]?.version || 'v1';
+  const isV2Layout = layoutVersion === 'v2';
+
   const previewUrl = useMemo(() => {
     if (mode === 'combined') {
       // 統合オーバーレイ
@@ -58,7 +63,9 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
         showArtist: String(settings.setlist.showArtist),
         setlistEnabled: String(settings.setlist.enabled),
       });
-      return `http://localhost:19800/overlay/combined?${params.toString()}`;
+      // v2レイアウトの場合はcombined-v2を使用
+      const endpoint = isV2Layout ? '/overlay/combined-v2' : '/overlay/combined';
+      return `http://localhost:19800${endpoint}?${params.toString()}`;
     }
 
     // 個別オーバーレイ
@@ -86,13 +93,14 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
     }
 
     return `${base}?${params.toString()}`;
-  }, [settings, activePanel, mode]);
+  }, [settings, activePanel, mode, isV2Layout]);
 
-  const displayMode = mode === 'combined' ? '統合オーバーレイ' :
-    activePanel === 'comment' ? 'コメントオーバーレイ' : 'セットリストオーバーレイ';
+  const displayMode = mode === 'combined'
+    ? (isV2Layout ? '3カラム統合オーバーレイ' : '統合オーバーレイ')
+    : activePanel === 'comment' ? 'コメントオーバーレイ' : 'セットリストオーバーレイ';
 
   const obsUrl = mode === 'combined'
-    ? 'http://localhost:19800/overlay/combined'
+    ? (isV2Layout ? 'http://localhost:19800/overlay/combined-v2' : 'http://localhost:19800/overlay/combined')
     : activePanel === 'comment'
       ? 'http://localhost:19800/overlay/comment'
       : 'http://localhost:19800/overlay/setlist';

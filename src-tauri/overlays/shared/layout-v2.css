@@ -1,0 +1,169 @@
+/**
+ * 3カラムレイアウト用CSS（v2）
+ * 固定比率: 左22% / 中央56% / 右22%
+ * 11個のslot配置システム
+ */
+
+/* ===== 3カラムルートレイアウト ===== */
+.layout-root {
+  position: fixed;
+  inset: 0;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  box-sizing: border-box;
+  display: grid;
+  /* fr単位で比率維持（gutter込みでも100%に収まる） */
+  grid-template-columns: 22fr 56fr 22fr;
+  column-gap: var(--gutter);
+}
+
+/* ===== カラム共通 ===== */
+.col-left,
+.col-center,
+.col-right {
+  height: 100%;
+  display: grid;
+  row-gap: var(--row-gap);
+  min-height: 0;
+}
+
+/* ===== 左カラム（5スロット） ===== */
+.col-left {
+  /* left.top / left.topBelow / left.middle(1fr) / left.lower / left.bottom */
+  grid-template-rows: auto auto 1fr auto auto;
+}
+
+/* ===== 中央カラム（1スロット） ===== */
+.col-center {
+  /* center.full */
+  grid-template-rows: 1fr;
+}
+
+/* ===== 右カラム（4スロット + サブグリッド） ===== */
+.col-right {
+  /* right.top / right.upper(1fr) / right-lower-grid(auto) / right.bottom */
+  grid-template-rows: auto 1fr auto auto;
+}
+
+/* ===== 右下サブグリッド ===== */
+.right-lower-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+  align-items: end;
+}
+
+/* ===== パネルスタイル ===== */
+.panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(var(--panel-blur));
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+/* ===== クランプボックス（オーバーフロー制御） ===== */
+.clamp-box {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ===== slot共通スタイル ===== */
+.layout-root section {
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ===== 空slotの表示（デバッグ用、本番では非表示） ===== */
+.layout-root section:empty {
+  /* 空のslotは高さ0 */
+  display: none;
+}
+
+/* ===== コメントエリア（left.middle） ===== */
+#slot-left-middle {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#slot-left-middle .comment-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--comment-gap);
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ===== セットリストエリア（right.upper） ===== */
+#slot-right-upper {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#slot-right-upper .setlist-container {
+  background: var(--panel-bg);
+  backdrop-filter: blur(var(--panel-blur));
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  border-radius: var(--radius);
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* ===== セットリストアイテム ===== */
+.setlist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  opacity: 0.5;
+  transition: all 0.3s ease;
+}
+
+.setlist-item.current {
+  opacity: 1;
+  transform: scale(1.02);
+}
+
+.setlist-item.current .song-title {
+  color: var(--primary-color);
+}
+
+.song-number {
+  font-size: 14px;
+  font-weight: bold;
+  min-width: 24px;
+  text-align: center;
+  color: var(--primary-color);
+}
+
+.song-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.song-title {
+  font-size: var(--font-size-setlist, 20px);
+  font-weight: bold;
+  text-shadow: var(--text-shadow);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-artist {
+  font-size: 14px;
+  opacity: 0.7;
+  text-shadow: var(--text-shadow);
+}
+
+.song-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--primary-color);
+}

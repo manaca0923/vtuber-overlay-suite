@@ -28,6 +28,18 @@ pub enum WsMessage {
     /// 設定更新
     #[serde(rename = "settings:update")]
     SettingsUpdate { payload: SettingsUpdatePayload },
+
+    /// KPI更新
+    #[serde(rename = "kpi:update")]
+    KpiUpdate { payload: KpiUpdatePayload },
+
+    /// キュー更新
+    #[serde(rename = "queue:update")]
+    QueueUpdate { payload: QueueUpdatePayload },
+
+    /// 告知更新
+    #[serde(rename = "promo:update")]
+    PromoUpdate { payload: PromoUpdatePayload },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,4 +165,60 @@ pub enum SlotId {
     RightLowerRight,
     #[serde(rename = "right.bottom")]
     RightBottom,
+}
+
+/// KPI更新ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KpiUpdatePayload {
+    /// 主数値（視聴者数など）
+    pub main: Option<i64>,
+    /// 主数値のラベル
+    pub label: Option<String>,
+    /// 副数値（高評価数など）
+    pub sub: Option<i64>,
+    /// 副数値のラベル
+    pub sub_label: Option<String>,
+}
+
+/// キュー更新ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueUpdatePayload {
+    /// キュータイトル
+    pub title: Option<String>,
+    /// キューアイテム一覧
+    pub items: Vec<QueueItem>,
+}
+
+/// キューアイテム
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueItem {
+    /// アイテムID
+    pub id: Option<String>,
+    /// 表示テキスト
+    pub text: String,
+}
+
+/// 告知更新ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoUpdatePayload {
+    /// 告知アイテム一覧
+    pub items: Vec<PromoItem>,
+    /// サイクル間隔（秒）
+    pub cycle_sec: Option<u32>,
+    /// 各アイテム表示時間（秒）
+    pub show_sec: Option<u32>,
+}
+
+/// 告知アイテム
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoItem {
+    /// 表示テキスト
+    pub text: String,
+    /// アイコン（絵文字など）
+    pub icon: Option<String>,
 }

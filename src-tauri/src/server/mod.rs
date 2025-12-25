@@ -1,4 +1,5 @@
 mod http;
+pub mod template_types;
 pub mod types;
 mod websocket;
 

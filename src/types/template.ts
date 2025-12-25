@@ -158,11 +158,11 @@ function clamp(value: number, min: number, max: number): number {
 // ===== クランプ関数（tuning） =====
 
 export function clampOffsetX(value: number): number {
-  return clamp(value, CLAMP_RANGES.offsetX.min, CLAMP_RANGES.offsetX.max);
+  return clamp(Math.round(value), CLAMP_RANGES.offsetX.min, CLAMP_RANGES.offsetX.max);
 }
 
 export function clampOffsetY(value: number): number {
-  return clamp(value, CLAMP_RANGES.offsetY.min, CLAMP_RANGES.offsetY.max);
+  return clamp(Math.round(value), CLAMP_RANGES.offsetY.min, CLAMP_RANGES.offsetY.max);
 }
 
 // ===== クランプ関数（rules） =====

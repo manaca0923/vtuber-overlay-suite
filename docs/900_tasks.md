@@ -1216,6 +1216,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] 低: MessageType文字列表記をcamelCaseに統一（docs/400_data-models.md）
 - [x] 低: InnerTubeドキュメント整合性修正（非対象→バックアップとして実装済み）
 
+### PR#53 追加レビュー対応②（2025-12-26）
+- [x] 中: start_polling_innertubeに統合ポーラー停止処理を追加
+  - 旧経路（InnerTube単体）起動時にも統合ポーラーを停止するよう修正
+  - 相互排他の双方向化完了
+- [x] 低: gRPC優先/InnerTubeバックアップのドキュメント統一
+  - 001_requirements.md: gRPC Streaming優先、InnerTube=バックアップに更新
+  - 100_architecture.md: 技術スタック表とシステム構成図を更新
+
 ---
 
 ## T23: 新コンポーネント追加

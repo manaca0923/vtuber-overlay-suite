@@ -11,7 +11,7 @@
 | Database | SQLite | ローカル永続化 |
 | Realtime | WebSocket | localhost通信 |
 | HTTP Server | Actix-web / Axum | Rust製 |
-| YouTube API | InnerTube API (メイン) | 公式REST APIはデバッグ用 |
+| YouTube API | gRPC Streaming (メイン) | InnerTube=バックアップ, REST=互換 |
 | Updater | Tauri Updater | 起動時チェック |
 
 ---
@@ -25,7 +25,7 @@
 │  ┌─────────────────────┐    ┌─────────────────────────────┐ │
 │  │    React Frontend   │    │       Rust Backend          │ │
 │  ├─────────────────────┤    ├─────────────────────────────┤ │
-│  │ - 設定画面          │◄──►│ - InnerTube API通信         │ │
+│  │ - 設定画面          │◄──►│ - YouTube API通信 (gRPC/InnerTube) │ │
 │  │ - プレビュー        │    │ - ポーリング制御            │ │
 │  │ - セットリスト編集  │    │ - WebSocket Server          │ │
 │  │ - ウィザード        │    │ - HTTP Server               │ │

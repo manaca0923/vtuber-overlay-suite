@@ -727,6 +727,21 @@ pub async fn start_polling_innertube(
         }
     }
 
+    // 相互排他: 統合ポーラーが動いていたら停止してUI通知
+    {
+        let poller = get_unified_poller().lock().await;
+        if poller.is_running() {
+            log::info!("Stopping unified polling (mutual exclusion)");
+            poller.stop().await;
+            // UI更新のためStopped通知を送信
+            if let Err(e) = app.emit("polling-event", PollingEvent::Stopped {
+                reason: "InnerTubeポーリング（旧経路）に切り替え".to_string(),
+            }) {
+                log::error!("Failed to emit stopped event: {}", e);
+            }
+        }
+    }
+
     // 既存のInnerTubeポーリングを停止（JoinHandleをabort）
     {
         let mut handle_lock = get_innertube_handle().lock().await;

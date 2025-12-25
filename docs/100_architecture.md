@@ -65,6 +65,7 @@ vtuber-overlay-suite/
 │   │   │   ├── mod.rs
 │   │   │   ├── youtube.rs    # YouTube API関連
 │   │   │   ├── setlist.rs    # セットリスト操作
+│   │   │   ├── overlay.rs    # オーバーレイ設定
 │   │   │   └── settings.rs   # 設定管理
 │   │   ├── youtube/          # YouTube API実装
 │   │   │   ├── mod.rs
@@ -74,13 +75,21 @@ vtuber-overlay-suite/
 │   │   ├── server/           # WebSocket/HTTP
 │   │   │   ├── mod.rs
 │   │   │   ├── websocket.rs
-│   │   │   └── http.rs
+│   │   │   ├── http.rs
+│   │   │   └── types.rs      # メッセージ型定義
 │   │   ├── db/               # SQLite
 │   │   │   ├── mod.rs
 │   │   │   ├── schema.rs
 │   │   │   └── queries.rs
 │   │   └── secure/           # セキュアストレージ
 │   │       └── mod.rs
+│   ├── overlays/             # オーバーレイHTML（実際の配置）
+│   │   ├── comment.html
+│   │   ├── setlist.html
+│   │   ├── combined.html     # 統合オーバーレイ
+│   │   └── shared/           # 共通リソース
+│   │       ├── overlay-common.css
+│   │       └── comment-renderer.js
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── src/                       # React Frontend
@@ -92,23 +101,65 @@ vtuber-overlay-suite/
 │   ├── hooks/
 │   ├── stores/               # 状態管理
 │   ├── types/
+│   │   ├── overlaySettings.ts
+│   │   └── template.ts       # 3カラムテンプレート型（将来）
 │   ├── App.tsx
 │   └── main.tsx
-├── overlay/                   # OBS用オーバーレイ
-│   ├── comment/              # コメント表示
-│   │   ├── index.html
-│   │   ├── style.css
-│   │   └── script.js
-│   ├── setlist/              # セットリスト表示
-│   │   ├── index.html
-│   │   ├── style.css
-│   │   └── script.js
-│   └── templates/            # テンプレートアセット
-│       └── default/
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json
 ```
+
+---
+
+## オーバーレイレイアウト層（将来実装予定）
+
+> **ステータス**: 設計完了、実装予定
+
+### 概要
+
+3カラム固定レイアウト（22%/56%/22%）をベースとした、slot配置システム。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    OBS Browser Source (1920x1080)           │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌────────────────────────┐  ┌──────────┐    │
+│  │ left.top │  │                        │  │right.top │    │
+│  ├──────────┤  │                        │  ├──────────┤    │
+│  │left.     │  │                        │  │right.    │    │
+│  │topBelow  │  │      center.full       │  │upper     │    │
+│  ├──────────┤  │      (主役ステージ)    │  │(セトリ)  │    │
+│  │left.     │  │                        │  ├──────────┤    │
+│  │middle    │  │                        │  │right.    │    │
+│  │(コメント)│  │                        │  │lowerL/R  │    │
+│  ├──────────┤  └────────────────────────┘  ├──────────┤    │
+│  │left.lower│                              │right.    │    │
+│  ├──────────┤                              │bottom    │    │
+│  │left.     │                              │(告知)    │    │
+│  │bottom    │                              └──────────┘    │
+│  └──────────┘                                              │
+│      22%              56%                     22%          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### テンプレート管理
+
+テンプレート設定はJSONで定義し、SQLiteのsettingsテーブルに保存。
+
+```
+テンプレートJSON
+    ↓
+JSON Schema検証（src-tauri/schemas/）
+    ↓
+クランプ処理（Rust）
+    ↓
+SQLite保存
+    ↓
+WebSocket配信 → OBSオーバーレイ
+```
+
+詳細は `docs/300_overlay-specs.md`（3カラムレイアウト）および `docs/400_data-models.md`（型定義）を参照。
 
 ---
 

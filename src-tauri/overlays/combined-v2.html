@@ -438,6 +438,9 @@
               densityManager.recordUpdate('right.bottom');
               break;
             case 'weather:update':
+              // 天気ウィジェットは左カラム（slot-left-topBelow）に配置されるため、
+              // 右下エリアの過密検出（densityManager）には記録しない。
+              // 右下エリア: right.lowerLeft, right.lowerRight, right.bottom のみが対象
               updateBatcher.queue('WeatherWidget', data.payload);
               break;
             case 'template:update':

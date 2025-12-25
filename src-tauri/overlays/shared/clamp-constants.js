@@ -48,9 +48,12 @@
     // theme.outline（アウトライン）
     outlineWidth: { min: 0, max: 6, default: 2 },
 
-    // コンポーネント固有
-    updateThrottle: { min: 1000, max: 10000, default: 2000 }, // KPIBlock
-    queueMaxItems: { min: 3, max: 10, default: 6 }, // QueueList（docs/300整合）
+    // コンポーネント固有（オーバーレイ専用、TypeScript/Rustには未定義）
+    // これらはオーバーレイ側でのみ使用されるため、3層同期は不要
+    updateThrottle: { min: 1000, max: 10000, default: 2000 }, // KPIBlock用
+    // queueMaxItems: QueueListの表示アイテム数制限。docs/300_overlay-specs.md の
+    // 「QueueList: 3-10」に基づく。汎用のmaxItems(6-20)とは異なる用途。
+    queueMaxItems: { min: 3, max: 10, default: 6 },
   };
 
   /**

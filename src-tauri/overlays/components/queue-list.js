@@ -49,11 +49,16 @@ class QueueList extends BaseComponent {
   /**
    * 縮退モードを適用
    * @param {object} settings
+   *
+   * 注意: 縮退時にmaxItemsを超えるアイテムは削除される（意図的な仕様）。
+   * 理由: 待機キューは常にサーバーから最新データが送られてくるため、
+   * 削除されたアイテムは次回のqueue:updateで必要に応じて復元される。
+   * パフォーマンス優先のため、ローカルでの保持は行わない。
    */
   applyDegradedMode(settings) {
     if (settings.maxItems) {
       this.maxItems = this.clampByKey(settings.maxItems, 'queueMaxItems', 3, 10);
-      // 現在の表示を更新
+      // 現在の表示を更新（超過分は削除、次回update時に必要なら再取得される）
       if (this.items.length > this.maxItems) {
         this.items = this.items.slice(0, this.maxItems);
         this.renderList();

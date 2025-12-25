@@ -60,14 +60,14 @@
       if (!this.updateHistory.has(slotId)) return;
 
       const now = Date.now();
-      const history = this.updateHistory.get(slotId);
-      history.push(now);
-
-      // 古いエントリを削除
       const cutoff = now - this.windowMs;
-      while (history.length > 0 && history[0] < cutoff) {
-        history.shift();
-      }
+
+      // 古いエントリを除去しつつ新しいエントリを追加
+      // filter() + push() で配列操作を効率化（shift()のO(n)を回避）
+      const history = this.updateHistory.get(slotId);
+      const filtered = history.filter((t) => t >= cutoff);
+      filtered.push(now);
+      this.updateHistory.set(slotId, filtered);
 
       this.checkDensity();
     }

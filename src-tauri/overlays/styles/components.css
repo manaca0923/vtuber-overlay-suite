@@ -1,0 +1,222 @@
+/**
+ * コンポーネント固有スタイル
+ * 各コンポーネントの見た目を定義
+ *
+ * Design Token CSS変数を使用（design-tokens.css参照）
+ */
+
+/* ===== ClockWidget ===== */
+.clock-widget {
+  text-align: center;
+  padding: var(--dt-spacing-md, 12px);
+}
+
+.clock-time {
+  font-size: var(--dt-font-clock-time, 72px);
+  font-weight: var(--dt-weight-heavy, 700);
+  line-height: var(--dt-line-height-tight, 1.1);
+  letter-spacing: 0.02em;
+}
+
+.clock-date {
+  font-size: var(--dt-font-clock-date, 24px);
+  font-weight: var(--dt-weight-normal, 500);
+  opacity: 0.8;
+  margin-top: var(--dt-spacing-xs, 4px);
+}
+
+/* ===== WeatherWidget ===== */
+.weather-widget {
+  display: flex;
+  align-items: center;
+  gap: var(--dt-spacing-sm, 8px);
+  padding: var(--dt-spacing-sm, 8px) var(--dt-spacing-md, 12px);
+}
+
+.weather-icon {
+  font-size: 1.5em;
+}
+
+.weather-temp {
+  font-weight: var(--dt-weight-bold, 600);
+}
+
+.weather-desc {
+  opacity: 0.8;
+}
+
+/* ===== BrandBlock ===== */
+.brand-block {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--dt-spacing-sm, 8px);
+}
+
+.brand-logo {
+  max-width: 100%;
+  max-height: 60px;
+  object-fit: contain;
+}
+
+.brand-text {
+  font-size: var(--dt-font-notice, 14px);
+  opacity: 0.7;
+}
+
+/* ===== MainAvatarStage ===== */
+.main-avatar-stage {
+  width: 100%;
+  height: 100%;
+  /* 透明プレースホルダー - アバターはOBSの別レイヤー */
+}
+
+/* ===== ChannelBadge ===== */
+.channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dt-spacing-xs, 4px);
+  padding: var(--dt-spacing-xs, 4px) var(--dt-spacing-sm, 8px);
+  white-space: nowrap;
+}
+
+.channel-badge-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.channel-badge-label {
+  font-weight: var(--dt-weight-bold, 600);
+}
+
+/* ===== KPIBlock ===== */
+.kpi-block {
+  text-align: center;
+  padding: var(--dt-spacing-md, 12px);
+}
+
+.kpi-main {
+  font-size: var(--dt-font-kpi-main, 64px);
+  font-weight: var(--dt-weight-heavy, 700);
+  line-height: var(--dt-line-height-tight, 1.1);
+}
+
+.kpi-label {
+  font-size: var(--dt-font-notice, 14px);
+  opacity: 0.7;
+  margin-top: var(--dt-spacing-xs, 4px);
+}
+
+.kpi-sub {
+  font-size: var(--dt-font-kpi-sub, 28px);
+  font-weight: var(--dt-weight-bold, 600);
+  margin-top: var(--dt-spacing-sm, 8px);
+  opacity: 0.9;
+}
+
+.kpi-sub-label {
+  font-size: var(--dt-font-notice, 14px);
+  opacity: 0.6;
+}
+
+/* ===== PromoPanel ===== */
+.promo-panel {
+  padding: var(--dt-spacing-md, 12px);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.promo-content {
+  text-align: center;
+  font-size: var(--dt-font-promo, 20px);
+  transition: opacity var(--dt-transition-normal, 0.3s) var(--dt-easing, ease-out);
+}
+
+.promo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--dt-spacing-sm, 8px);
+}
+
+.promo-icon {
+  flex-shrink: 0;
+}
+
+.promo-text {
+  flex: 1;
+}
+
+/* ===== QueueList ===== */
+.queue-list {
+  padding: var(--dt-spacing-sm, 8px) var(--dt-spacing-md, 12px);
+}
+
+.queue-title {
+  font-weight: var(--dt-weight-bold, 600);
+  margin-bottom: var(--dt-spacing-sm, 8px);
+  font-size: var(--dt-font-notice, 14px);
+  opacity: 0.8;
+}
+
+.queue-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.queue-item {
+  padding: var(--dt-spacing-xs, 4px) 0;
+  font-size: var(--dt-font-setlist, 18px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item:first-child {
+  font-weight: var(--dt-weight-bold, 600);
+}
+
+.queue-item + .queue-item {
+  opacity: 0.8;
+}
+
+/* ===== 共通ユーティリティ ===== */
+
+/* 非表示 */
+.component-hidden {
+  display: none !important;
+}
+
+/* フェードイン */
+@keyframes component-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.component-fade-in {
+  animation: component-fade-in var(--dt-transition-normal, 0.3s) var(--dt-easing, ease-out);
+}
+
+/* フェードアウト */
+@keyframes component-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.component-fade-out {
+  animation: component-fade-out var(--dt-transition-normal, 0.3s) var(--dt-easing, ease-out);
+}

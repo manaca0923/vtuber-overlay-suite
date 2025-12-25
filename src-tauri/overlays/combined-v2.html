@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="shared/design-tokens.css">
   <!-- 3カラムレイアウト -->
   <link rel="stylesheet" href="shared/layout-v2.css">
+  <!-- コンポーネントスタイル -->
+  <link rel="stylesheet" href="styles/components.css">
   <style>
     /* combined-v2.html固有のスタイル */
     :root {
@@ -103,6 +105,21 @@
   <!-- 共通スクリプト -->
   <script src="shared/slots.js"></script>
   <script src="shared/comment-renderer.js?v=2"></script>
+
+  <!-- コンポーネントシステム -->
+  <script src="shared/component-registry.js"></script>
+  <script src="components/base-component.js"></script>
+
+  <!-- コンポーネント -->
+  <script src="components/clock-widget.js"></script>
+  <script src="components/weather-widget.js"></script>
+  <script src="components/brand-block.js"></script>
+  <script src="components/main-avatar-stage.js"></script>
+  <script src="components/channel-badge.js"></script>
+  <script src="components/kpi-block.js"></script>
+  <script src="components/promo-panel.js"></script>
+  <script src="components/queue-list.js"></script>
+
   <script>
     // 共通モジュールから関数を取得
     const {
@@ -397,6 +414,25 @@
               applySettingsUpdate(data.payload);
               applyUrlSettings();
               break;
+
+            // 新規コンポーネント用イベント
+            case 'kpi:update':
+              ComponentRegistry.broadcast('KPIBlock', data.payload);
+              break;
+            case 'queue:update':
+              ComponentRegistry.broadcast('QueueList', data.payload);
+              break;
+            case 'promo:update':
+              ComponentRegistry.broadcast('PromoPanel', data.payload);
+              break;
+            case 'weather:update':
+              ComponentRegistry.broadcast('WeatherWidget', data.payload);
+              break;
+            case 'template:update':
+              if (data.payload && data.payload.components) {
+                ComponentRegistry.applyTemplate(data.payload.components);
+              }
+              break;
           }
         } catch (e) {
           console.error('Failed to parse message:', e);
@@ -425,9 +461,42 @@
       }, 100);
     });
 
+    // ===== コンポーネント初期化 =====
+    function initDefaultComponents() {
+      // 左カラム
+      ComponentRegistry.mount('left.top', 'ClockWidget', {});
+      ComponentRegistry.mount('left.topBelow', 'WeatherWidget', {});
+      ComponentRegistry.mount('left.bottom', 'BrandBlock', {});
+
+      // 中央カラム
+      ComponentRegistry.mount('center.full', 'MainAvatarStage', {});
+
+      // 右カラム
+      ComponentRegistry.mount('right.top', 'ChannelBadge', { style: { label: 'LIVE' } });
+      ComponentRegistry.mount('right.lowerLeft', 'KPIBlock', {});
+      ComponentRegistry.mount('right.lowerRight', 'QueueList', { rules: { maxItems: 6 } });
+      ComponentRegistry.mount('right.bottom', 'PromoPanel', {});
+    }
+
+    // URLパラメータでコンポーネントを制御
+    function applyComponentSettings() {
+      const params = new URLSearchParams(window.location.search);
+
+      // 各コンポーネントの有効/無効
+      const componentsEnabled = params.get('components');
+      if (componentsEnabled === 'false') {
+        // コンポーネントを無効にする場合はスキップ
+        return;
+      }
+
+      // デフォルトコンポーネントを初期化
+      initDefaultComponents();
+    }
+
     // ===== 初期化 =====
     applyUrlSettings();
     fetchAndApplySettings();
+    applyComponentSettings();
     connectWebSocket();
   </script>
 </body>

@@ -660,7 +660,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T20 | ✅ 完了 | 2025-12-25 |
 | T21 | ✅ 完了 | 2025-12-25 |
 | T22 | ✅ 完了 | 2025-12-25 |
-| T23 | ⬜ 未着手 | - |
+| T23 | ✅ 完了 | 2025-12-25 |
 | T24 | ⬜ 未着手 | - |
 | T25 | ⬜ 未着手 | - |
 
@@ -1178,24 +1178,49 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T23: 新コンポーネント追加
 **優先度**: P2 | **見積**: 10日 | **依存**: T22
-**ステータス**: ⬜ **未着手**
+**ステータス**: ✅ **完了**（2025-12-25）
 
 ### 概要
-8個の新規コンポーネントを順次追加。
+8個の新規コンポーネントとコンポーネント管理システムを追加。
 
 ### チェックリスト
-- [ ] ClockWidget - 時刻/日付表示
-- [ ] WeatherWidget - 天気情報
-- [ ] BrandBlock - ロゴ
-- [ ] MainAvatarStage - 中央ステージ
-- [ ] ChannelBadge - チャンネルバッジ
-- [ ] KPIBlock - KPI数値
-- [ ] PromoPanel - 告知（cycle対応）
-- [ ] QueueList - 待機キュー
-- [ ] コンポーネント登録システム（component-registry.js）
+
+#### Phase 1: 基盤構築（完了）
+- [x] ComponentRegistry（共有モジュール）
+- [x] BaseComponent（基底クラス）
+- [x] components.css（コンポーネント固有スタイル）
+
+#### Phase 2: 静的コンポーネント（完了）
+- [x] ClockWidget - 時刻/日付表示
+- [x] WeatherWidget - 天気情報（スタブ）
+- [x] BrandBlock - ロゴ
+- [x] MainAvatarStage - 中央ステージ
+- [x] ChannelBadge - チャンネルバッジ
+
+#### Phase 3: 動的コンポーネント（完了）
+- [x] KPIBlock - KPI数値（スロットリング対応）
+- [x] PromoPanel - 告知（cycle対応）
+- [x] QueueList - 待機キュー（maxItems対応）
+
+#### Phase 4: 統合（完了）
+- [x] combined-v2.html統合（スクリプト読み込み、初期化、WSハンドラ）
+- [x] Rust側WSメッセージ追加（KpiUpdatePayload, QueueUpdatePayload, PromoUpdatePayload）
+- [x] ビルド確認
 
 ### 成果物
-- `src-tauri/overlays/components/*.js` - 各コンポーネント
+- `src-tauri/overlays/shared/component-registry.js` - コンポーネント管理
+- `src-tauri/overlays/components/base-component.js` - 基底クラス
+- `src-tauri/overlays/components/clock-widget.js` - 時計
+- `src-tauri/overlays/components/weather-widget.js` - 天気（スタブ）
+- `src-tauri/overlays/components/brand-block.js` - ロゴ
+- `src-tauri/overlays/components/main-avatar-stage.js` - 中央ステージ
+- `src-tauri/overlays/components/channel-badge.js` - バッジ
+- `src-tauri/overlays/components/kpi-block.js` - KPI
+- `src-tauri/overlays/components/promo-panel.js` - 告知
+- `src-tauri/overlays/components/queue-list.js` - 待機キュー
+- `src-tauri/overlays/styles/components.css` - コンポーネントスタイル
+- `src-tauri/overlays/combined-v2.html` - 統合（修正）
+- `src-tauri/src/server/types.rs` - WSメッセージ追加
 
 ---
 

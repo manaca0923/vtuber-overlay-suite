@@ -72,12 +72,13 @@
 
 ## 制約・前提
 
-1. **InnerTube優先**: 認証不要のInnerTube APIをメインで使用（安定性注意）
-2. **公式API対応**: YouTube Data API v3も利用可能（デバッグモード・API key必須）
-3. **OAuth回避（MVP）**: API key中心、OAuthはPhase 2
-4. **品質優先**: 「多いけど使われない」ではなく少数精鋭
+1. **gRPC優先**: gRPC Streaming（公式API）をメインで使用（安定性・低クォータ消費）
+2. **InnerTubeバックアップ**: 認証不要のInnerTube APIはバックアップとして利用可能
+3. **REST API互換**: YouTube Data API v3 ポーリングも利用可能（BYOK・互換モード）
+4. **OAuth回避（MVP）**: API key中心、OAuthはPhase 2
+5. **品質優先**: 「多いけど使われない」ではなく少数精鋭
 
-> **Note**: InnerTubeは非公式APIのため、YouTube側の仕様変更で動作しなくなる可能性があります。その場合は公式APIに切り替えてください。
+> **Note**: InnerTubeは非公式APIのため、YouTube側の仕様変更で動作しなくなる可能性があります。gRPC/REST APIをメインでご利用ください。
 
 ---
 

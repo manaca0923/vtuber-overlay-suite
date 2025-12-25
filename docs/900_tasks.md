@@ -1224,6 +1224,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 001_requirements.md: gRPC Streaming優先、InnerTube=バックアップに更新
   - 100_architecture.md: 技術スタック表とシステム構成図を更新
 
+### PR#53 追加レビュー対応③（2025-12-26）
+- [x] 中: start_polling（旧Official/REST）にも統合ポーラー停止処理を追加
+  - 3経路すべて（統合/InnerTube/Official）で相互排他が完成
+- [x] 低: 001_requirements.md制約・前提セクションをgRPC優先に統一
+  - line 75「InnerTube優先」→「gRPC優先」に修正
+- [x] 低: 100_architecture.mdシステム構成図をgRPC優先に統一
+  - line 49「YouTube InnerTube」→「YouTube API(gRPC)」に修正
+
 ---
 
 ## T23: 新コンポーネント追加

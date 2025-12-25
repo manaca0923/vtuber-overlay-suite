@@ -46,7 +46,7 @@
                     ▼               ▼               ▼
             ┌───────────┐   ┌───────────┐   ┌───────────┐
             │  YouTube  │   │    OBS    │   │  Browser  │
-            │ InnerTube │   │  Studio   │   │ (Preview) │
+            │ API(gRPC) │   │  Studio   │   │ (Preview) │
             └───────────┘   └───────────┘   └───────────┘
 ```
 

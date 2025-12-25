@@ -133,6 +133,21 @@ pub async fn start_polling(
     }
     get_innertube_running().store(false, Ordering::SeqCst);
 
+    // 相互排他: 統合ポーラーが動いていたら停止してUI通知
+    {
+        let poller = get_unified_poller().lock().await;
+        if poller.is_running() {
+            log::info!("Stopping unified polling (mutual exclusion)");
+            poller.stop().await;
+            // UI更新のためStopped通知を送信
+            if let Err(e) = app.emit("polling-event", PollingEvent::Stopped {
+                reason: "公式APIポーリングに切り替え".to_string(),
+            }) {
+                log::error!("Failed to emit stopped event: {}", e);
+            }
+        }
+    }
+
     // 新しいポーラーを作成（ロックの外で）
     let poller = ChatPoller::new(api_key);
 

@@ -743,6 +743,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - または`customCssUrl`パラメータで外部CSSファイルを読み込む方式
   - ユーザーがコメント欄の表示を自由にカスタマイズ可能に
 
+- [ ] **3カラムレイアウト比率のCSS実装** (PR#48)
+  - 現在: `--left-col: 22%`, `--center-col: 56%`, `--right-col: 22%` で定義
+  - 問題: gutter（24px）を含めると実際のコンテンツエリアが100%を超える可能性
+  - 対応: 実装時に `calc()` または `fr` 単位の使用を検討
+  - 対象ファイル: `src-tauri/overlays/shared/layout-v2.css`（実装時に作成）
+
+- [ ] **QueueListのmaxItems範囲の統一** (PR#48)
+  - 現在: TypeScript型定義で `maxItems: 6-20`、slot配置表で `QueueList: 3-10` と記述不整合
+  - 対応: 実装時にQueueList専用のクランプ範囲（3〜10）を追加するか、ドキュメントを統一
+  - 対象ファイル: `docs/300_overlay-specs.md`, `docs/400_data-models.md`, 実装コード
+
 - [ ] **オーバーレイのドラッグ自由配置機能**
   - プリセットレイアウトではなく、プレビュー画面上でドラッグ&ドロップで配置
   - 技術検討: react-rnd または react-draggable の使用

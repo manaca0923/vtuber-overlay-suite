@@ -292,11 +292,18 @@ export interface Song {
   updatedAt: string;
 }
 
+// Song.tags の型変換について:
+// - DB: TEXT (JSON array string)
+// - Rust → Frontend (Song): string | null (JSONシリアライズ済み)
+// - Frontend → Rust (CreateSongInput): string[] | null (配列)
+// - Rustがserde_json::to_string()でJSON化してDB保存
+// - Frontendは parseTags() 関数でパース
+
 export interface CreateSongInput {
   title: string;
   artist?: string | null;
   category?: string | null;
-  tags?: string[] | null;
+  tags?: string[] | null;  // 配列で渡す。Rust側でJSON文字列に変換
   duration_seconds?: number | null;  // snake_case (Tauriコマンド引数名)
   [key: string]: unknown;
 }

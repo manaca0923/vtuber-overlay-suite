@@ -11,6 +11,7 @@
 
 use super::api_key_manager::get_api_key_manager;
 use super::backoff::ExponentialBackoff;
+use super::db::save_comments_to_db;
 use super::errors::YouTubeError;
 use super::grpc::GrpcPoller;
 use super::innertube::InnerTubeClient;
@@ -435,48 +436,6 @@ async fn run_innertube_loop(
 
     log::info!("InnerTube polling loop ended");
     Ok(())
-}
-
-/// コメントをDBに保存
-///
-/// INSERT OR IGNOREで重複を無視し、既存レコードはスキップする
-async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
-    use uuid::Uuid;
-
-    for msg in messages {
-        let id = Uuid::new_v4().to_string();
-        let is_owner = if msg.is_owner { 1 } else { 0 };
-        let is_moderator = if msg.is_moderator { 1 } else { 0 };
-        let is_member = if msg.is_member { 1 } else { 0 };
-
-        // message_typeをJSON文字列に変換
-        let message_type_str = serde_json::to_string(&msg.message_type)
-            .unwrap_or_else(|_| r#"{"type":"text"}"#.to_string());
-
-        let result = sqlx::query!(
-            r#"INSERT OR IGNORE INTO comment_logs
-            (id, youtube_id, message, author_name, author_channel_id, author_image_url,
-             is_owner, is_moderator, is_member, message_type, published_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            id,
-            msg.id,
-            msg.message,
-            msg.author_name,
-            msg.author_channel_id,
-            msg.author_image_url,
-            is_owner,
-            is_moderator,
-            is_member,
-            message_type_str,
-            msg.published_at
-        )
-        .execute(pool)
-        .await;
-
-        if let Err(e) = result {
-            log::warn!("Failed to save comment to DB: {:?}", e);
-        }
-    }
 }
 
 #[cfg(test)]

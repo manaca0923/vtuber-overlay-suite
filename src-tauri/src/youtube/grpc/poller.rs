@@ -13,8 +13,8 @@ use crate::server::types::WsMessage;
 use crate::server::WebSocketState;
 use crate::youtube::api_key_manager::get_api_key_manager;
 use crate::youtube::backoff::ExponentialBackoff;
+use crate::youtube::db::save_comments_to_db;
 use crate::youtube::errors::YouTubeError;
-use crate::youtube::types::ChatMessage;
 use sqlx::SqlitePool;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -312,48 +312,6 @@ async fn run_grpc_stream(
     }
 
     Ok(())
-}
-
-/// コメントをDBに保存
-///
-/// INSERT OR IGNOREで重複を無視し、既存レコードはスキップする
-async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
-    use uuid::Uuid;
-
-    for msg in messages {
-        let id = Uuid::new_v4().to_string();
-        let is_owner = if msg.is_owner { 1 } else { 0 };
-        let is_moderator = if msg.is_moderator { 1 } else { 0 };
-        let is_member = if msg.is_member { 1 } else { 0 };
-
-        // message_typeをJSON文字列に変換
-        let message_type_str = serde_json::to_string(&msg.message_type)
-            .unwrap_or_else(|_| r#"{"type":"text"}"#.to_string());
-
-        let result = sqlx::query!(
-            r#"INSERT OR IGNORE INTO comment_logs
-            (id, youtube_id, message, author_name, author_channel_id, author_image_url,
-             is_owner, is_moderator, is_member, message_type, published_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            id,
-            msg.id,
-            msg.message,
-            msg.author_name,
-            msg.author_channel_id,
-            msg.author_image_url,
-            is_owner,
-            is_moderator,
-            is_member,
-            message_type_str,
-            msg.published_at
-        )
-        .execute(pool)
-        .await;
-
-        if let Err(e) = result {
-            log::warn!("Failed to save comment to DB: {:?}", e);
-        }
-    }
 }
 
 #[cfg(test)]

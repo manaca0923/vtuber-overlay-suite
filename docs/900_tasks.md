@@ -657,6 +657,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T14 | ✅ 完了 | 2025-12-21 |
 | T15 | ✅ 完了 | 2025-12-21 |
 | T16 | ✅ 完了 | 2025-12-23 |
+| T20 | ✅ 完了 | 2025-12-25 |
+| T21 | ⬜ 未着手 | - |
+| T22 | ⬜ 未着手 | - |
+| T23 | ⬜ 未着手 | - |
+| T24 | ⬜ 未着手 | - |
+| T25 | ⬜ 未着手 | - |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
@@ -698,6 +704,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `CommentPosition`: TopLeft, TopRight, BottomLeft, BottomRight
   - `SetlistPosition`: Top, Bottom, Left, Right
   - TypeScript側の型定義と一致（serde rename_allで変換）
+
+- [ ] **オーバーレイ共通ロジックの抽出** (PR#49)
+  - `combined.html`と`combined-v2.html`でJavaScriptロジックが重複（約300行）
+  - 将来的に`shared/overlay-core.js`への抽出を検討
+  - 対象ロジック:
+    - WebSocket接続管理
+    - 設定適用ロジック
+    - セットリスト更新処理
 
 ### 機能改善（中優先度）
 
@@ -1015,22 +1029,27 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T20: 3カラムレイアウト基盤
 **優先度**: P1 | **見積**: 5日 | **依存**: T08
-**ステータス**: ⬜ **未着手**
+**ステータス**: ✅ **完了**（2025-12-25）
 
 ### 概要
 既存オーバーレイシステムに3カラム固定レイアウト（22%/56%/22%）を追加。v1との後方互換性を維持。
 
 ### チェックリスト
-- [ ] CSS変数の拡張（overlay-common.css）
-- [ ] 3カラムHTML構造作成（combined-v2.html）
-- [ ] CSS Grid実装（layout-v2.css）
-- [ ] HTTPエンドポイント追加（/overlay/combined-v2）
-- [ ] v1/v2切替UI追加（LayoutPresetSelector.tsx）
+- [x] CSS変数の拡張（overlay-common.css）
+- [x] 3カラムHTML構造作成（combined-v2.html）
+- [x] CSS Grid実装（layout-v2.css）
+- [x] HTTPエンドポイント追加（/overlay/combined-v2）
+- [x] v1/v2切替UI追加（LayoutPresetSelector.tsx）
 
 ### 成果物
-- `src-tauri/overlays/combined-v2.html`
-- `src-tauri/overlays/shared/layout-v2.css`
-- `src-tauri/src/server/http.rs` - エンドポイント追加
+- `src-tauri/overlays/combined-v2.html` - 3カラム統合オーバーレイ（11個のslot構造）
+- `src-tauri/overlays/shared/layout-v2.css` - CSS Grid 3カラムレイアウト
+- `src-tauri/overlays/shared/overlay-common.css` - v2用CSS変数追加
+- `src-tauri/src/server/http.rs` - `/overlay/combined-v2`エンドポイント追加
+- `src-tauri/src/server/types.rs` - `LayoutPreset::ThreeColumn`追加
+- `src/types/overlaySettings.ts` - `three-column`プリセット追加
+- `src/components/settings/LayoutPresetSelector.tsx` - 3カラムプレビュー追加
+- `src/components/settings/OverlayPreview.tsx` - v2プレビューURL対応
 
 ---
 

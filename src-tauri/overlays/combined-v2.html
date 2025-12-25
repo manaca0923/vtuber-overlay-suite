@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3カラム統合オーバーレイ (v2)</title>
+  <!-- 共通スタイル -->
+  <link rel="stylesheet" href="shared/overlay-common.css">
+  <!-- 3カラムレイアウト -->
+  <link rel="stylesheet" href="shared/layout-v2.css">
+  <style>
+    /* combined-v2.html固有のスタイル */
+    :root {
+      --font-size-setlist: 24px;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 3カラムレイアウトルート -->
+  <div class="layout-root">
+    <!-- 左カラム -->
+    <div class="col-left">
+      <section id="slot-left-top">
+        <!-- 時刻ウィジェット（T21以降で実装） -->
+      </section>
+      <section id="slot-left-topBelow">
+        <!-- 天気ウィジェット（T21以降で実装） -->
+      </section>
+      <section id="slot-left-middle" class="clamp-box">
+        <!-- コメント表示 -->
+        <div class="comment-container" id="comment-container"></div>
+      </section>
+      <section id="slot-left-lower">
+        <!-- スーパーチャット（T21以降で実装） -->
+      </section>
+      <section id="slot-left-bottom">
+        <!-- ロゴ（T21以降で実装） -->
+      </section>
+    </div>
+
+    <!-- 中央カラム -->
+    <div class="col-center">
+      <section id="slot-center-full">
+        <!-- 主役ステージ（T21以降で実装） -->
+      </section>
+    </div>
+
+    <!-- 右カラム -->
+    <div class="col-right">
+      <section id="slot-right-top">
+        <!-- チャンネルバッジ（T21以降で実装） -->
+      </section>
+      <section id="slot-right-upper" class="clamp-box">
+        <!-- セットリスト表示 -->
+        <div class="setlist-container" id="setlist-container">
+          <div class="setlist-item" id="song-prev">
+            <span class="song-number">-</span>
+            <div class="song-info">
+              <div class="song-title">-</div>
+              <div class="song-artist"></div>
+            </div>
+          </div>
+          <div class="setlist-item current" id="song-current">
+            <span class="song-number">-</span>
+            <div class="song-info">
+              <div class="song-title">待機中...</div>
+              <div class="song-artist"></div>
+            </div>
+            <span class="song-status">NOW</span>
+          </div>
+          <div class="setlist-item" id="song-next">
+            <span class="song-number">-</span>
+            <div class="song-info">
+              <div class="song-title">-</div>
+              <div class="song-artist"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="right-lower-grid">
+        <section id="slot-right-lowerLeft">
+          <!-- KPI（T21以降で実装） -->
+        </section>
+        <section id="slot-right-lowerRight">
+          <!-- 待機キュー（T21以降で実装） -->
+        </section>
+      </div>
+      <section id="slot-right-bottom">
+        <!-- 告知（T21以降で実装） -->
+      </section>
+    </div>
+  </div>
+
+  <!-- 共通スクリプト -->
+  <script src="shared/comment-renderer.js?v=2"></script>
+  <script>
+    // 共通モジュールから関数を取得
+    const {
+      isValidHexColor,
+      isValidNumber,
+      sanitizeFontFamily,
+      createCommentElement,
+      removeCommentWithAnimation,
+      CommentQueueManager
+    } = window.CommentRenderer;
+
+    // ===== 設定 =====
+    let showAvatar = true;
+    let showArtist = true;
+    let commentEnabled = true;
+    let setlistEnabled = true;
+
+    const WS_URL = 'ws://localhost:19801/ws';
+    const API_BASE_URL = 'http://localhost:19800/api';
+    const SETTINGS_FETCH_TIMEOUT = 3000;
+
+    let ws = null;
+    let reconnectDelay = 1000;
+
+    // ===== URL/API設定適用 =====
+    function applyUrlSettings() {
+      const params = new URLSearchParams(window.location.search);
+      const root = document.documentElement;
+
+      const primaryColor = params.get('primaryColor');
+      if (primaryColor && isValidHexColor(primaryColor)) {
+        root.style.setProperty('--primary-color', primaryColor);
+      }
+
+      const fontFamily = params.get('fontFamily');
+      const sanitizedFont = sanitizeFontFamily(fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
+      }
+
+      const commentFontSize = params.get('commentFontSize');
+      if (commentFontSize && isValidNumber(commentFontSize, 8, 72)) {
+        root.style.setProperty('--font-size-message', commentFontSize + 'px');
+      }
+
+      const showAvatarParam = params.get('showAvatar');
+      if (showAvatarParam !== null) {
+        showAvatar = showAvatarParam === 'true';
+        updateAvatarVisibility();
+      }
+
+      const commentEnabledParam = params.get('commentEnabled');
+      if (commentEnabledParam !== null) {
+        commentEnabled = commentEnabledParam === 'true';
+        updateVisibility();
+      }
+
+      const setlistFontSize = params.get('setlistFontSize');
+      if (setlistFontSize && isValidNumber(setlistFontSize, 8, 72)) {
+        root.style.setProperty('--font-size-setlist', setlistFontSize + 'px');
+      }
+
+      const showArtistParam = params.get('showArtist');
+      if (showArtistParam !== null) {
+        showArtist = showArtistParam === 'true';
+        updateArtistVisibility();
+      }
+
+      const setlistEnabledParam = params.get('setlistEnabled');
+      if (setlistEnabledParam !== null) {
+        setlistEnabled = setlistEnabledParam === 'true';
+        updateVisibility();
+      }
+    }
+
+    function updateVisibility() {
+      const commentSlot = document.getElementById('slot-left-middle');
+      const setlistSlot = document.getElementById('slot-right-upper');
+      commentSlot.classList.toggle('hidden', !commentEnabled);
+      setlistSlot.classList.toggle('hidden', !setlistEnabled);
+    }
+
+    function updateAvatarVisibility() {
+      document.querySelectorAll('.avatar').forEach(avatar => {
+        avatar.style.display = showAvatar ? 'block' : 'none';
+      });
+    }
+
+    function updateArtistVisibility() {
+      document.querySelectorAll('.song-artist').forEach(artist => {
+        artist.style.display = showArtist ? 'block' : 'none';
+      });
+    }
+
+    // ===== WebSocket設定更新 =====
+    function applySettingsUpdate(settings) {
+      const root = document.documentElement;
+
+      if (settings.primaryColor && isValidHexColor(settings.primaryColor)) {
+        root.style.setProperty('--primary-color', settings.primaryColor);
+      }
+
+      const sanitizedFont = sanitizeFontFamily(settings.fontFamily);
+      if (sanitizedFont) {
+        root.style.setProperty('--font-family', sanitizedFont);
+      }
+
+      if (settings.comment) {
+        if (settings.comment.fontSize && isValidNumber(settings.comment.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-message', settings.comment.fontSize + 'px');
+        }
+        if (settings.comment.showAvatar !== undefined) {
+          showAvatar = settings.comment.showAvatar;
+          updateAvatarVisibility();
+        }
+        if (settings.comment.enabled !== undefined) {
+          commentEnabled = settings.comment.enabled;
+          updateVisibility();
+        }
+      }
+
+      if (settings.setlist) {
+        if (settings.setlist.fontSize && isValidNumber(settings.setlist.fontSize, 8, 72)) {
+          root.style.setProperty('--font-size-setlist', settings.setlist.fontSize + 'px');
+        }
+        if (settings.setlist.showArtist !== undefined) {
+          showArtist = settings.setlist.showArtist;
+          updateArtistVisibility();
+        }
+        if (settings.setlist.enabled !== undefined) {
+          setlistEnabled = settings.setlist.enabled;
+          updateVisibility();
+        }
+      }
+    }
+
+    // ===== コメント機能 =====
+    function trimOverflowingComments() {
+      const container = document.getElementById('comment-container');
+      const slot = document.getElementById('slot-left-middle');
+      const slotRect = slot.getBoundingClientRect();
+      const comments = Array.from(container.querySelectorAll('.comment:not(.removing)'));
+
+      comments.forEach(comment => {
+        const rect = comment.getBoundingClientRect();
+        if (rect.top < slotRect.top - 10) {
+          removeCommentWithAnimation(comment);
+        }
+      });
+    }
+
+    // コメントキュー初期化
+    const commentQueue = new CommentQueueManager({
+      onAddComment: (comment) => {
+        const container = document.getElementById('comment-container');
+        if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) return;
+
+        const el = createCommentElement(comment, showAvatar);
+        container.appendChild(el);
+
+        requestAnimationFrame(() => {
+          trimOverflowingComments();
+        });
+      }
+    });
+
+    // ===== セットリスト機能 =====
+    let currentSetlist = { songs: [], currentIndex: -1 };
+
+    function updateSetlist(data) {
+      currentSetlist = data;
+      const songs = data.songs || [];
+      const currentIndex = data.currentIndex ?? -1;
+
+      const prevEl = document.getElementById('song-prev');
+      const currentEl = document.getElementById('song-current');
+      const nextEl = document.getElementById('song-next');
+
+      if (currentIndex > 0) {
+        const prevSong = songs[currentIndex - 1];
+        prevEl.querySelector('.song-number').textContent = currentIndex;
+        prevEl.querySelector('.song-title').textContent = prevSong.title;
+        prevEl.querySelector('.song-artist').textContent = prevSong.artist || '';
+        prevEl.style.display = 'flex';
+      } else {
+        prevEl.style.display = 'none';
+      }
+
+      if (currentIndex >= 0 && currentIndex < songs.length) {
+        const currentSong = songs[currentIndex];
+        currentEl.querySelector('.song-number').textContent = currentIndex + 1;
+        currentEl.querySelector('.song-title').textContent = currentSong.title;
+        currentEl.querySelector('.song-artist').textContent = currentSong.artist || '';
+        currentEl.style.display = 'flex';
+      } else {
+        currentEl.querySelector('.song-number').textContent = '-';
+        currentEl.querySelector('.song-title').textContent = '待機中...';
+        currentEl.querySelector('.song-artist').textContent = '';
+      }
+
+      if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+        const nextSong = songs[currentIndex + 1];
+        nextEl.querySelector('.song-number').textContent = currentIndex + 2;
+        nextEl.querySelector('.song-title').textContent = nextSong.title;
+        nextEl.querySelector('.song-artist').textContent = nextSong.artist || '';
+        nextEl.style.display = 'flex';
+      } else {
+        nextEl.style.display = 'none';
+      }
+
+      updateArtistVisibility();
+    }
+
+    // ===== WebSocket接続 =====
+    let settingsVersion = 0;
+    let fetchInFlight = false;
+    let settingsFetchSucceeded = false;
+
+    async function fetchAndApplySettings() {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
+      const requestVersion = settingsVersion;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SETTINGS_FETCH_TIMEOUT);
+        const response = await fetch(`${API_BASE_URL}/overlay/settings`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const settings = await response.json();
+          if (settingsVersion > requestVersion) return;
+          applySettingsUpdate(settings);
+          applyUrlSettings();
+          settingsFetchSucceeded = true;
+        }
+      } catch (e) {
+        console.log('Settings API not available, using defaults');
+      } finally {
+        fetchInFlight = false;
+      }
+    }
+
+    async function fetchLatestSetlist() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/setlist/latest`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.songs) {
+            updateSetlist({
+              songs: data.songs.map(s => ({ title: s.title, artist: s.artist })),
+              currentIndex: data.setlist.currentIndex
+            });
+          }
+        }
+      } catch (e) {
+        console.log('Failed to fetch setlist');
+      }
+    }
+
+    function connectWebSocket() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        reconnectDelay = 1000;
+        if (!settingsFetchSucceeded) {
+          fetchAndApplySettings();
+        }
+        fetchLatestSetlist();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          switch (data.type) {
+            case 'comment:add':
+              commentQueue.queue(data.payload);
+              break;
+            case 'comment:remove':
+              const el = document.querySelector(`[data-id="${CSS.escape(data.payload?.id)}"]`);
+              if (el) removeCommentWithAnimation(el);
+              break;
+            case 'setlist:update':
+              updateSetlist({
+                songs: data.payload.songs.map(s => ({ title: s.title, artist: s.artist })),
+                currentIndex: data.payload.currentIndex
+              });
+              break;
+            case 'settings:update':
+              settingsVersion++;
+              applySettingsUpdate(data.payload);
+              applyUrlSettings();
+              break;
+          }
+        } catch (e) {
+          console.error('Failed to parse message:', e);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket closed, reconnecting...');
+        setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+          connectWebSocket();
+        }, reconnectDelay);
+      };
+    }
+
+    // ===== ウィンドウリサイズ =====
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        trimOverflowingComments();
+      }, 100);
+    });
+
+    // ===== 初期化 =====
+    applyUrlSettings();
+    fetchAndApplySettings();
+    connectWebSocket();
+  </script>
+</body>
+
+</html>

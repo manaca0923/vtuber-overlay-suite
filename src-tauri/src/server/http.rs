@@ -40,6 +40,7 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         .route("/overlay/comment", get(overlay_comment))
         .route("/overlay/setlist", get(overlay_setlist))
         .route("/overlay/combined", get(overlay_combined))
+        .route("/overlay/combined-v2", get(overlay_combined_v2))
         .nest_service("/overlay/shared", serve_shared)
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -101,6 +102,21 @@ async fn overlay_combined(State(state): State<HttpState>) -> impl IntoResponse {
         Ok(content) => Html(content).into_response(),
         Err(e) => {
             log::error!("Failed to read combined.html from {:?}: {}", path, e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load overlay".to_string(),
+            ).into_response()
+        }
+    }
+}
+
+/// 3カラム統合オーバーレイHTML v2（22%/56%/22%固定レイアウト）
+async fn overlay_combined_v2(State(state): State<HttpState>) -> impl IntoResponse {
+    let path = state.overlays_dir.join("combined-v2.html");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Html(content).into_response(),
+        Err(e) => {
+            log::error!("Failed to read combined-v2.html from {:?}: {}", path, e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to load overlay".to_string(),
@@ -329,6 +345,7 @@ fn parse_layout_preset(s: &str) -> LayoutPreset {
         "music" => LayoutPreset::Music,
         "gaming" => LayoutPreset::Gaming,
         "custom" => LayoutPreset::Custom,
+        "three-column" => LayoutPreset::ThreeColumn,
         _ => LayoutPreset::Streaming, // デフォルト
     }
 }

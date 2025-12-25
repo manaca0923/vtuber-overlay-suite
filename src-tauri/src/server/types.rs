@@ -97,13 +97,15 @@ pub enum SetlistPosition {
 
 /// レイアウトプリセット
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum LayoutPreset {
     Streaming,
     Talk,
     Music,
     Gaming,
     Custom,
+    #[serde(rename = "three-column")]
+    ThreeColumn,
 }
 
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除

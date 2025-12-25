@@ -16,6 +16,17 @@
   --animation-duration: 0.3s;
   --animation-easing: ease-out;
   --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+
+  /* ===== 3カラムレイアウト用CSS変数（v2） ===== */
+  --gutter: 24px;
+  --safe-top: 4vh;
+  --safe-right: 4vw;
+  --safe-bottom: 5vh;
+  --safe-left: 4vw;
+  --row-gap: 16px;
+  --radius: 14px;
+  --panel-bg: rgba(0, 0, 0, 0.25);
+  --panel-blur: 10px;
 }
 
 /* ===== リセット ===== */

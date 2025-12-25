@@ -1055,16 +1055,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T21: slot・Design Token整備
 **優先度**: P1 | **見積**: 3日 | **依存**: T20
-**ステータス**: ⬜ **未着手**
+**ステータス**: ✅ **完了**
 
 ### 概要
 11個のslot配置システムとCSS変数によるDesign Token。
 
 ### チェックリスト
-- [ ] slot管理JavaScript作成（slots.js）
-- [ ] Design Token CSS作成（design-tokens.css）
-- [ ] TypeScript slot型定義（slot.ts）
-- [ ] Rust SlotId列挙型追加（server/types.rs）
+- [x] slot管理JavaScript作成（slots.js）
+- [x] Design Token CSS作成（design-tokens.css）
+- [x] TypeScript slot型定義（slot.ts）
+- [x] Rust SlotId列挙型追加（server/types.rs）
 
 ### slot定義（11個）
 | slot | 役割 |
@@ -1080,6 +1080,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | right.lowerLeft | KPI |
 | right.lowerRight | 短冊 |
 | right.bottom | 告知 |
+
+### 成果物
+- `src-tauri/overlays/shared/slots.js` - slot管理モジュール（SlotManager API）
+- `src-tauri/overlays/shared/design-tokens.css` - Design Token CSS変数
+- `src/types/slot.ts` - TypeScript slot型定義
+- `src-tauri/src/server/types.rs` - SlotId列挙型追加
 
 ---
 

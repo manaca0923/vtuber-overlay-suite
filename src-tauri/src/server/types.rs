@@ -126,3 +126,31 @@ pub struct SetlistSettingsPayload {
     pub show_artist: bool,
     pub font_size: u32,
 }
+
+/// slot ID（3カラムレイアウト v2）
+/// 11個のslot配置システム
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SlotId {
+    #[serde(rename = "left.top")]
+    LeftTop,
+    #[serde(rename = "left.topBelow")]
+    LeftTopBelow,
+    #[serde(rename = "left.middle")]
+    LeftMiddle,
+    #[serde(rename = "left.lower")]
+    LeftLower,
+    #[serde(rename = "left.bottom")]
+    LeftBottom,
+    #[serde(rename = "center.full")]
+    CenterFull,
+    #[serde(rename = "right.top")]
+    RightTop,
+    #[serde(rename = "right.upper")]
+    RightUpper,
+    #[serde(rename = "right.lowerLeft")]
+    RightLowerLeft,
+    #[serde(rename = "right.lowerRight")]
+    RightLowerRight,
+    #[serde(rename = "right.bottom")]
+    RightBottom,
+}

@@ -1,0 +1,144 @@
+/**
+ * Design Tokens（テーマ・タイポグラフィ）
+ * JSONテンプレート設定からのマッピング先
+ *
+ * 参照: docs/3カラム_要件仕様書_追記版_v1.1.md
+ * - 9. 推奨フォントサイズ表（1920x1080基準）
+ * - 15. Design Token（JSON → CSS変数マッピング）
+ */
+
+:root {
+  /* ===== カラー ===== */
+  --dt-text-primary: #ffffff;
+  --dt-text-secondary: rgba(255, 255, 255, 0.7);
+  --dt-accent: var(--primary-color, #6366f1);
+
+  /* ===== タイポグラフィ（1920x1080基準） ===== */
+  /* Clock（時刻） - 推奨: 64〜80px */
+  --dt-font-clock-time: 64px;
+  /* Clock（日付） - 推奨: 22〜26px */
+  --dt-font-clock-date: 24px;
+  /* Weather - 推奨: 20〜24px */
+  --dt-font-weather: 22px;
+  /* Chat（名前） - 推奨: 20〜24px */
+  --dt-font-chat-name: 22px;
+  /* Chat（本文） - 推奨: 20〜24px */
+  --dt-font-chat-message: 22px;
+  /* SuperChat（金額） - 推奨: 28〜36px */
+  --dt-font-superchat-amount: 32px;
+  /* SetList - 推奨: 18〜24px */
+  --dt-font-setlist: 20px;
+  /* KPI（主数字） - 推奨: 56〜72px */
+  --dt-font-kpi-main: 64px;
+  /* KPI（副数字） - 推奨: 24〜32px */
+  --dt-font-kpi-sub: 28px;
+  /* Promo - 推奨: 18〜28px */
+  --dt-font-promo: 22px;
+  /* Notice - 推奨: 14〜16px */
+  --dt-font-notice: 15px;
+
+  /* ===== フォントウェイト ===== */
+  --dt-weight-normal: 500;
+  --dt-weight-bold: 600;
+  --dt-weight-heavy: 700;
+
+  /* ===== 行間 ===== */
+  --dt-line-height-tight: 1.2;
+  --dt-line-height-normal: 1.4;
+  --dt-line-height-relaxed: 1.6;
+
+  /* ===== 影（標準） ===== */
+  /* shadow: blur 8 / opacity 0.55 / offset 2,2 */
+  --dt-shadow-blur: 8px;
+  --dt-shadow-opacity: 0.55;
+  --dt-shadow-offset-x: 2px;
+  --dt-shadow-offset-y: 2px;
+  --dt-shadow:
+    var(--dt-shadow-offset-x)
+    var(--dt-shadow-offset-y)
+    var(--dt-shadow-blur)
+    rgba(0, 0, 0, var(--dt-shadow-opacity));
+
+  /* ===== アウトライン（標準） ===== */
+  /* outline: 2px / rgba(0,0,0,0.55) */
+  --dt-outline-width: 2px;
+  --dt-outline-color: rgba(0, 0, 0, 0.55);
+
+  /* ===== アニメーション ===== */
+  --dt-transition-fast: 150ms;
+  --dt-transition-normal: 300ms;
+  --dt-transition-slow: 500ms;
+  --dt-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ===== スペーシング ===== */
+  --dt-spacing-xs: 4px;
+  --dt-spacing-sm: 8px;
+  --dt-spacing-md: 12px;
+  --dt-spacing-lg: 16px;
+  --dt-spacing-xl: 24px;
+
+  /* ===== クランプ規約（14. クランプ規約） ===== */
+  /* offsetX/Y: -40〜+40 */
+  --dt-clamp-offset-min: -40px;
+  --dt-clamp-offset-max: 40px;
+  /* maxLines: 4〜14 */
+  --dt-clamp-max-lines-min: 4;
+  --dt-clamp-max-lines-max: 14;
+  --dt-clamp-max-lines-default: 10;
+  /* maxItems: 6〜20 */
+  --dt-clamp-max-items-min: 6;
+  --dt-clamp-max-items-max: 20;
+  --dt-clamp-max-items-default: 14;
+  /* cycleSec: 10〜120 */
+  --dt-clamp-cycle-sec-min: 10;
+  --dt-clamp-cycle-sec-max: 120;
+  --dt-clamp-cycle-sec-default: 30;
+  /* showSec: 3〜15 */
+  --dt-clamp-show-sec-min: 3;
+  --dt-clamp-show-sec-max: 15;
+  --dt-clamp-show-sec-default: 6;
+}
+
+/* ===== テキスト影ユーティリティ ===== */
+.dt-text-shadow {
+  text-shadow: var(--dt-shadow);
+}
+
+/* ===== テキストアウトラインユーティリティ ===== */
+.dt-text-outline {
+  -webkit-text-stroke: var(--dt-outline-width) var(--dt-outline-color);
+  paint-order: stroke fill;
+}
+
+/* ===== 省略表示ユーティリティ ===== */
+.dt-ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ===== 行数制限ユーティリティ ===== */
+.dt-line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dt-line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===== フェードユーティリティ（オーバーフロー時） ===== */
+.dt-fade-bottom {
+  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+}
+
+.dt-fade-top {
+  mask-image: linear-gradient(to top, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to top, black 80%, transparent 100%);
+}

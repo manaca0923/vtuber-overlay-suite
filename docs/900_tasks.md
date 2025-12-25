@@ -1119,9 +1119,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### 成果物
 - `src-tauri/schemas/template-mvp-1.0.json` - テンプレートJSON Schema
-- `src/types/template.ts` - TypeScript型定義・クランプ関数
-- `src-tauri/src/server/template_types.rs` - Rust型定義・クランプ関数
-- `src-tauri/src/commands/template.rs` - テンプレート検証コマンド
+- `src/types/template.ts` - TypeScript型定義・クランプ関数（themeクランプ含む）
+- `src-tauri/src/server/template_types.rs` - Rust型定義・クランプ関数（layout_type検証含む）
+- `src-tauri/src/commands/template.rs` - テンプレート検証コマンド（ID重複チェック含む）
+
+### PRレビュー対応（2025-12-25）
+- [x] TypeScript側themeクランプ実装（panel/shadow/outline）
+- [x] Rust側layout_type検証（"threeColumn"に強制）
+- [x] コンポーネントID一意性チェック（TypeScript/Rust両方）
+- [x] clampOffsetX/clampOffsetYに整数丸め処理追加
+- [x] DEFAULT_TEMPLATEの空components配列についてコメント追加
 
 ---
 

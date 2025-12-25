@@ -728,6 +728,31 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: JSON SchemaからTypeScript型を自動生成、またはビルド時の検証スクリプト追加を検討
   - 優先度: 低（現時点では手動同期で問題なし）
 
+- [ ] **layout_type の検証がない** (PR#51)
+  - 現在: `layout_type`は"threeColumn"固定だが、バリデーションで検証されていない
+  - 対応: 将来のレイアウトタイプ拡張を見越してenumにするか検証を追加
+  - 対象ファイル: `src-tauri/src/server/template_types.rs`
+  - 優先度: 低
+
+- [ ] **コンポーネントIDの一意性チェック** (PR#51)
+  - 現在: slot重複チェックはあるが、コンポーネントIDの重複チェックがない
+  - 対応: IDが一意であることを期待している場合は検証を追加
+  - 対象ファイル: `src-tauri/src/commands/template.rs`
+  - 優先度: 低
+
+- [ ] **slotIdの型安全性** (PR#50)
+  - 現在: `toSlotId`/`cssIdToSlotId`の正規表現の意図が曖昧
+  - 問題: 複数のハイフンを含むslot IDの変換が不確実
+  - 対応: 非貪欲マッチ `(.+?)` を使うか、column名を明示的にリストアップ
+  - 対象ファイル: `src-tauri/overlays/shared/slots.js`, `src/types/slot.ts`
+  - 優先度: 低
+
+- [ ] **SLOT定義の単一ソース化** (PR#50)
+  - 現在: slot定義が3箇所（Rust, TypeScript, JavaScript）に分散
+  - 対応: JSONスキーマから各言語のコードを自動生成、またはTypeScriptをsingle source of truthに
+  - 対象ファイル: `src-tauri/src/server/types.rs`, `src/types/slot.ts`, `src-tauri/overlays/shared/slots.js`
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 - [ ] **テンプレートstyleフィールドのXSS考慮** (PR#51)

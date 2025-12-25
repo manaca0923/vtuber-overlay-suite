@@ -713,6 +713,28 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 設定適用ロジック
     - セットリスト更新処理
 
+- [ ] **layout-v2.cssのセットリストスタイル重複** (PR#49)
+  - `layout-v2.css:112-166`と`combined.html`のスタイル定義（`.setlist-item`等）が重複
+  - 将来的に`shared/setlist-styles.css`への統合を検討
+  - 優先度: 低
+
+- [ ] **JSON Schema の `$id` URL更新** (PR#51)
+  - 現在: `https://example.local/...`
+  - 対応: 本番リリース前に実際のプロジェクトURLに更新、または相対パス（`./template-mvp-1.0.json`）に変更
+  - 対象ファイル: `src-tauri/schemas/template-mvp-1.0.json`
+
+- [ ] **コンポーネントタイプの同期維持** (PR#51)
+  - 現在: RustとTypeScriptで`ComponentType`の列挙型が手動で同期
+  - 対応: JSON SchemaからTypeScript型を自動生成、またはビルド時の検証スクリプト追加を検討
+  - 優先度: 低（現時点では手動同期で問題なし）
+
+### セキュリティ（将来課題）
+
+- [ ] **テンプレートstyleフィールドのXSS考慮** (PR#51)
+  - 現在: `style`フィールドが`serde_json::Value`で定義されており任意のJSONを受け入れる
+  - 対応: 将来的にXSS等のセキュリティ考慮が必要になる可能性
+  - 対象ファイル: `src-tauri/src/server/template_types.rs`
+
 ### 機能改善（中優先度）
 
 - [x] **スーパーチャット金額別色分け** (PR#7, PR#28で対応済み)
@@ -792,12 +814,29 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 将来: 為替レートAPIからの取得、または設定で変更可能に
   - 優先度: 低
 
+- [ ] **レイアウト比率の合計チェックUI** (PR#51)
+  - 現在: レイアウト比率の合計が1.0から離れている場合はwarningログのみ
+  - 対応: 将来的にユーザーへのフィードバックとして合計値を表示することを検討
+  - 優先度: 低
+
+- [ ] **useBundledKey状態の永続化** (PR#40)
+  - 現在: `useBundledKey`はローカルステートのみで管理、アプリ再起動時にリセット
+  - 対応: `apiMode`と同様にDBに保存することを検討
+  - 対象ファイル: `src/components/CommentControlPanel.tsx`
+  - 優先度: 低
+
 ### パフォーマンス
 
 - [ ] **オーバーレイパフォーマンステスト** (PR#19)
   - MAX_COMMENTSを10→30に増加済み
   - OBSブラウザソースでの長時間使用テスト
   - 低スペックマシンでの動作確認
+
+- [ ] **絵文字キャッシュのサイズ制限** (PR#24)
+  - 現在: `EMOJI_CACHE`（RwLock<HashMap>）はサイズ制限なし
+  - 問題: 長時間運用時にメモリが増加し続ける可能性
+  - 対応: LRUキャッシュに置き換えるか、上限を設定
+  - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
 - [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
@@ -815,6 +854,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - WebSocket接続テスト
   - メッセージ送受信テスト
   - 複数クライアント同時接続テスト
+
+- [ ] **TypeScript側のテンプレートバリデーションテスト** (PR#51)
+  - Rust側にはテストがあるが、TypeScript側の`hasSlotDuplicates`と`hasIdDuplicates`関数のテストがない
+  - 対応: Vitest/Jestなどでユニットテストを追加
+  - 対象ファイル: `src/types/template.ts`
 
 ### ドキュメント
 

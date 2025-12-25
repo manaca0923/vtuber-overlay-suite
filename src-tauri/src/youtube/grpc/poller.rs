@@ -237,17 +237,19 @@ async fn run_grpc_stream(
                     message_count += messages.len() as u64;
 
                     if !messages.is_empty() {
+                        let broadcast_count = messages.len();
+
                         // Emit to frontend via Tauri event
                         let _ = app_handle.emit("chat-messages", &messages);
 
                         // Broadcast to WebSocket clients (for overlays)
                         let state = app_handle.state::<AppState>();
                         let server_state = state.server.read().await;
-                        for msg in messages.clone() {
-                            let _ = server_state.broadcast(WsMessage::CommentAdd { payload: msg });
+                        for msg in messages {
+                            server_state.broadcast(WsMessage::CommentAdd { payload: msg }).await;
                         }
 
-                        log::debug!("Broadcast {} chat messages (total: {})", messages.len(), message_count);
+                        log::info!("Broadcast {} chat messages to WebSocket (total: {})", broadcast_count, message_count);
                     }
                 }
                 Some(Err(status)) => {

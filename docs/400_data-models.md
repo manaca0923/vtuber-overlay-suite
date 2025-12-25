@@ -286,7 +286,7 @@ export interface Song {
   title: string;
   artist: string | null;
   category: string | null;
-  tags: string[];
+  tags: string | null;  // JSON array from Rust (要パース)
   durationSeconds: number | null;
   createdAt: string;
   updatedAt: string;
@@ -294,19 +294,15 @@ export interface Song {
 
 export interface CreateSongInput {
   title: string;
-  artist?: string;
-  category?: string;
-  tags?: string[];
-  durationSeconds?: number;
-}
-
-export interface UpdateSongInput {
-  id: string;
-  title?: string;
   artist?: string | null;
   category?: string | null;
-  tags?: string[];
-  durationSeconds?: number | null;
+  tags?: string[] | null;
+  duration_seconds?: number | null;  // snake_case (Tauriコマンド引数名)
+  [key: string]: unknown;
+}
+
+export interface UpdateSongInput extends CreateSongInput {
+  id: string;
 }
 ```
 
@@ -371,8 +367,8 @@ export interface ChatMessage {
 
 export type MessageType =
   | { type: 'text' }
-  | { type: 'superchat'; amount: string; currency: string }
-  | { type: 'supersticker'; stickerId: string }
+  | { type: 'superChat'; amount: string; currency: string }
+  | { type: 'superSticker'; stickerId: string }
   | { type: 'membership'; level: string }
   | { type: 'membershipGift'; count: number };
 

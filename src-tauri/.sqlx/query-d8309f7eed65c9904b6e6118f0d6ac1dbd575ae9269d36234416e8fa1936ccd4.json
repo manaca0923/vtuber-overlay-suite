@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE songs\n         SET title = COALESCE(?, title),\n             artist = ?,\n             category = ?,\n             tags = ?,\n             duration_seconds = ?,\n             updated_at = ?\n         WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "d8309f7eed65c9904b6e6118f0d6ac1dbd575ae9269d36234416e8fa1936ccd4"
+}

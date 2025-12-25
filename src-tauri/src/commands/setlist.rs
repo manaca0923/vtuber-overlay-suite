@@ -110,13 +110,15 @@ pub async fn update_song(
         None => None,
     };
 
+    // titleのみCOALESCEを使用（必須フィールド）
+    // 他のオプショナルフィールドは直接設定（NULL許可=クリア可能）
     sqlx::query!(
         "UPDATE songs
          SET title = COALESCE(?, title),
-             artist = COALESCE(?, artist),
-             category = COALESCE(?, category),
-             tags = COALESCE(?, tags),
-             duration_seconds = COALESCE(?, duration_seconds),
+             artist = ?,
+             category = ?,
+             tags = ?,
+             duration_seconds = ?,
              updated_at = ?
          WHERE id = ?",
         title,

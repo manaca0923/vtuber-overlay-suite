@@ -1032,6 +1032,31 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [ ] 再接続テスト（ネットワーク断）（手動テスト）
 - [x] `docs/200_youtube-api.md` 更新 ✅ 2025-12-23
 
+### PRレビュー対応（2025-12-25）
+
+- [x] **統合ポーラーにWS/DB連携を追加** (PR#52レビュー)
+  - 統合ポーラー（InnerTube/gRPC両方）からのコメントがWebSocketブロードキャストとSQLite保存されるよう修正
+  - `unified_poller.rs`に`server_state`と`db_pool`パラメータを追加
+  - `grpc/poller.rs`にDB保存処理を追加
+
+- [x] **「続きから開始」ボタンの非表示化** (PR#52レビュー)
+  - 統合ポーラーが保存状態復元をサポートするまでUIを非表示
+  - `CommentControlPanel.tsx`でボタンセクションをコメントアウト
+
+- [x] **楽曲編集でフィールドをクリア可能に** (PR#52レビュー)
+  - `setlist.rs`のCOALESCEを削除し、オプショナルフィールドのクリアを許可
+  - `SongForm.tsx`で空文字列を`null`として送信
+  - `song.ts`の型定義を`null`許容に更新
+
+- [x] **ドキュメント整合性修正** (PR#52レビュー)
+  - `docs/400_data-models.md`: MessageType表記をcamelCaseに修正（superChat, superSticker）
+  - `docs/400_data-models.md`: Song.tags型を`string | null`に修正
+  - `docs/200_youtube-api.md`: gRPC優先・InnerTubeバックアップ方針に更新
+
+- [x] **console.log整理（comment.html）** (PR#52レビュー)
+  - 本番オーバーレイ用にデバッグログを削除
+  - エラーハンドリングはコメントで説明
+
 ### 技術的負債（次イテレーションで対応予定）
 
 以下はPR#40レビューで指摘された改善項目。機能実装完了後に対応予定。

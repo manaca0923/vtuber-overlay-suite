@@ -244,7 +244,6 @@
     async function fetchAndApplySettings() {
       if (fetchInFlight) {
         retryPending = true;
-        console.log('Settings fetch already in flight, will retry after');
         return;
       }
       fetchInFlight = true;
@@ -263,25 +262,19 @@
         if (response.ok) {
           const settings = await response.json();
           if (settingsVersion > requestVersion) {
-            console.log('Skipping HTTP settings (newer WS settings already applied)');
+            // 新しいWS設定が適用済みのためスキップ
             return;
           }
-          console.log('Fetched overlay settings:', settings);
           applySettingsUpdate(settings);
           applyUrlSettings();
           settingsFetchSucceeded = true;
         }
       } catch (e) {
-        if (e.name === 'AbortError') {
-          console.log('Settings API timeout, using defaults');
-        } else {
-          console.log('Settings API not available, using defaults');
-        }
+        // 設定API未起動時はデフォルト設定を使用（エラーログ不要）
       } finally {
         fetchInFlight = false;
         if (retryPending && !settingsFetchSucceeded) {
           retryPending = false;
-          console.log('Retrying settings fetch');
           fetchAndApplySettings();
         }
       }
@@ -314,7 +307,6 @@
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
         reconnectDelay = 1000;
         if (!isFirstConnection || !settingsFetchSucceeded) {
           fetchAndApplySettings();
@@ -335,16 +327,15 @@
             applyUrlSettings();
           }
         } catch (e) {
-          console.error('Failed to parse message:', e);
+          // JSONパースエラー（通常発生しない）
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      ws.onerror = () => {
+        // 接続エラー時は自動再接続（oncloseで処理）
       };
 
       ws.onclose = () => {
-        console.log('WebSocket closed, reconnecting...');
         setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, 30000);
           connectWebSocket();

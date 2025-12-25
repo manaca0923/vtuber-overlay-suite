@@ -1067,6 +1067,12 @@ fn get_unified_poller() -> &'static Arc<TokioMutex<UnifiedPoller>> {
 ///
 /// 3つのモード（InnerTube / Official / gRPC）のいずれかでポーリングを開始する。
 /// 既存のポーリングは自動的に停止される。
+///
+/// ## WS/DB連携
+/// 取得したコメントは以下の経路で配信される：
+/// 1. Tauriイベント（chat-messages）→ フロントエンドUI
+/// 2. WebSocketブロードキャスト（comment:add）→ OBSオーバーレイ
+/// 3. SQLite保存 → コメントログ
 #[tauri::command]
 pub async fn start_unified_polling(
     video_id: String,
@@ -1074,6 +1080,7 @@ pub async fn start_unified_polling(
     use_bundled_key: bool,
     user_api_key: Option<String>,
     app: AppHandle,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     log::info!(
         "Starting unified polling: mode={:?}, video_id={}, use_bundled_key={}",
@@ -1084,8 +1091,12 @@ pub async fn start_unified_polling(
 
     let poller = get_unified_poller().lock().await;
 
+    // AppStateからDBプールとWebSocketサーバー状態を取得
+    let db_pool = state.db.clone();
+    let server_state = std::sync::Arc::clone(&state.server);
+
     poller
-        .start(video_id, mode, use_bundled_key, user_api_key, app)
+        .start(video_id, mode, use_bundled_key, user_api_key, app, db_pool, server_state)
         .await
         .map_err(|e| format!("{}", e))
 }

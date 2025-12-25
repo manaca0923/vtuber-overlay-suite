@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO comment_logs\n            (id, youtube_id, message, author_name, author_channel_id, author_image_url,\n             is_owner, is_moderator, is_member, message_type, published_at)\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "459779bed9eb996fec4093e8811e83f5f0d69dfb03c40c62349cc5fdb12a8f3d"
+}

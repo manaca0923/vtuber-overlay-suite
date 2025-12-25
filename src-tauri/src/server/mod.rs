@@ -1,11 +1,11 @@
 mod http;
 pub mod template_types;
 pub mod types;
-mod websocket;
+pub mod websocket;
 
 pub use http::start_http_server_with_db;
 pub use types::ServerState;
-pub use websocket::start_websocket_server;
+pub use websocket::{start_websocket_server, WebSocketState};
 
 use std::sync::Arc;
 use tokio::sync::RwLock;

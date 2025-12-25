@@ -845,6 +845,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: LRUキャッシュに置き換えるか、上限を設定
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
+- [ ] **DensityManagerの定期クリーンアップ** (PR#54)
+  - 現在: `recordUpdate()`呼び出し時のみ古いエントリを除去
+  - 問題: 更新が止まった場合に履歴が残り続ける可能性
+  - 対応: 定期的なクリーンアップタイマー、または`windowMs`を超えたエントリの自動削除
+  - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
+  - 優先度: 低（現時点では配列サイズは最大で閾値程度に収まる）
+
 - [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ

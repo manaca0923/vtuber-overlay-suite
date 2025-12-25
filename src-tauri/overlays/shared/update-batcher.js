@@ -67,11 +67,12 @@
       if (this.pendingUpdates.size === 0) return;
 
       // バッチ処理: 全更新を1フレームで適用
-      this.pendingUpdates.forEach((data, type) => {
-        if (typeof ComponentRegistry !== 'undefined') {
+      // ComponentRegistryの存在チェックはループ外で1回のみ実行
+      if (typeof ComponentRegistry !== 'undefined') {
+        this.pendingUpdates.forEach((data, type) => {
           ComponentRegistry.broadcast(type, data);
-        }
-      });
+        });
+      }
 
       this.pendingUpdates.clear();
     }

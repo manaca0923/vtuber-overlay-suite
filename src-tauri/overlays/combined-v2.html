@@ -106,6 +106,11 @@
   <script src="shared/slots.js"></script>
   <script src="shared/comment-renderer.js?v=2"></script>
 
+  <!-- パフォーマンス最適化モジュール（T24） -->
+  <script src="shared/clamp-constants.js"></script>
+  <script src="shared/update-batcher.js"></script>
+  <script src="shared/density-manager.js"></script>
+
   <!-- コンポーネントシステム（base-component.jsは他のコンポーネントが継承するため先に読み込む） -->
   <script src="components/base-component.js"></script>
   <script src="shared/component-registry.js"></script>
@@ -143,6 +148,10 @@
 
     let ws = null;
     let reconnectDelay = 1000;
+
+    // パフォーマンス最適化（T24）: バッチ更新と過密検出
+    const updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+    const densityManager = new DensityManager();
 
     // ===== URL/API設定適用 =====
     function applyUrlSettings() {
@@ -415,18 +424,24 @@
               applyUrlSettings();
               break;
 
-            // 新規コンポーネント用イベント
+            // 新規コンポーネント用イベント（T24: バッチ更新 + 過密検出）
             case 'kpi:update':
-              ComponentRegistry.broadcast('KPIBlock', data.payload);
+              updateBatcher.queue('KPIBlock', data.payload);
+              densityManager.recordUpdate('right.lowerLeft');
               break;
             case 'queue:update':
-              ComponentRegistry.broadcast('QueueList', data.payload);
+              updateBatcher.queue('QueueList', data.payload);
+              densityManager.recordUpdate('right.lowerRight');
               break;
             case 'promo:update':
-              ComponentRegistry.broadcast('PromoPanel', data.payload);
+              updateBatcher.queue('PromoPanel', data.payload);
+              densityManager.recordUpdate('right.bottom');
               break;
             case 'weather:update':
-              ComponentRegistry.broadcast('WeatherWidget', data.payload);
+              // 天気ウィジェットは左カラム（slot-left-topBelow）に配置されるため、
+              // 右下エリアの過密検出（densityManager）には記録しない。
+              // 右下エリア: right.lowerLeft, right.lowerRight, right.bottom のみが対象
+              updateBatcher.queue('WeatherWidget', data.payload);
               break;
             case 'template:update':
               if (data.payload && data.payload.components) {

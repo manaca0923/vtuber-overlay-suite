@@ -661,7 +661,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T21 | ✅ 完了 | 2025-12-25 |
 | T22 | ✅ 完了 | 2025-12-25 |
 | T23 | ✅ 完了 | 2025-12-25 |
-| T24 | ⬜ 未着手 | - |
+| T24 | ✅ 完了 | 2025-12-26 |
 | T25 | ⬜ 未着手 | - |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
@@ -727,6 +727,31 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 現在: RustとTypeScriptで`ComponentType`の列挙型が手動で同期
   - 対応: JSON SchemaからTypeScript型を自動生成、またはビルド時の検証スクリプト追加を検討
   - 優先度: 低（現時点では手動同期で問題なし）
+
+- [ ] **layout_type の検証がない** (PR#51)
+  - 現在: `layout_type`は"threeColumn"固定だが、バリデーションで検証されていない
+  - 対応: 将来のレイアウトタイプ拡張を見越してenumにするか検証を追加
+  - 対象ファイル: `src-tauri/src/server/template_types.rs`
+  - 優先度: 低
+
+- [ ] **コンポーネントIDの一意性チェック** (PR#51)
+  - 現在: slot重複チェックはあるが、コンポーネントIDの重複チェックがない
+  - 対応: IDが一意であることを期待している場合は検証を追加
+  - 対象ファイル: `src-tauri/src/commands/template.rs`
+  - 優先度: 低
+
+- [ ] **slotIdの型安全性** (PR#50)
+  - 現在: `toSlotId`/`cssIdToSlotId`の正規表現の意図が曖昧
+  - 問題: 複数のハイフンを含むslot IDの変換が不確実
+  - 対応: 非貪欲マッチ `(.+?)` を使うか、column名を明示的にリストアップ
+  - 対象ファイル: `src-tauri/overlays/shared/slots.js`, `src/types/slot.ts`
+  - 優先度: 低
+
+- [ ] **SLOT定義の単一ソース化** (PR#50)
+  - 現在: slot定義が3箇所（Rust, TypeScript, JavaScript）に分散
+  - 対応: JSONスキーマから各言語のコードを自動生成、またはTypeScriptをsingle source of truthに
+  - 対象ファイル: `src-tauri/src/server/types.rs`, `src/types/slot.ts`, `src-tauri/overlays/shared/slots.js`
+  - 優先度: 低
 
 ### セキュリティ（将来課題）
 
@@ -845,6 +870,20 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: LRUキャッシュに置き換えるか、上限を設定
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
+- [ ] **DensityManagerの定期クリーンアップ** (PR#54)
+  - 現在: `recordUpdate()`呼び出し時のみ古いエントリを除去
+  - 問題: 更新が止まった場合に履歴が残り続ける可能性
+  - 対応: 定期的なクリーンアップタイマー、または`windowMs`を超えたエントリの自動削除
+  - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
+  - 優先度: 低（現時点では配列サイズは最大で閾値程度に収まる）
+
+- [ ] **DensityManager閾値の設定可能化** (PR#54)
+  - 現在: `highDensityThreshold: 5`（2秒間に5回）がハードコード
+  - 問題: 低スペック環境では閾値を下げたい場合がある
+  - 対応: テンプレート設定またはURLパラメータで動的変更可能に
+  - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
+  - 優先度: 低
+
 - [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
@@ -866,6 +905,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - Rust側にはテストがあるが、TypeScript側の`hasSlotDuplicates`と`hasIdDuplicates`関数のテストがない
   - 対応: Vitest/Jestなどでユニットテストを追加
   - 対象ファイル: `src/types/template.ts`
+
+- [ ] **UpdateBatcher/DensityManagerのユニットテスト** (PR#54)
+  - パフォーマンス最適化モジュールのテストカバレッジ追加
+  - テスト対象:
+    - バッチタイミング（150ms間隔でまとめられるか）
+    - 閾値判定のエッジケース（5回の更新でdensity:highが発火するか）
+    - 復元動作（density:normalで設定が戻るか）
+  - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
+  - 優先度: 低
 
 ### ドキュメント
 
@@ -1284,16 +1332,48 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T24: パフォーマンス最適化
 **優先度**: P2 | **見積**: 3日 | **依存**: T23
-**ステータス**: ⬜ **未着手**
+**ステータス**: ✅ **完了**（2025-12-26）
 
 ### 概要
 100-200msバッチ更新、クランプ規約強制、縮退処理。
 
 ### チェックリスト
-- [ ] バッチ更新実装（requestAnimationFrame）
-- [ ] クランプ規約の強制実装
-- [ ] 右下過密時の縮退処理
-- [ ] パフォーマンステスト
+- [x] バッチ更新実装（requestAnimationFrame）
+- [x] クランプ規約の強制実装
+- [x] 右下過密時の縮退処理
+- [ ] パフォーマンステスト（手動テスト必要）
+
+### 成果物
+
+#### 新規作成（3ファイル）
+- `src-tauri/overlays/shared/clamp-constants.js` - クランプ定数（ソース・オブ・トゥルース）
+- `src-tauri/overlays/shared/update-batcher.js` - 100-200msバッチ更新システム
+- `src-tauri/overlays/shared/density-manager.js` - 右下過密検出・縮退処理
+
+#### 変更（5ファイル）
+- `src-tauri/overlays/combined-v2.html` - スクリプト読み込み、WSハンドラ修正
+- `src-tauri/overlays/components/base-component.js` - `clampByKey()`メソッド追加
+- `src-tauri/overlays/components/kpi-block.js` - 共有定数使用、density対応
+- `src-tauri/overlays/components/queue-list.js` - 共有定数使用、density対応
+- `src-tauri/overlays/components/promo-panel.js` - 共有定数使用、density対応
+
+### 実装詳細
+
+#### バッチ更新システム（UpdateBatcher）
+- WebSocket更新を150msでバッチ処理
+- requestAnimationFrameで1フレームにまとめて適用
+- 同一コンポーネントタイプへの複数更新は最新のみ保持
+
+#### クランプ規約統一（clamp-constants.js）
+- CLAMP_RANGES定数でオーバーレイ側の値制限を一元管理
+- TypeScript（template.ts）およびRust（template_types.rs）と同期
+- clampByKey()メソッドで共有定数を参照
+
+#### 右下過密検出（DensityManager）
+- right.lowerLeft（KPI）、right.lowerRight（Queue）、right.bottom（Promo）を監視
+- 2秒間に5回以上の更新で高負荷判定
+- density:high/density:normalイベントで各コンポーネントに縮退処理を通知
+- 縮退時: updateThrottle 2秒→4秒、maxItems 6→4、showSec 6秒→10秒
 
 ---
 

@@ -25,11 +25,57 @@ class QueueList extends BaseComponent {
     this.showNumber = this.style.showNumber !== false;
 
     // ルール設定（クランプ適用）
-    this.maxItems = this.clamp(this.rules.maxItems || 6, 3, 10);
+    this.maxItems = this.clampByKey(this.rules.maxItems || 6, 'queueMaxItems', 3, 10);
+    this.originalMaxItems = this.maxItems; // 縮退モードからの復元用
     this.showWhenEmpty = this.rules.showWhenEmpty || false;
 
     // アイテム
     this.items = [];
+  }
+
+  /**
+   * イベントハンドラ（density対応）
+   * @param {string} eventType
+   * @param {object} payload
+   */
+  onEvent(eventType, payload) {
+    if (eventType === 'density:high') {
+      this.applyDegradedMode(payload);
+    } else if (eventType === 'density:normal') {
+      this.restoreNormalMode(payload);
+    }
+  }
+
+  /**
+   * 縮退モードを適用
+   * @param {object} settings
+   *
+   * 注意: 縮退時にmaxItemsを超えるアイテムは削除される（意図的な仕様）。
+   * 理由: 待機キューは常にサーバーから最新データが送られてくるため、
+   * 削除されたアイテムは次回のqueue:updateで必要に応じて復元される。
+   * パフォーマンス優先のため、ローカルでの保持は行わない。
+   */
+  applyDegradedMode(settings) {
+    if (settings.maxItems) {
+      this.maxItems = this.clampByKey(settings.maxItems, 'queueMaxItems', 3, 10);
+      // 現在の表示を更新（超過分は削除、次回update時に必要なら再取得される）
+      if (this.items.length > this.maxItems) {
+        this.items = this.items.slice(0, this.maxItems);
+        this.renderList();
+      }
+    }
+  }
+
+  /**
+   * 通常モードに復元
+   * @param {object} settings
+   */
+  restoreNormalMode(settings) {
+    if (settings.maxItems) {
+      this.maxItems = this.clampByKey(settings.maxItems, 'queueMaxItems', 3, 10);
+    } else {
+      this.maxItems = this.originalMaxItems;
+    }
   }
 
   render() {

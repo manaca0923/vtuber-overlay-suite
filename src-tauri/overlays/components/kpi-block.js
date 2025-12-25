@@ -26,12 +26,48 @@ class KPIBlock extends BaseComponent {
     this.showSub = this.style.showSub !== false;
 
     // 更新スロットリング（2秒デフォルト）
-    this.updateThrottle = this.clamp(this.rules.updateThrottle || 2000, 1000, 10000);
+    this.updateThrottle = this.clampByKey(this.rules.updateThrottle || 2000, 'updateThrottle', 1000, 10000);
+    this.originalThrottle = this.updateThrottle; // 縮退モードからの復元用
     this.lastUpdate = 0;
 
     // 現在値
     this.mainValue = null;
     this.subValue = null;
+  }
+
+  /**
+   * イベントハンドラ（density対応）
+   * @param {string} eventType
+   * @param {object} payload
+   */
+  onEvent(eventType, payload) {
+    if (eventType === 'density:high') {
+      this.applyDegradedMode(payload);
+    } else if (eventType === 'density:normal') {
+      this.restoreNormalMode(payload);
+    }
+  }
+
+  /**
+   * 縮退モードを適用
+   * @param {object} settings
+   */
+  applyDegradedMode(settings) {
+    if (settings.updateThrottle) {
+      this.updateThrottle = this.clampByKey(settings.updateThrottle, 'updateThrottle', 1000, 10000);
+    }
+  }
+
+  /**
+   * 通常モードに復元
+   * @param {object} settings
+   */
+  restoreNormalMode(settings) {
+    if (settings.updateThrottle) {
+      this.updateThrottle = this.clampByKey(settings.updateThrottle, 'updateThrottle', 1000, 10000);
+    } else {
+      this.updateThrottle = this.originalThrottle;
+    }
   }
 
   render() {

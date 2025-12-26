@@ -20,11 +20,15 @@ pub use types::{OpenWeatherMapResponse, WeatherData};
 
 use reqwest::Client;
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
 /// OpenWeatherMap APIのベースURL
 const OPENWEATHERMAP_API_URL: &str = "https://api.openweathermap.org/data/2.5/weather";
+
+/// HTTPリクエストのタイムアウト（秒）
+const HTTP_TIMEOUT_SECS: u64 = 10;
 
 /// 天気APIエラー
 #[derive(Debug, Error)]
@@ -43,6 +47,9 @@ pub enum WeatherError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+    #[error("Request timeout: API応答がありません")]
+    Timeout,
 }
 
 /// 天気APIクライアント
@@ -61,8 +68,13 @@ pub struct WeatherClient {
 impl WeatherClient {
     /// 新しい天気クライアントを作成
     pub fn new() -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+
         Self {
-            client: Client::new(),
+            client,
             cache: WeatherCache::new(),
             api_key: Arc::new(RwLock::new(None)),
             city: Arc::new(RwLock::new("Tokyo".to_string())),
@@ -107,16 +119,18 @@ impl WeatherClient {
 
     /// 天気情報を取得（キャッシュ優先）
     pub async fn get_weather(&self) -> Result<WeatherData, WeatherError> {
-        // キャッシュをチェック
-        if let Some(cached) = self.cache.get().await {
+        let city = self.city.read().await.clone();
+
+        // キャッシュをチェック（都市名も検証）
+        if let Some(cached) = self.cache.get(&city).await {
             return Ok(cached);
         }
 
         // APIから取得
         let data = self.fetch_weather().await?;
 
-        // キャッシュに保存
-        self.cache.set(data.clone()).await;
+        // キャッシュに保存（都市名も保存）
+        self.cache.set(data.clone(), city).await;
 
         Ok(data)
     }
@@ -143,7 +157,15 @@ impl WeatherClient {
                 ("lang", "ja"),      // 日本語
             ])
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    log::warn!("Weather API request timed out after {}s", HTTP_TIMEOUT_SECS);
+                    WeatherError::Timeout
+                } else {
+                    WeatherError::HttpError(e)
+                }
+            })?;
 
         let status = response.status();
         if !status.is_success() {

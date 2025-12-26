@@ -18,14 +18,17 @@ const CACHE_TTL_SECS: u64 = 15 * 60;
 struct CacheEntry {
     /// キャッシュされたデータ
     data: WeatherData,
+    /// キャッシュ対象の都市名
+    city: String,
     /// キャッシュ作成時刻
     created_at: Instant,
 }
 
 impl CacheEntry {
-    fn new(data: WeatherData) -> Self {
+    fn new(data: WeatherData, city: String) -> Self {
         Self {
             data,
+            city,
             created_at: Instant::now(),
         }
     }
@@ -33,6 +36,11 @@ impl CacheEntry {
     /// 指定されたTTLに対して期限切れかどうかを判定
     fn is_expired(&self, ttl_secs: u64) -> bool {
         self.created_at.elapsed() > Duration::from_secs(ttl_secs)
+    }
+
+    /// 指定された都市と一致するかを判定
+    fn matches_city(&self, city: &str) -> bool {
+        self.city == city
     }
 }
 
@@ -65,30 +73,38 @@ impl WeatherCache {
 
     /// キャッシュから天気データを取得
     ///
-    /// キャッシュがない、または期限切れの場合はNoneを返す
-    pub async fn get(&self) -> Option<WeatherData> {
+    /// キャッシュがない、期限切れ、または都市が異なる場合はNoneを返す
+    pub async fn get(&self, city: &str) -> Option<WeatherData> {
         let entry = self.entry.read().await;
         match entry.as_ref() {
-            Some(e) if !e.is_expired(self.ttl_secs) => {
-                log::debug!("Weather cache hit");
+            Some(e) if !e.is_expired(self.ttl_secs) && e.matches_city(city) => {
+                log::debug!("Weather cache hit for city: {}", city);
                 Some(e.data.clone())
             }
+            Some(e) if !e.matches_city(city) => {
+                log::debug!(
+                    "Weather cache miss: city mismatch (cached: {}, requested: {})",
+                    e.city,
+                    city
+                );
+                None
+            }
             Some(_) => {
-                log::debug!("Weather cache expired");
+                log::debug!("Weather cache expired for city: {}", city);
                 None
             }
             None => {
-                log::debug!("Weather cache miss");
+                log::debug!("Weather cache miss: no entry");
                 None
             }
         }
     }
 
     /// キャッシュに天気データを保存
-    pub async fn set(&self, data: WeatherData) {
+    pub async fn set(&self, data: WeatherData, city: String) {
         let mut entry = self.entry.write().await;
-        *entry = Some(CacheEntry::new(data));
-        log::debug!("Weather data cached (TTL: {}s)", self.ttl_secs);
+        *entry = Some(CacheEntry::new(data, city.clone()));
+        log::debug!("Weather data cached for city: {} (TTL: {}s)", city, self.ttl_secs);
     }
 
     /// キャッシュをクリア
@@ -144,9 +160,9 @@ mod tests {
         let cache = WeatherCache::new();
         let data = create_test_weather_data();
 
-        cache.set(data.clone()).await;
+        cache.set(data.clone(), "Tokyo".to_string()).await;
 
-        let cached = cache.get().await;
+        let cached = cache.get("Tokyo").await;
         assert!(cached.is_some());
         assert_eq!(cached.unwrap().location, "Tokyo");
     }
@@ -154,7 +170,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_miss() {
         let cache = WeatherCache::new();
-        let cached = cache.get().await;
+        let cached = cache.get("Tokyo").await;
         assert!(cached.is_none());
     }
 
@@ -163,11 +179,11 @@ mod tests {
         let cache = WeatherCache::new();
         let data = create_test_weather_data();
 
-        cache.set(data).await;
-        assert!(cache.get().await.is_some());
+        cache.set(data, "Tokyo".to_string()).await;
+        assert!(cache.get("Tokyo").await.is_some());
 
         cache.clear().await;
-        assert!(cache.get().await.is_none());
+        assert!(cache.get("Tokyo").await.is_none());
     }
 
     #[tokio::test]
@@ -178,7 +194,7 @@ mod tests {
         // キャッシュなしの場合は0
         assert_eq!(cache.ttl_remaining().await, 0);
 
-        cache.set(data).await;
+        cache.set(data, "Tokyo".to_string()).await;
 
         // キャッシュ直後はTTLに近い値
         let ttl = cache.ttl_remaining().await;
@@ -191,16 +207,16 @@ mod tests {
         let cache = WeatherCache::with_ttl(1);
         let data = create_test_weather_data();
 
-        cache.set(data).await;
+        cache.set(data, "Tokyo".to_string()).await;
 
         // キャッシュ直後は取得可能
-        assert!(cache.get().await.is_some());
+        assert!(cache.get("Tokyo").await.is_some());
 
         // 1秒以上待機して期限切れを確認
         tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
 
         // 期限切れでNoneを返す
-        assert!(cache.get().await.is_none());
+        assert!(cache.get("Tokyo").await.is_none());
 
         // TTL remainingも0
         assert_eq!(cache.ttl_remaining().await, 0);
@@ -212,20 +228,77 @@ mod tests {
         let cache = WeatherCache::with_ttl(2);
         let data = create_test_weather_data();
 
-        cache.set(data).await;
+        cache.set(data, "Tokyo".to_string()).await;
 
         // 1.5秒待機（TTLの半分以上経過）
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
 
         // まだ有効（2秒未満）
-        assert!(cache.get().await.is_some());
+        assert!(cache.get("Tokyo").await.is_some());
         assert!(cache.ttl_remaining().await > 0);
 
         // さらに1秒待機（合計2.5秒経過）
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
         // 期限切れ
-        assert!(cache.get().await.is_none());
+        assert!(cache.get("Tokyo").await.is_none());
         assert_eq!(cache.ttl_remaining().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_cache_city_mismatch() {
+        // 都市名が異なる場合はキャッシュミスになることを確認
+        let cache = WeatherCache::new();
+        let data = create_test_weather_data();
+
+        // Tokyoでキャッシュ
+        cache.set(data, "Tokyo".to_string()).await;
+
+        // Tokyoでは取得可能
+        assert!(cache.get("Tokyo").await.is_some());
+
+        // Osakaでは取得不可（都市不一致）
+        assert!(cache.get("Osaka").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_cache_city_change_invalidates_old_city() {
+        // 都市変更後に古い都市のキャッシュが無効になることを確認
+        let cache = WeatherCache::new();
+
+        let tokyo_data = WeatherData {
+            icon: "☀️".to_string(),
+            temp: 25.5,
+            description: "晴天".to_string(),
+            location: "Tokyo".to_string(),
+            humidity: 60,
+            weather_code: 800,
+            fetched_at: chrono::Utc::now().timestamp(),
+        };
+
+        let osaka_data = WeatherData {
+            icon: "☁️".to_string(),
+            temp: 22.0,
+            description: "曇り".to_string(),
+            location: "Osaka".to_string(),
+            humidity: 70,
+            weather_code: 803,
+            fetched_at: chrono::Utc::now().timestamp(),
+        };
+
+        // Tokyoでキャッシュ
+        cache.set(tokyo_data.clone(), "Tokyo".to_string()).await;
+        assert!(cache.get("Tokyo").await.is_some());
+
+        // Osakaで上書き
+        cache.set(osaka_data.clone(), "Osaka".to_string()).await;
+
+        // Tokyoは取得不可（上書きされた）
+        assert!(cache.get("Tokyo").await.is_none());
+
+        // Osakaは取得可能
+        let cached = cache.get("Osaka").await;
+        assert!(cached.is_some());
+        assert_eq!(cached.unwrap().location, "Osaka");
     }
 }

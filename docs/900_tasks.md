@@ -974,6 +974,32 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低
 
+- [ ] **天気API keyringフォールバックのテスト** (PR#57)
+  - keyringにキーがあるがメモリにない場合のフォールバック動作を検証
+  - テスト対象:
+    - `ensure_api_key_synced`関数の動作（keyringアクセスをモック化）
+    - `get_weather`/`fetch_weather`/`broadcast_weather_update`でのフォールバック呼び出し
+  - 対象ファイル: `src-tauri/src/commands/weather.rs`
+  - 優先度: 中（OS keyringへの依存でモック化が必要）
+
+- [ ] **YouTube `get_live_stream_stats` のHTTPステータスマッピングテスト** (PR#57)
+  - 404/400/5xxエラー時のYouTubeErrorマッピングを検証
+  - テスト対象:
+    - 403 quota exceeded → QuotaExceeded
+    - 401 → InvalidApiKey
+    - 404 → VideoNotFound
+    - 5xx → ApiError（一時的障害メッセージ）
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`
+  - 優先度: 中（HTTPクライアントのモック化が必要）
+
+- [ ] **`broadcast_weather_update(force_refresh=true)` のテスト** (PR#57)
+  - キャッシュクリア→新規取得→ブロードキャストの動作を検証
+  - テスト対象:
+    - `force_refresh=true`でキャッシュがクリアされること
+    - 新しいデータがWebSocketでブロードキャストされること
+  - 対象ファイル: `src-tauri/src/commands/weather.rs`
+  - 優先度: 中（サーバー/状態のモック化が必要）
+
 - [ ] **bfcache/リロード時のWebSocket再接続テスト** (PR#56)
   - JSテストハーネスがない場合は手動QA手順を文書化
   - テスト対象:

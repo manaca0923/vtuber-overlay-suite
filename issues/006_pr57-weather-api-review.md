@@ -412,6 +412,51 @@ export const broadcastWeatherUpdate = (forceRefresh?: boolean) =>
 
 ---
 
+### 12. 天気取得時のkeyringフォールバック不足（高リスク・追加指摘）
+
+**問題**:
+`get_weather`/`fetch_weather`がメモリ内のAPIキーのみを使用していた。起動時のkeyring復元失敗時（キーチェーンロック等）、UIを開くまで天気取得が失敗し続け、オーバーレイが動作しない。
+
+**解決策**:
+```rust
+// 共通のkeyring同期ヘルパーを追加
+async fn ensure_api_key_synced(state: &AppState) {
+    if !state.weather.has_api_key().await {
+        if let Ok(api_key) = keyring::get_weather_api_key() {
+            state.weather.set_api_key(api_key).await;
+            log::info!("Weather API key synced from keyring to memory (auto-recovery)");
+        }
+    }
+}
+
+// 各コマンドで同期を呼び出す
+#[tauri::command]
+pub async fn get_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
+    ensure_api_key_synced(&state).await;  // 追加
+    state.weather.get_weather().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn fetch_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
+    ensure_api_key_synced(&state).await;  // 追加
+    state.weather.clear_cache().await;
+    state.weather.get_weather().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn broadcast_weather_update(...) -> Result<(), String> {
+    ensure_api_key_synced(&state).await;  // 追加
+    // ...
+}
+```
+
+**教訓**:
+- 永続ストレージとメモリの両方を持つ場合、データ取得の各エントリポイントで同期を確認する
+- UIを開かなくても呼ばれる可能性のあるコマンド（定期更新、ブロードキャスト等）には必ず同期ロジックを入れる
+- 共通の同期ヘルパー関数を作成し、コードの重複を避ける
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -426,3 +471,4 @@ export const broadcastWeatherUpdate = (forceRefresh?: boolean) =>
 10. **永続ストレージとメモリの同期**: 両方を持つ場合、UI確認時などに同期ポイントを設ける
 11. **TTLとキャッシュヒット条件の一致**: TTL表示はキャッシュヒット条件と同じ条件で判定すること
 12. **ブロードキャスト時の強制リフレッシュ**: 設定変更後に確実に最新データを送信できるオプションを提供
+13. **全エントリポイントでの永続ストレージ同期**: UIを開かなくても呼ばれるコマンドにも同期ロジックを入れる

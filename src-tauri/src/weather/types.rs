@@ -182,4 +182,79 @@ mod tests {
         let data = WeatherData::from_openweathermap(response).unwrap();
         assert_eq!(data.temp, 25.5); // 小数点1桁に丸め
     }
+
+    #[test]
+    fn test_from_openweathermap_full_parsing() {
+        // OpenWeatherMap APIの典型的なレスポンスをシミュレート
+        let response = OpenWeatherMapResponse {
+            weather: vec![WeatherCondition {
+                id: 801,
+                main: "Clouds".to_string(),
+                description: "薄い雲".to_string(),
+                icon: "02d".to_string(),
+            }],
+            main: MainData {
+                temp: 18.3,
+                feels_like: Some(17.5),
+                humidity: 72,
+            },
+            name: "Osaka".to_string(),
+            sys: Some(SysData {
+                country: Some("JP".to_string()),
+            }),
+        };
+
+        let data = WeatherData::from_openweathermap(response).unwrap();
+
+        // 全フィールドが正しくパースされていることを確認
+        assert_eq!(data.icon, "⛅");
+        assert_eq!(data.temp, 18.3);
+        assert_eq!(data.description, "薄い雲");
+        assert_eq!(data.location, "Osaka");
+        assert_eq!(data.humidity, 72);
+        assert_eq!(data.weather_code, 801);
+        assert!(data.fetched_at > 0);
+    }
+
+    #[test]
+    fn test_from_openweathermap_empty_weather() {
+        // weather配列が空の場合はNoneを返す
+        let response = OpenWeatherMapResponse {
+            weather: vec![],
+            main: MainData {
+                temp: 20.0,
+                feels_like: None,
+                humidity: 50,
+            },
+            name: "Tokyo".to_string(),
+            sys: None,
+        };
+
+        let result = WeatherData::from_openweathermap(response);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_from_openweathermap_negative_temp() {
+        // 負の気温も正しく処理される
+        let response = OpenWeatherMapResponse {
+            weather: vec![WeatherCondition {
+                id: 600,
+                main: "Snow".to_string(),
+                description: "雪".to_string(),
+                icon: "13d".to_string(),
+            }],
+            main: MainData {
+                temp: -5.7,
+                feels_like: Some(-10.2),
+                humidity: 85,
+            },
+            name: "Sapporo".to_string(),
+            sys: None,
+        };
+
+        let data = WeatherData::from_openweathermap(response).unwrap();
+        assert_eq!(data.temp, -5.7);
+        assert_eq!(data.icon, "❄️");
+    }
 }

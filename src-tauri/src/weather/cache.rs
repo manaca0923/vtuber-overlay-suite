@@ -30,8 +30,9 @@ impl CacheEntry {
         }
     }
 
-    fn is_expired(&self) -> bool {
-        self.created_at.elapsed() > Duration::from_secs(CACHE_TTL_SECS)
+    /// 指定されたTTLに対して期限切れかどうかを判定
+    fn is_expired(&self, ttl_secs: u64) -> bool {
+        self.created_at.elapsed() > Duration::from_secs(ttl_secs)
     }
 }
 
@@ -68,7 +69,7 @@ impl WeatherCache {
     pub async fn get(&self) -> Option<WeatherData> {
         let entry = self.entry.read().await;
         match entry.as_ref() {
-            Some(e) if !e.is_expired() => {
+            Some(e) if !e.is_expired(self.ttl_secs) => {
                 log::debug!("Weather cache hit");
                 Some(e.data.clone())
             }
@@ -182,5 +183,49 @@ mod tests {
         // キャッシュ直後はTTLに近い値
         let ttl = cache.ttl_remaining().await;
         assert!(ttl > 0 && ttl <= 10);
+    }
+
+    #[tokio::test]
+    async fn test_cache_expiry_with_short_ttl() {
+        // 短いTTL（1秒）でテスト
+        let cache = WeatherCache::with_ttl(1);
+        let data = create_test_weather_data();
+
+        cache.set(data).await;
+
+        // キャッシュ直後は取得可能
+        assert!(cache.get().await.is_some());
+
+        // 1秒以上待機して期限切れを確認
+        tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+
+        // 期限切れでNoneを返す
+        assert!(cache.get().await.is_none());
+
+        // TTL remainingも0
+        assert_eq!(cache.ttl_remaining().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_ttl_consistency_between_get_and_ttl_remaining() {
+        // TTLの整合性テスト：get()とttl_remaining()が同じTTL値を使用していることを確認
+        let cache = WeatherCache::with_ttl(2);
+        let data = create_test_weather_data();
+
+        cache.set(data).await;
+
+        // 1.5秒待機（TTLの半分以上経過）
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+
+        // まだ有効（2秒未満）
+        assert!(cache.get().await.is_some());
+        assert!(cache.ttl_remaining().await > 0);
+
+        // さらに1秒待機（合計2.5秒経過）
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+        // 期限切れ
+        assert!(cache.get().await.is_none());
+        assert_eq!(cache.ttl_remaining().await, 0);
     }
 }

@@ -273,10 +273,12 @@ impl YouTubeClient {
             .send()
             .await?;
 
-        match response.status() {
+        let status = response.status();
+        match status {
             reqwest::StatusCode::OK => {}
             reqwest::StatusCode::FORBIDDEN => {
                 let error_text = response.text().await?;
+                log::warn!("YouTube API 403 Forbidden: {}", error_text);
                 if error_text.contains("quotaExceeded") {
                     return Err(YouTubeError::QuotaExceeded);
                 } else if error_text.contains("rateLimitExceeded") {
@@ -285,10 +287,36 @@ impl YouTubeClient {
                 return Err(YouTubeError::InvalidApiKey);
             }
             reqwest::StatusCode::UNAUTHORIZED => {
+                log::warn!("YouTube API 401 Unauthorized");
                 return Err(YouTubeError::InvalidApiKey);
             }
-            _ => {
+            reqwest::StatusCode::NOT_FOUND => {
+                log::warn!("YouTube API 404 Not Found for video: {}", video_id);
                 return Err(YouTubeError::VideoNotFound);
+            }
+            reqwest::StatusCode::BAD_REQUEST => {
+                let error_text = response.text().await?;
+                log::warn!("YouTube API 400 Bad Request: {}", error_text);
+                // 不正な動画IDの可能性
+                return Err(YouTubeError::VideoNotFound);
+            }
+            _ if status.is_server_error() => {
+                // 5xx サーバーエラー: 一時的な障害の可能性
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("YouTube API server error ({}): {}", status, error_text);
+                return Err(YouTubeError::ApiError(format!(
+                    "サーバーエラー ({}): 一時的な障害の可能性があります",
+                    status
+                )));
+            }
+            _ => {
+                // その他の予期しないステータス
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                return Err(YouTubeError::ApiError(format!(
+                    "予期しないエラー ({})",
+                    status
+                )));
             }
         }
 

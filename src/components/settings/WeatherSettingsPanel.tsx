@@ -18,6 +18,7 @@ interface WeatherSettingsPanelProps {
 export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelProps) {
   const [apiKey, setApiKeyValue] = useState('');
   const [hasKey, setHasKey] = useState(false);
+  const [isEditingKey, setIsEditingKey] = useState(false); // 編集モード状態を分離
   const [city, setCityValue] = useState('Tokyo');
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [cacheTtl, setCacheTtl] = useState(0);
@@ -64,8 +65,11 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
     setError(null);
     try {
       await setWeatherApiKey(apiKey.trim());
-      setHasKey(true);
+      // バックエンド状態を再取得して反映
+      const hasApiKey = await hasWeatherApiKey();
+      setHasKey(hasApiKey);
       setApiKeyValue('');
+      setIsEditingKey(false);
     } catch (err) {
       setError('APIキーの保存に失敗しました');
       console.error(err);
@@ -73,6 +77,19 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
       setLoading(false);
     }
   }, [apiKey]);
+
+  // APIキー編集キャンセル
+  const handleCancelEditKey = useCallback(async () => {
+    setIsEditingKey(false);
+    setApiKeyValue('');
+    // バックエンド状態を再取得
+    try {
+      const hasApiKey = await hasWeatherApiKey();
+      setHasKey(hasApiKey);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // 都市名保存
   const handleSaveCity = useCallback(async () => {
@@ -156,43 +173,54 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
         <label className="block text-sm font-medium text-gray-700">
           OpenWeatherMap APIキー
         </label>
-        {hasKey ? (
+        {hasKey && !isEditingKey ? (
           <div className="flex items-center gap-2">
             <span className="text-sm text-green-600">設定済み</span>
             <button
               type="button"
-              onClick={() => setHasKey(false)}
+              onClick={() => setIsEditingKey(true)}
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
               変更
             </button>
           </div>
         ) : (
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={showApiKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKeyValue(e.target.value)}
-                placeholder="APIキーを入力"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKeyValue(e.target.value)}
+                  placeholder="APIキーを入力"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showApiKey ? '隠す' : '表示'}
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                onClick={handleSaveApiKey}
+                disabled={loading || !apiKey.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {showApiKey ? '隠す' : '表示'}
+                保存
               </button>
             </div>
-            <button
-              type="button"
-              onClick={handleSaveApiKey}
-              disabled={loading || !apiKey.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              保存
-            </button>
+            {isEditingKey && (
+              <button
+                type="button"
+                onClick={handleCancelEditKey}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                キャンセル
+              </button>
+            )}
           </div>
         )}
         <p className="text-xs text-gray-500">

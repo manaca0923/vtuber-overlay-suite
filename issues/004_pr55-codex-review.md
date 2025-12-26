@@ -123,6 +123,49 @@ let emoji_info = cache.peek(shortcut).cloned();
 - キャッシュからの読み取りは`peek()`を優先
 - LRU更新が必要な場合のみ`get()`を使用
 
+### 3.2 Number.isFinite()の文字列入力対応（template.ts, clamp-constants.js）
+
+**指摘内容**:
+- `Number.isFinite()`は文字列を変換しない
+- `Number.isFinite("10")` → `false`（文字列はfalse）
+- クエリパラメータやシリアライズされた設定から文字列で渡された場合、最小値にクランプされてしまう
+- 例: `maxItems`に`"14"`が渡されると`3`になる
+
+**対応**:
+```typescript
+// Before:
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+// After:
+function clamp(value: number, min: number, max: number): number {
+  // 数値文字列対応: Number()で変換（Number.isFiniteは文字列を変換しない）
+  const num = Number(value);
+  // NaN/Infinityなど非有限数は最小値にフォールバック
+  if (!Number.isFinite(num)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, num));
+}
+```
+
+**修正箇所**:
+- `src/types/template.ts`: clamp関数
+- `src-tauri/overlays/shared/clamp-constants.js`: clamp関数
+
+**テスト追加**:
+- `clampMaxItems`/`clampMaxLines`に対する文字列入力テスト
+- 数値文字列（`"10"`）→正しくパース
+- 非数値文字列（`"abc"`, `""`）→最小値にフォールバック
+
+**今後の対策**:
+- 外部入力を扱う関数では、`Number()`で明示的に変換してから`Number.isFinite()`でチェック
+- `Number.isFinite()`は型変換を行わないことを意識する
+
 ### 4. ログレベルの適切な使用
 
 **指摘内容（複数のPRレビューで言及）**:

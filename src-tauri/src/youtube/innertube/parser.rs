@@ -399,7 +399,15 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
         }
 
         // peekを使用して読み取り専用でキャッシュを参照（LRU順序を更新しない）
-        // 高スループット時のロック競合を軽減
+        //
+        // 設計判断: get() vs peek()
+        // - get(): LRU順序を更新（最近使用した項目は残る）
+        // - peek(): LRU順序を更新しない（挿入順でのみeviction）
+        //
+        // peek()を選択した理由:
+        // 1. 高スループット時のロック競合軽減（get()は内部でmut操作）
+        // 2. このキャッシュの主目的はメモリ上限の維持であり、厳密なLRUは不要
+        // 3. 絵文字は配信中に繰り返し使用されるため、挿入順でも十分な効果
         matches
             .iter()
             .map(|&(start, end)| {

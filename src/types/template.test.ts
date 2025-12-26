@@ -183,6 +183,22 @@ describe('clampMaxItems', () => {
     // Number.isFinite(-Infinity) === false なので最小値にフォールバック
     expect(clampMaxItems(-Infinity)).toBe(CLAMP_RANGES.maxItems.min);
   });
+
+  it('数値文字列は正しくパースされる', () => {
+    // Number()で変換されるため、数値文字列は正常に処理される
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxItems('10' as any)).toBe(10);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxItems('14' as any)).toBe(14);
+  });
+
+  it('非数値文字列は最小値にクランプされる', () => {
+    // Number("abc") === NaN なので最小値にフォールバック
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxItems('abc' as any)).toBe(CLAMP_RANGES.maxItems.min);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxItems('' as any)).toBe(CLAMP_RANGES.maxItems.min);
+  });
 });
 
 describe('clampMaxLines', () => {

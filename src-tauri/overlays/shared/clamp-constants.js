@@ -59,17 +59,20 @@
   /**
    * 汎用クランプ関数
    * NaN/Infinity/-Infinityなど非有限数は最小値にフォールバック
-   * @param {number} value - クランプする値
+   * 数値文字列（"10"など）もNumber()で変換してから処理
+   * @param {number|string} value - クランプする値
    * @param {number} min - 最小値
    * @param {number} max - 最大値
    * @returns {number} クランプ後の値
    */
   function clamp(value, min, max) {
+    // 数値文字列対応: Number()で変換（Number.isFiniteは文字列を変換しない）
+    const num = Number(value);
     // NaN/Infinityなど非有限数は最小値にフォールバック
-    if (!Number.isFinite(value)) {
+    if (!Number.isFinite(num)) {
       return min;
     }
-    return Math.max(min, Math.min(max, value));
+    return Math.max(min, Math.min(max, num));
   }
 
   /**

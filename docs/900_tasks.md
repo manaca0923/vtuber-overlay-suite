@@ -946,6 +946,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - **戻り値を構造化**: `{ saved: usize, failed: usize, skipped: usize }`を返し、呼び出し元に通知
     - **予算を設定可能に**: メッセージ数/チャンク数に比例させる、または設定ファイルで変更可能に
     - **テスト用に予算を注入可能に**: `test_concurrent_writes_with_retry`が2秒固定予算でフレーキーになる可能性あり（遅いディスク/CI環境）
+    - **テスト追加**: 予算超過時のskippedカウントを検証するテスト（構造化戻り値実装後）
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 中（本番運用後にフィードバックを収集）
 
@@ -976,8 +977,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [ ] **bfcache/リロード時のWebSocket再接続テスト** (PR#56)
   - JSテストハーネスがない場合は手動QA手順を文書化
   - テスト対象:
-    - pagehide + beforeunloadの両方発火時にcleanup()が1回のみ実行される
+    - pagehide + pageshowのbfcacheフローでcleanup/reconnect idempotencyを検証
+    - cleanup後にオーバーレイがinert状態にならないことを確認
     - isShuttingDownがpageshow復元時にリセットされる
+    - DensityManager/UpdateBatcherがbfcache復元後も正常に動作する
     - OBSリロード後にWebSocket再接続が可能
   - 対象ファイル: `src-tauri/overlays/combined-v2.html`
   - 優先度: 低（OBSブラウザソースではbfcacheは使用されない）

@@ -69,28 +69,59 @@ function clamp(value: number, min: number, max: number): number {
 - 現状のフォールバック処理はリトライなしでログ出力のみ
 - 高負荷時にコメントが消失する可能性
 
-**対応**:
-1. `busy_timeout`設定を追加（db/mod.rs）
-   - ロック競合時に即座にエラーを返さず、5秒間待機してリトライ
-   ```rust
-   const SQLITE_BUSY_TIMEOUT_MS: u32 = 5000;
+**対応（v1）**: URIパラメータでbusy_timeout設定
+```rust
+let pool = SqlitePoolOptions::new()
+    .connect(&format!("sqlite:{}?mode=rwc&busy_timeout={}", db_path, SQLITE_BUSY_TIMEOUT_MS))
+    .await?;
+```
 
-   let pool = SqlitePoolOptions::new()
-       .max_connections(5)
-       .connect(&format!(
-           "sqlite:{}?mode=rwc&busy_timeout={}",
-           db_path, SQLITE_BUSY_TIMEOUT_MS
-       ))
-       .await?;
-   ```
+**追加指摘（v2）**: URIパラメータではsqlxが正しく解釈しない可能性
+- `SqliteConnectOptions`を使用して明示的にbusy_timeoutを設定すべき
 
-2. フォールバック処理は既存のまま維持
-   - busy_timeoutでほとんどのロック競合は解消される
-   - それでも失敗した場合は個別INSERTにフォールバック
+**最終対応（v2）**:
+```rust
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use std::str::FromStr;
+use std::time::Duration;
+
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
+
+let connect_options = SqliteConnectOptions::from_str(&format!("sqlite:{}?mode=rwc", db_path))?
+    .busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS));
+
+let pool = SqlitePoolOptions::new()
+    .max_connections(5)
+    .connect_with(connect_options)
+    .await?;
+```
+
+**スモークテスト追加**:
+- `test_create_pool_with_busy_timeout`: busy_timeout設定でプール作成が成功することを検証
 
 **今後の対策**:
-- SQLite接続設定には常にbusy_timeoutを設定
-- 高負荷環境では追加のリトライロジック検討
+- SQLite接続設定には`SqliteConnectOptions`を使用（URIパラメータは避ける）
+- 設定変更時はスモークテストで検証
+
+### 3.1 LRUキャッシュのロック競合（parser.rs）
+
+**指摘内容**:
+- `Mutex<LruCache>`で毎回`get()`を呼ぶとLRU順序が更新される（書き込み操作）
+- 高スループット時にロック競合が発生し、レイテンシが悪化する可能性
+
+**対応**:
+- `get()`を`peek()`に変更（読み取り専用、LRU順序を更新しない）
+```rust
+// Before:
+let emoji_info = cache.get(shortcut).cloned();
+
+// After:
+let emoji_info = cache.peek(shortcut).cloned();
+```
+
+**今後の対策**:
+- キャッシュからの読み取りは`peek()`を優先
+- LRU更新が必要な場合のみ`get()`を使用
 
 ### 4. ログレベルの適切な使用
 
@@ -104,14 +135,21 @@ function clamp(value: number, min: number, max: number): number {
 
 ## 未対応（将来対応）
 
-### 1. SQLITE_BUSY時のリトライ/backoffテスト
-- 2接続で同時書き込みし、リトライが正しく動作するかを検証するテスト
-- 現状はbusy_timeout設定で対応済みのため、優先度低
+### 1. SQLITE_BUSY時の並行書き込みテスト
+- 2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証するテスト
+- 現状はbusy_timeout設定とスモークテストで対応済みのため、優先度低
+- 必要になったら`docs/900_tasks.md`に追加
 
 ### 2. parking_lot::Mutex検討
 - 高並行性が必要になった場合の検討事項
 - 現状のstd::sync::Mutexで問題なし
 
+### 3. db.rsのSQLITE_BUSYリトライ/backoff
+- トランザクション開始/コミット時にSQLITE_BUSYが発生した場合のリトライロジック
+- 現状はbusy_timeoutで軽減、フォールバック処理（個別INSERT）で対応
+- 高負荷環境で問題が発生したら検討
+
 ## 参照
 - PR #55: https://github.com/manaca0923/vtuber-overlay-suite/pull/55
 - SQLite busy handling: https://www.sqlite.org/c3ref/busy_timeout.html
+- lru crate peek vs get: https://docs.rs/lru/latest/lru/struct.LruCache.html#method.peek

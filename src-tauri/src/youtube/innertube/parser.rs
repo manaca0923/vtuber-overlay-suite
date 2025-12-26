@@ -388,7 +388,7 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
     // Step 2: キャッシュからショートカットを一括検索し、(start, end, Option<EmojiInfo>)を収集
     // HashMapを介さず直接タプルを構築することでcloneを削減
     let matches_with_emoji: Vec<(usize, usize, Option<EmojiInfo>)> = {
-        let mut cache = match EMOJI_CACHE.lock() {
+        let cache = match EMOJI_CACHE.lock() {
             Ok(c) => c,
             Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
         };
@@ -398,12 +398,13 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
             return vec![MessageRun::Text { text: text.to_string() }];
         }
 
-        // 必要なショートカットのみを取得（getはLRUを更新するのでmut）
+        // peekを使用して読み取り専用でキャッシュを参照（LRU順序を更新しない）
+        // 高スループット時のロック競合を軽減
         matches
             .iter()
             .map(|&(start, end)| {
                 let shortcut = &text[start..end];
-                let emoji_info = cache.get(shortcut).cloned();
+                let emoji_info = cache.peek(shortcut).cloned();
                 (start, end, emoji_info)
             })
             .collect()

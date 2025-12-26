@@ -1113,6 +1113,53 @@ if !save_chunk_with_retry(pool, chunk, remaining).await {
 - end-to-end予算管理を意識した設計
 - チェーンされた関数間で予算を渡すパターンを標準化
 
+### 29. save_chunk_individuallyのbusy_timeout取得/設定失敗時の即時終了（高リスク指摘）
+
+**指摘内容**:
+- `save_chunk_individually`で`get_busy_timeout`がNoneまたは`set_busy_timeout`失敗時に続行
+- 接続の以前のbusy_timeout（5秒など）で長時間ブロックする可能性
+- 予算を超過してリアルタイム保証が破れる
+
+**対応**:
+```rust
+// Before（問題あり）:
+let original_timeout = get_busy_timeout(&mut conn).await;
+// Noneの場合も続行 → 5秒でブロック可能
+
+let should_restore = if let Some(_) = original_timeout {
+    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+        false // 設定失敗時も続行 → 5秒でブロック可能
+    } else {
+        true
+    }
+} else {
+    false // 続行してしまう
+};
+
+// After（修正済み）:
+let original_timeout = match get_busy_timeout(&mut conn).await {
+    Some(timeout) => timeout,
+    None => {
+        log::debug!("Skipping individual insert fallback: failed to get original busy_timeout");
+        return; // 即座に終了
+    }
+};
+
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    log::debug!("Skipping individual insert fallback: failed to set busy_timeout: {:?}", e);
+    return; // 即座に終了
+}
+```
+
+**追加テスト**:
+- `test_fallback_restores_busy_timeout`: フォールバックパスでもbusy_timeoutが復元されることを確認
+- `test_fallback_tiny_budget_exits_without_blocking`: 極小予算で長時間ブロックせずに終了することを確認
+
+**今後の対策**:
+- 予算を強制できない場合は続行せず即座に終了
+- 「続行」よりも「安全に終了」を優先
+- フォールバックパスでもリトライパスと同じ厳密さを維持
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

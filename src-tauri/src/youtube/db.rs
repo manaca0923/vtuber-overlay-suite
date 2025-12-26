@@ -476,9 +476,10 @@ async fn save_chunk_with_transaction_on_conn(
 /// 残り予算を受け取り、予算内でのみ処理を実行する。
 /// pool.acquire()も短いbusy_timeoutも残り予算で制限される。
 ///
-/// ## busy_timeout復元
-/// リトライパスと同様に、元のbusy_timeoutを取得・復元する。
-/// 取得失敗時はbusy_timeoutを変更せずにデフォルト値で続行する。
+/// ## busy_timeout管理
+/// リトライパスと同様に、元のbusy_timeoutを取得・設定・復元する。
+/// 取得または設定に失敗した場合は即座に終了し、予算を超えてブロックするリスクを排除。
+/// これにより、接続の以前のbusy_timeout（5秒など）で長時間ブロックすることを防ぐ。
 async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], remaining: Duration) {
     let mut success_count = 0;
     let mut error_count = 0;
@@ -514,8 +515,17 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     };
 
     // 元のbusy_timeoutを取得（復元用）
-    // 取得失敗時はbusy_timeoutを変更せず、デフォルト値で続行（接続劣化を回避）
-    let original_timeout = get_busy_timeout(&mut conn).await;
+    // 取得失敗時は予算を強制できないため即座に終了
+    // → 接続の以前のbusy_timeout（5秒など）で長時間ブロックするリスクを排除
+    let original_timeout = match get_busy_timeout(&mut conn).await {
+        Some(timeout) => timeout,
+        None => {
+            log::debug!(
+                "Skipping individual insert fallback: failed to get original busy_timeout"
+            );
+            return;
+        }
+    };
 
     // busy_timeoutを残り予算で制限（最大500ms）
     // saturating_subでアンダーフローを防止（スケジューラ遅延等でelapsedがremainingを超える可能性）
@@ -530,19 +540,15 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
 
     let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64).min(500);
 
-    // original_timeoutがSomeの場合のみbusy_timeoutを変更
-    // Noneの場合は復元できないため、変更せずにデフォルト値で続行
-    let should_restore = if let Some(_) = original_timeout {
-        if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
-            log::debug!("Failed to set busy_timeout for fallback: {:?}", e);
-            false // 設定失敗時は復元不要
-        } else {
-            true // 設定成功時は後で復元
-        }
-    } else {
-        log::debug!("Skipping busy_timeout change for fallback: original value unknown");
-        false // 元の値が不明なので変更しない
-    };
+    // busy_timeoutを設定
+    // 設定失敗時は予算を強制できないため即座に終了
+    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+        log::debug!(
+            "Skipping individual insert fallback: failed to set busy_timeout: {:?}",
+            e
+        );
+        return;
+    }
 
     for msg in messages {
         // 予算チェック
@@ -564,17 +570,13 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         }
     }
 
-    // busy_timeoutを元の値に復元（変更した場合のみ）
-    if should_restore {
-        if let Some(timeout) = original_timeout {
-            if let Err(e) = set_busy_timeout(&mut conn, timeout).await {
-                log::warn!(
-                    "Failed to restore busy_timeout in fallback to original ({}ms): {:?}",
-                    timeout,
-                    e
-                );
-            }
-        }
+    // busy_timeoutを元の値に復元
+    if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+        log::warn!(
+            "Failed to restore busy_timeout in fallback to original ({}ms): {:?}",
+            original_timeout,
+            e
+        );
     }
 
     if error_count > 0 || success_count + error_count < messages.len() {
@@ -1485,5 +1487,98 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count.0, 2, "Both messages should be saved");
+    }
+
+    #[tokio::test]
+    async fn test_fallback_restores_busy_timeout() {
+        // フォールバックパス（save_chunk_individually）でもbusy_timeoutが復元されることを確認
+        // リトライパスの復元テストと同様のカバレッジ
+
+        use sqlx::sqlite::SqliteConnectOptions;
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!("fallback_restore_test_{}.db", std::process::id()));
+
+        // プールのデフォルトbusy_timeoutを3000msに設定
+        // 接続タイムアウトも設定（テスト用）
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .busy_timeout(std::time::Duration::from_millis(3000));
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(2) // 2接続で、1つはsave_chunk_individually用、1つは検証用
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        let messages = vec![create_test_message("fallback1", "Message 1")];
+
+        // フォールバックを直接呼び出してテスト
+        save_chunk_individually(&pool, &messages, Duration::from_millis(500)).await;
+
+        // 別のコネクションを取得してbusy_timeoutを確認
+        // 注: save_chunk_individuallyで使用したコネクションがプールに戻されている
+        let mut conn = pool.acquire().await.unwrap();
+        let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+
+        // 元の値（3000ms）に復元されていること
+        // ただし、2接続プールなので別のコネクションが返される可能性がある
+        // この場合も3000msであるはず
+        assert_eq!(
+            timeout.0, 3000,
+            "busy_timeout should be 3000ms (original or default), got {}ms",
+            timeout.0
+        );
+
+        // データが保存されていること
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 1, "Message should be saved via fallback");
+
+        // クリーンアップ
+        drop(conn);
+        drop(pool);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn test_fallback_tiny_budget_exits_without_blocking() {
+        // 極小予算でsave_chunk_individuallyを呼び出し、
+        // 長時間ブロックせずに終了することを確認
+
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
+
+        let messages = vec![create_test_message("tiny_fallback1", "Message 1")];
+
+        let start = Instant::now();
+
+        // 10msの予算 → 50ms未満なので即座にスキップ
+        save_chunk_individually(&pool, &messages, Duration::from_millis(10)).await;
+
+        let elapsed = start.elapsed();
+
+        // 100ms以内に終了すること（長時間ブロックしていない）
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "Fallback with tiny budget should exit quickly, took {}ms",
+            elapsed.as_millis()
+        );
+
+        // データは保存されていないこと（予算不足でスキップ）
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 0, "No messages should be saved with tiny budget");
     }
 }

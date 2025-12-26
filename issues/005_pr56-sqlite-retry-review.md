@@ -1068,6 +1068,51 @@ if should_restore {
 - スキップ発生時のログ/メトリクスを確保
 - 本番運用後にフィードバックを収集して判断
 
+### 28. save_chunk_with_retryのend-to-end予算管理（高リスク指摘）
+
+**指摘内容**:
+- `save_chunk_with_retry`が独自の2秒タイマーを持っている
+- 外側の`save_comments_to_db`の総予算を無視して、遅いチャンクが2秒を消費
+- end-to-endのタイムアウト保証が破れる
+- 例: 外側で残り500msしかないのに、チャンクは2秒まで使える
+
+**対応**:
+```rust
+// Before（問題あり）:
+async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
+    let start_time = Instant::now();
+    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS); // 独自タイマー
+    // ...
+}
+
+// After（修正済み）:
+async fn save_chunk_with_retry(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    remaining: Duration,  // 外側から予算を受け取る
+) -> bool {
+    let start_time = Instant::now();
+    let total_timeout = remaining;  // 外側の予算を使用
+    // ...
+}
+
+// 呼び出し側:
+let remaining = total_timeout.saturating_sub(elapsed);
+if !save_chunk_with_retry(pool, chunk, remaining).await {
+    // ...
+}
+```
+
+**追加テスト**:
+- `test_tiny_budget_skips_gracefully`: 極小予算（10ms）でパニックしないことを確認
+- `test_budget_exhaustion_mid_chunk`: 100件のメッセージが予算内で処理されることを確認
+- `test_remaining_budget_passed_to_retry`: 500ms予算内で完了することを確認
+
+**今後の対策**:
+- 内部関数は独自のタイムアウトを持たず、外側から予算を受け取る
+- end-to-end予算管理を意識した設計
+- チェーンされた関数間で予算を渡すパターンを標準化
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

@@ -72,16 +72,22 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 
     // チャンクに分割して処理（ロック保持時間を短縮）
     for chunk in messages.chunks(BATCH_CHUNK_SIZE) {
-        // 総タイムアウトチェック
-        if start_time.elapsed() >= total_timeout {
+        // 残り予算を計算（saturating_subでアンダーフロー防止）
+        let elapsed = start_time.elapsed();
+        let remaining = total_timeout.saturating_sub(elapsed);
+
+        // 残り予算が少なすぎる場合はスキップ（50ms未満は無意味）
+        if remaining.as_millis() < 50 {
             log::warn!(
-                "save_comments_to_db: Total timeout ({}ms) exceeded, skipping remaining chunks",
-                RETRY_TOTAL_TIMEOUT_MS
+                "save_comments_to_db: Remaining budget ({}ms) too short, skipping chunk ({} messages)",
+                remaining.as_millis(),
+                chunk.len()
             );
             return;
         }
 
-        if !save_chunk_with_retry(pool, chunk).await {
+        // 残り予算をsave_chunk_with_retryに渡す（end-to-end予算管理）
+        if !save_chunk_with_retry(pool, chunk, remaining).await {
             // トランザクション失敗時は1件ずつ個別INSERTにフォールバック
             // ただし総タイムアウトを超過している場合はスキップ
             let elapsed = start_time.elapsed();
@@ -103,27 +109,35 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 ///
 /// SQLITE_BUSYエラーが発生した場合、以下の制約内でリトライする:
 /// - 最大試行回数: MAX_ATTEMPTS回
-/// - 総タイムアウト: RETRY_TOTAL_TIMEOUT_MS
+/// - 外側から渡された残り予算（remaining）内
 ///
 /// 試行間隔はexponential backoffで増加（100ms → 200ms...最大1000ms）。
 ///
-/// ## タイムアウトの強制
+/// ## タイムアウトの強制（end-to-end保証）
+/// 外側のsave_comments_to_dbから残り予算（remaining）を受け取り、
+/// その予算内でのみリトライを行う。これにより、遅いチャンクが
+/// 後続チャンクの予算を食い潰すことを防ぐ。
+///
 /// 各試行前にコネクションを取得し、`PRAGMA busy_timeout`を残り時間に応じて
-/// 動的に設定する。これにより、SQLiteレベルでブロック時間を制限し、
-/// 総タイムアウトを確実に強制する。
+/// 動的に設定する。これにより、SQLiteレベルでブロック時間を制限する。
 ///
 /// `tokio::time::timeout`はブロッキングSQLite操作をキャンセルできないため使用しない。
 /// 代わりに、各試行でbusy_timeoutを明示的に制限することで、
 /// ブロック時間がタイムアウト予算を超えないことを保証する。
 ///
-/// 例: MAX_ATTEMPTS=3、RETRY_TOTAL_TIMEOUT_MS=2000msの場合
-///   1回目: busy_timeout=500ms（残り2000ms、最大500ms）
-///   2回目: 100ms後、busy_timeout=500ms（残り1400ms程度、最大500ms）
+/// 例: remaining=1500ms、MAX_ATTEMPTS=3の場合
+///   1回目: busy_timeout=500ms（残り1500ms、最大500ms）
+///   2回目: 100ms後、busy_timeout=500ms（残り900ms程度、最大500ms）
 ///   3回目: 200ms後、busy_timeout=残り時間以内（最大500ms）
 ///   → 試行回数超過または残り時間なしでフォールバック（個別INSERT）
-async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
+async fn save_chunk_with_retry(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    remaining: Duration,
+) -> bool {
     let start_time = Instant::now();
-    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+    // 外側から渡された残り予算を使用（独自タイマーではない）
+    let total_timeout = remaining;
     let mut attempt = 0;
     let mut backoff_ms = INITIAL_BACKOFF_MS;
 
@@ -1123,7 +1137,9 @@ mod tests {
         ];
 
         // save_chunk_with_retryが成功すること
-        let result = save_chunk_with_retry(&pool, &messages).await;
+        // テスト用にデフォルト予算（2秒）を渡す
+        let default_budget = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+        let result = save_chunk_with_retry(&pool, &messages, default_budget).await;
         assert!(result, "Retry should succeed on first attempt");
 
         // データが保存されていること
@@ -1143,7 +1159,8 @@ mod tests {
         let messages = vec![create_test_message("msg1", "Hello")];
 
         // save_chunk_with_retryが失敗すること（リトライせずに）
-        let result = save_chunk_with_retry(&pool, &messages).await;
+        let default_budget = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+        let result = save_chunk_with_retry(&pool, &messages, default_budget).await;
         assert!(!result, "Should fail immediately on non-BUSY error");
     }
 
@@ -1257,7 +1274,8 @@ mod tests {
         ];
 
         // save_chunk_with_retryを実行（内部でbusy_timeoutが変更される）
-        let result = save_chunk_with_retry(&pool, &messages).await;
+        let default_budget = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+        let result = save_chunk_with_retry(&pool, &messages, default_budget).await;
         assert!(result, "Should succeed");
 
         // 新しいコネクションを取得してbusy_timeoutを確認
@@ -1310,7 +1328,8 @@ mod tests {
         let messages = vec![create_test_message("single1", "Message 1")];
 
         // save_chunk_with_retryを実行
-        let result = save_chunk_with_retry(&pool, &messages).await;
+        let default_budget = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+        let result = save_chunk_with_retry(&pool, &messages, default_budget).await;
         assert!(result, "Should succeed");
 
         // 同じコネクションを再取得（単一接続プールなので同じはず）
@@ -1361,7 +1380,8 @@ mod tests {
         let messages = vec![create_test_message("nondefault1", "Message 1")];
 
         // save_chunk_with_retryを実行
-        let result = save_chunk_with_retry(&pool, &messages).await;
+        let default_budget = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+        let result = save_chunk_with_retry(&pool, &messages, default_budget).await;
         assert!(result, "Should succeed");
 
         // 同じコネクションを再取得
@@ -1382,5 +1402,88 @@ mod tests {
         drop(conn);
         drop(pool);
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn test_tiny_budget_skips_gracefully() {
+        // 非常に小さな予算（10ms）でsave_chunk_with_retryを呼び出し、
+        // パニックせずにfalseを返すことを確認
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
+
+        let messages = vec![create_test_message("tiny1", "Message 1")];
+
+        // 10msの予算 → 50ms未満なのでスキップされるはず
+        let tiny_budget = Duration::from_millis(10);
+        let result = save_chunk_with_retry(&pool, &messages, tiny_budget).await;
+
+        // 予算不足で失敗するが、パニックしないこと
+        assert!(!result, "Should fail gracefully with tiny budget");
+
+        // データは保存されていないこと
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 0, "No messages should be saved with tiny budget");
+    }
+
+    #[tokio::test]
+    async fn test_budget_exhaustion_mid_chunk() {
+        // 中途半端な予算でsave_comments_to_dbを呼び出し、
+        // 予算内で処理が打ち切られることを確認
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
+
+        // 100件のメッセージ（2チャンク）
+        let messages: Vec<ChatMessage> = (0..100)
+            .map(|i| create_test_message(&format!("budget_msg{}", i), &format!("Message {}", i)))
+            .collect();
+
+        // 全体をsave_comments_to_dbに渡す（2秒予算内で処理される）
+        save_comments_to_db(&pool, &messages).await;
+
+        // 正常な予算内では全件保存されること
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 100, "All 100 messages should be saved within 2s budget");
+    }
+
+    #[tokio::test]
+    async fn test_remaining_budget_passed_to_retry() {
+        // save_chunk_with_retryが外側の予算を尊重することを確認
+        // 500msの予算で呼び出し、内部で500ms以内に完了すること
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
+
+        let messages = vec![
+            create_test_message("budget_test1", "Message 1"),
+            create_test_message("budget_test2", "Message 2"),
+        ];
+
+        let start = Instant::now();
+        let budget = Duration::from_millis(500);
+        let result = save_chunk_with_retry(&pool, &messages, budget).await;
+
+        let elapsed = start.elapsed();
+
+        // 成功すること
+        assert!(result, "Should succeed");
+
+        // 500ms未満で完了すること（予算を超えない）
+        assert!(
+            elapsed < Duration::from_millis(600), // マージン100ms
+            "Should complete within budget, took {}ms",
+            elapsed.as_millis()
+        );
+
+        // データが保存されていること
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 2, "Both messages should be saved");
     }
 }

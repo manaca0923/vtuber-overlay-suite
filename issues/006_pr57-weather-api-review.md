@@ -536,6 +536,64 @@ pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, Str
 
 ---
 
+### 15. keyringアクセスのspawn_blocking対応（High-risk）
+
+**問題**:
+`ensure_api_key_synced`、`set_weather_api_key`、および起動時のkeyring読み取りが、asyncコンテキストで直接同期的にkeyring APIを呼び出していた。OS keyringへのアクセスはブロッキング呼び出しであり、以下の問題を引き起こす可能性があった：
+- asyncランタイムのブロック
+- UIスレッドのフリーズ
+- OSがキーチェーンアクセス許可ダイアログを表示する間のハング
+
+**解決策**:
+```rust
+// Before: 直接同期呼び出し
+async fn ensure_api_key_synced(state: &AppState) -> Result<bool, keyring::KeyringError> {
+    match keyring::get_weather_api_key() {  // ← ブロッキング呼び出し
+        Ok(api_key) => { /* ... */ }
+        // ...
+    }
+}
+
+// After: spawn_blockingでラップ
+async fn ensure_api_key_synced(state: &AppState) -> Result<bool, String> {
+    // keyringアクセスはブロッキング呼び出しなので、spawn_blockingでラップ
+    let keyring_result = tokio::task::spawn_blocking(keyring::get_weather_api_key)
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
+
+    match keyring_result {
+        Ok(api_key) => { /* ... */ Ok(true) }
+        Err(keyring::KeyringError::NotFound) => Ok(false),
+        Err(e) => Err(format!("Keyring error: {}", e)),
+    }
+}
+
+// set_weather_api_keyも同様
+let api_key_clone = api_key.clone();
+tokio::task::spawn_blocking(move || keyring::save_weather_api_key(&api_key_clone))
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Keyring error: {}", e))?;
+
+// lib.rs起動時も同様
+tauri::async_runtime::block_on(async move {
+    match tokio::task::spawn_blocking(keyring::get_weather_api_key).await {
+        Ok(Ok(api_key)) => { /* ... */ }
+        Ok(Err(keyring::KeyringError::NotFound)) => { /* ... */ }
+        Ok(Err(e)) => { log::warn!(...); }
+        Err(e) => { log::warn!(...); }
+    }
+});
+```
+
+**教訓**:
+- OS API（keyring、ファイルシステム等）への呼び出しは`spawn_blocking`でラップする
+- asyncコンテキストでブロッキング呼び出しを行うとランタイム全体に影響する
+- 既存のYouTube用keyring実装（PR#26）のパターンを踏襲する
+- クロージャで値をmoveする場合は事前にcloneが必要
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -553,3 +611,4 @@ pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, Str
 13. **全エントリポイントでの永続ストレージ同期**: UIを開かなくても呼ばれるコマンドにも同期ロジックを入れる
 14. **RwLockとasync**: ロックガードをawait境界をまたいで保持しない。データをcloneして即座にdrop
 15. **OSリソースアクセスの最小化**: keyring等のOS呼び出しはヘルパー関数から結果を返し、再利用する
+16. **ブロッキング呼び出しのspawn_blocking**: OS API（keyring等）への呼び出しはasync内で直接呼ばず、spawn_blockingでラップ

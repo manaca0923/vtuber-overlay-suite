@@ -23,21 +23,26 @@ use crate::AppState;
 /// - `Err`: keyringアクセスエラー
 ///
 /// 呼び出し側でkeyringの結果を再利用することで、二重アクセスを防止する。
-async fn ensure_api_key_synced(state: &AppState) -> Result<bool, keyring::KeyringError> {
+/// keyringアクセスはブロッキング呼び出しなので、spawn_blockingでラップする。
+async fn ensure_api_key_synced(state: &AppState) -> Result<bool, String> {
     // メモリにキーがある場合、keyringへのアクセスをスキップ
     if state.weather.has_api_key().await {
         return Ok(true);
     }
 
-    // keyringからAPIキーを取得
-    match keyring::get_weather_api_key() {
+    // keyringからAPIキーを取得（ブロッキング呼び出しをspawn_blockingでラップ）
+    let keyring_result = tokio::task::spawn_blocking(keyring::get_weather_api_key)
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
+
+    match keyring_result {
         Ok(api_key) => {
             state.weather.set_api_key(api_key).await;
             log::info!("Weather API key synced from keyring to memory (auto-recovery)");
             Ok(true)
         }
         Err(keyring::KeyringError::NotFound) => Ok(false),
-        Err(e) => Err(e),
+        Err(e) => Err(format!("Keyring error: {}", e)),
     }
 }
 
@@ -47,8 +52,12 @@ pub async fn set_weather_api_key(
     state: State<'_, AppState>,
     api_key: String,
 ) -> Result<(), String> {
-    // keyringに保存（永続化）
-    keyring::save_weather_api_key(&api_key).map_err(|e| e.to_string())?;
+    // keyringに保存（永続化）- ブロッキング呼び出しをspawn_blockingでラップ
+    let api_key_clone = api_key.clone();
+    tokio::task::spawn_blocking(move || keyring::save_weather_api_key(&api_key_clone))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| format!("Keyring error: {}", e))?;
 
     // メモリにもセット（即時利用可能に）
     state.weather.set_api_key(api_key).await;
@@ -64,9 +73,7 @@ pub async fn set_weather_api_key(
 pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
     // ensure_api_key_syncedがkeyringの結果を返すので再利用
     // 二重keyringアクセスを防止
-    ensure_api_key_synced(&state)
-        .await
-        .map_err(|e| e.to_string())
+    ensure_api_key_synced(&state).await
 }
 
 /// 都市名を設定
@@ -88,9 +95,7 @@ pub async fn get_weather_city(state: State<'_, AppState>) -> Result<String, Stri
 #[tauri::command]
 pub async fn get_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
     // keyringからの自動復元を試みる（エラーは無視せず伝播）
-    ensure_api_key_synced(&state)
-        .await
-        .map_err(|e| e.to_string())?;
+    ensure_api_key_synced(&state).await?;
     state.weather.get_weather().await.map_err(|e| e.to_string())
 }
 
@@ -100,9 +105,7 @@ pub async fn get_weather(state: State<'_, AppState>) -> Result<WeatherData, Stri
 #[tauri::command]
 pub async fn fetch_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
     // keyringからの自動復元を試みる（エラーは無視せず伝播）
-    ensure_api_key_synced(&state)
-        .await
-        .map_err(|e| e.to_string())?;
+    ensure_api_key_synced(&state).await?;
     // キャッシュをクリアしてから取得（get_weatherが新規取得＆キャッシュ保存を行う）
     state.weather.clear_cache().await;
     state.weather.get_weather().await.map_err(|e| e.to_string())
@@ -121,9 +124,7 @@ pub async fn broadcast_weather_update(
     force_refresh: Option<bool>,
 ) -> Result<(), String> {
     // keyringからの自動復元を試みる（エラーは無視せず伝播）
-    ensure_api_key_synced(&state)
-        .await
-        .map_err(|e| e.to_string())?;
+    ensure_api_key_synced(&state).await?;
 
     let weather_data = if force_refresh.unwrap_or(false) {
         // 強制リフレッシュ: キャッシュをクリアしてから取得

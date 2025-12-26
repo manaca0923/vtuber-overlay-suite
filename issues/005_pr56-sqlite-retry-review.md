@@ -2025,6 +2025,48 @@ if (!updateBatcher || updateBatcher.isDestroyed()) {
 - 戻り値: `SaveResult { saved: usize, failed: usize, skipped: usize }`
 - 予算を設定可能にする（メッセージ数/チャンク数に比例）
 
+### 52. isShuttingDownの永続化によるリコネクト抑制（高リスク指摘）
+
+**指摘内容**:
+- `cleanup()`で`isShuttingDown=true`を設定し、`connectWebSocket()`でリセットするが、`pageshow`はbfcache時のみ
+- 通常のunload/reloadで`connectWebSocket()`より前にエラーが発生すると、シャットダウン状態が永続化
+- 再接続が永久に抑制される可能性
+
+**対応**:
+```javascript
+// 初期化セクションの先頭で防御的リセット
+// ===== 初期化 =====
+// 防御的リセット: 初期化前にシャットダウン状態をクリア
+// リロード時やbfcache非対応環境で、前回のシャットダウン状態が残っている可能性がある
+// connectWebSocket()より前にエラーが発生しても、再接続が抑制されないようにする
+isShuttingDown = false;
+
+applyUrlSettings();
+fetchAndApplySettings();
+applyComponentSettings();
+connectWebSocket();
+```
+
+**今後の対策**:
+- グローバル状態フラグは初期化時にリセットする
+- 関数呼び出しに依存したリセットは避ける（エラー時に呼ばれない可能性）
+- 防御的プログラミング: 最悪のケース（早期エラー）を考慮
+
+### 53. busy_timeout復元のリトライ回数（将来タスク）
+
+**指摘内容**:
+- 現在: 20msバックオフ後1回リトライ、失敗時はdetach
+- 問題: 高負荷時にBUSYが連続すると接続をchurnしてプール容量が減少
+
+**対応（将来タスクとして記録）**:
+- `docs/900_tasks.md`に「busy_timeout復元のBUSYリトライ回数増加検討」として記録
+- 2-3回のリトライループに変更を検討（例: 20ms, 40ms, 80ms）
+- 優先度: 低（本番運用でBUSY頻発時に検討）
+
+**今後の対策**:
+- リトライ回数は本番運用のメトリクスに基づいて調整
+- detachによるプール容量減少を監視
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

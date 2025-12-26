@@ -995,6 +995,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（PRAGMA busy_timeoutは通常BUSYにならない）
 
+- [ ] **busy_timeout復元のBUSYリトライ回数増加検討** (PR#56)
+  - 現在: 20msバックオフ後1回リトライ、失敗時はdetach
+  - 問題: 高負荷時にBUSYが連続すると接続をchurnしてプール容量が減少
+  - 対応案:
+    - 2-3回のリトライループに変更（例: 20ms, 40ms, 80ms）
+    - リトライ上限に達した場合のみdetach
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（本番運用でBUSY頻発時に検討）
+
 - [x] **beforeunloadイベントのbfcache影響検討** (PR#56)
   - ~~現在: `beforeunload`を登録しているとブラウザがbfcacheを無効にする可能性がある~~
   - ~~問題: 通常ブラウザでの戻る/進む時にキャッシュから復元されない~~

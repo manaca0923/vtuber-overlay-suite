@@ -614,6 +614,11 @@
     });
 
     // ===== 初期化 =====
+    // 防御的リセット: 初期化前にシャットダウン状態をクリア
+    // リロード時やbfcache非対応環境で、前回のシャットダウン状態が残っている可能性がある
+    // connectWebSocket()より前にエラーが発生しても、再接続が抑制されないようにする
+    isShuttingDown = false;
+
     applyUrlSettings();
     fetchAndApplySettings();
     applyComponentSettings();

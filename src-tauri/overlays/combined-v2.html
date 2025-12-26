@@ -148,10 +148,13 @@
 
     let ws = null;
     let reconnectDelay = 1000;
+    let reconnectTimerId = null;
+    let isShuttingDown = false;
 
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
-    const updateBatcher = new UpdateBatcher({ batchInterval: 150 });
-    const densityManager = new DensityManager();
+    // letを使用: bfcache復元時に再初期化するため
+    let updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+    let densityManager = new DensityManager();
 
     // ===== URL/API設定適用 =====
     function applyUrlSettings() {
@@ -390,11 +393,21 @@
     }
 
     function connectWebSocket() {
+      // OBSリロード時などでisShuttingDownがtrueのまま呼ばれる場合に備えてリセット
+      // ※ connectWebSocket()が呼ばれる = 接続を意図しているため、シャットダウン状態を解除
+      isShuttingDown = false;
+
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
+        // ペンディング中の再接続タイマーをクリア（二重接続防止）
+        // 手動/早期再接続でonopenに到達した場合、予約済みタイマーが残っている可能性がある
+        if (reconnectTimerId) {
+          clearTimeout(reconnectTimerId);
+          reconnectTimerId = null;
+        }
         if (!settingsFetchSucceeded) {
           fetchAndApplySettings();
         }
@@ -459,8 +472,14 @@
       };
 
       ws.onclose = () => {
+        // シャットダウン中は再接続しない
+        if (isShuttingDown) {
+          console.log('WebSocket closed (shutdown)');
+          return;
+        }
         console.log('WebSocket closed, reconnecting...');
-        setTimeout(() => {
+        reconnectTimerId = setTimeout(() => {
+          reconnectTimerId = null;
           reconnectDelay = Math.min(reconnectDelay * 2, 30000);
           connectWebSocket();
         }, reconnectDelay);
@@ -508,7 +527,98 @@
       initDefaultComponents();
     }
 
+    // ===== クリーンアップ =====
+    // オーバーレイのアンロード/リロード時にタイマーをクリーンアップ
+    //
+    // イベント発火順序と設計:
+    // 1. beforeunload: ページ離脱前に発火（bfcache対応ブラウザでも発火）
+    // 2. pagehide: ページ非表示時に発火（event.persistedでbfcache判定可能）
+    //
+    // bfcache対応のため:
+    // - beforeunloadではcleanupを呼ばない（bfcacheを無効化しないため）
+    // - pagehideでevent.persisted=falseの場合のみcleanup
+    // - OBSブラウザソース等のbfcache非対応環境ではpagehide(persisted=false)で確実にクリーンアップ
+
+    function cleanup() {
+      // シャットダウンフラグを立てて再接続を防止
+      isShuttingDown = true;
+
+      // 再接続タイマーをクリア
+      if (reconnectTimerId) {
+        clearTimeout(reconnectTimerId);
+        reconnectTimerId = null;
+      }
+
+      // WebSocketを閉じる（oncloseハンドラを無効化してから）
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+        ws = null; // 閉じたソケットを"生きている"と誤認しないようnull化
+      }
+
+      if (densityManager) {
+        densityManager.destroy();
+      }
+      if (updateBatcher) {
+        updateBatcher.destroy();
+      }
+    }
+
+    window.addEventListener('pagehide', (event) => {
+      // bfcacheに保存される場合はcleanupを呼ばない（後でpageshowで復元するため）
+      // event.persisted=true: bfcacheに保存される → クリーンアップしない
+      // event.persisted=false: 通常のページ離脱（OBS含む） → クリーンアップ
+      if (!event.persisted) {
+        cleanup();
+      }
+    });
+
+    // 注: beforeunloadはbfcacheを無効化する可能性があるため、cleanupを呼ばない
+    // OBSブラウザソース等のbfcache非対応環境でも、pagehide(persisted=false)で
+    // 確実にクリーンアップされるため問題なし
+
+    // bfcache復元時の再接続
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        // bfcacheから復元された場合、フラグをリセットして再接続可能にする
+        console.log('Page restored from bfcache, reconnecting...');
+        isShuttingDown = false;
+        reconnectDelay = 1000;
+
+        // ペンディング中の再接続タイマーをクリア（二重接続防止）
+        // ws.oncloseがタイマーをスケジュール済みの場合があるため、
+        // connectWebSocket()を呼ぶ前にクリアする
+        if (reconnectTimerId) {
+          clearTimeout(reconnectTimerId);
+          reconnectTimerId = null;
+        }
+
+        // マネージャーを再作成（destroyされている可能性があるため）
+        // 注: bfcache復元時はbeforeunload/pagehideでcleanupが呼ばれていないため、
+        //     通常はdestroyされていないが、念のためチェック
+        if (!densityManager || densityManager.isDestroyed()) {
+          densityManager = new DensityManager();
+          console.log('DensityManager reinitialized after bfcache restore');
+        }
+        // UpdateBatcherも再作成（destroyされている場合）
+        if (!updateBatcher || updateBatcher.isDestroyed()) {
+          updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+          console.log('UpdateBatcher reinitialized after bfcache restore');
+        }
+
+        // 二重接続を防止: CONNECTING/OPEN状態では再接続しない
+        if (!ws || (ws.readyState !== WebSocket.CONNECTING && ws.readyState !== WebSocket.OPEN)) {
+          connectWebSocket();
+        }
+      }
+    });
+
     // ===== 初期化 =====
+    // 防御的リセット: 初期化前にシャットダウン状態をクリア
+    // リロード時やbfcache非対応環境で、前回のシャットダウン状態が残っている可能性がある
+    // connectWebSocket()より前にエラーが発生しても、再接続が抑制されないようにする
+    isShuttingDown = false;
+
     applyUrlSettings();
     fetchAndApplySettings();
     applyComponentSettings();

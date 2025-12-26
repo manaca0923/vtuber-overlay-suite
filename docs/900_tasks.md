@@ -866,12 +866,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: LRUキャッシュ（lruクレート）に置き換え、上限2000エントリに設定
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
-- [ ] **DensityManagerの定期クリーンアップ** (PR#54)
-  - 現在: `recordUpdate()`呼び出し時のみ古いエントリを除去
-  - 問題: 更新が止まった場合に履歴が残り続ける可能性
-  - 対応: 定期的なクリーンアップタイマー、または`windowMs`を超えたエントリの自動削除
+- [x] **DensityManagerの定期クリーンアップ** (PR#54, PR#56で対応済み)
+  - ~~現在: `recordUpdate()`呼び出し時のみ古いエントリを除去~~
+  - ~~問題: 更新が止まった場合に履歴が残り続ける可能性~~
+  - 対応済み: 定期クリーンアップタイマー（5秒間隔）と`destroy()`メソッドを実装
   - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
-  - 優先度: 低（現時点では配列サイズは最大で閾値程度に収まる）
 
 - [ ] **DensityManager閾値の設定可能化** (PR#54)
   - 現在: `highDensityThreshold: 5`（2秒間に5回）がハードコード
@@ -880,25 +879,27 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
   - 優先度: 低
 
+- [x] **DensityManager destroy()呼び出しの追加** (PR#56)
+  - ~~現在: `destroy()`メソッドは実装済みだが、呼び出し箇所がない~~
+  - 対応済み: `combined-v2.html`で`pagehide`/`beforeunload`イベントで`cleanup()`関数を呼び出し
+  - `UpdateBatcher`にも`destroy()`メソッドを追加
+
 - [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
 
-- [ ] **SQLITE_BUSYリトライ/backoff** (PR#55)
-  - 現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応
-  - 問題: 高負荷時にトランザクション開始/コミットが失敗する可能性
-  - 対応: リトライロジックとexponential backoffの実装を検討
+- [x] **SQLITE_BUSYリトライ/backoff** (PR#55, PR#56で対応済み)
+  - ~~現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応~~
+  - ~~問題: 高負荷時にトランザクション開始/コミットが失敗する可能性~~
+  - 対応済み: リトライロジック（最大3回）とexponential backoff（100ms→200ms→400ms）を実装
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（現状のbusy_timeout+フォールバックで問題なし）
+  - 並行書き込みテスト追加（ファイルベースDB使用）
 
-- [ ] **絵文字キャッシュのMutex contention最適化** (PR#55)
-  - 現在: `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出し
-  - 問題: 高スループット時にロック競合が発生しパース遅延が悪化する可能性
-  - 対応案:
-    1. ショートカットの重複排除をロック取得前に行い、ユニークなショートカットのみget()
-    2. 並行キャッシュ（`moka::sync::Cache`など）への置き換え
+- [x] **絵文字キャッシュのMutex contention最適化** (PR#55, PR#56で対応済み)
+  - ~~現在: `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出し~~
+  - ~~問題: 高スループット時にロック競合が発生しパース遅延が悪化する可能性~~
+  - 対応済み: ショートカットの重複排除をロック取得前に行い、ユニークなショートカットのみget()
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
-  - 優先度: 低（現状のキャッシュサイズ2000・通常のチャット速度では問題なし）
 
 ### テスト
 
@@ -927,13 +928,37 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
   - 優先度: 低
 
-- [ ] **SQLITE_BUSY並行書き込みテスト** (PR#55)
-  - 2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証
-  - テスト対象:
-    - ロック競合時にbusy_timeoutで待機されるか
-    - フォールバック処理（個別INSERT）が正しく動作するか
-  - 対象ファイル: `src-tauri/src/db/mod.rs`, `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（現状のスモークテストで基本動作は検証済み）
+- [x] **SQLITE_BUSY並行書き込みテスト** (PR#55, PR#56で対応済み)
+  - ~~2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証~~
+  - 対応済み: `test_concurrent_writes_with_retry`を追加
+    - ファイルベースDB使用（in-memoryでは各接続が独立DBを持つため）
+    - 2タスクから同時に30件ずつ書き込み
+    - リトライ/フォールバックで60件全て保存されることを検証
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+
+- [ ] **save_comments_to_dbの総予算によるデータスキップ検討** (PR#56)
+  - 現在: 2秒の総予算を超えると残りのメッセージをスキップ
+  - 設計判断: SQLITE_BUSYなしでもスキップが発生する可能性がある（データ損失リスク）
+  - 対応案:
+    - 予算をチャンクごとにスコープするか、チャンク数でスケールする
+    - スキップ数をログ/メトリクスで報告し、上流でリキュー可能にする
+    - 現状はリアルタイム性を優先し、2秒以内に完了することを保証
+    - **戻り値を構造化**: `{ saved: usize, failed: usize, skipped: usize }`を返し、呼び出し元に通知
+    - **予算を設定可能に**: メッセージ数/チャンク数に比例させる、または設定ファイルで変更可能に
+    - **テスト用に予算を注入可能に**: `test_concurrent_writes_with_retry`が2秒固定予算でフレーキーになる可能性あり（遅いディスク/CI環境）
+    - **テスト追加**: 予算超過時のskippedカウントを検証するテスト（構造化戻り値実装後）
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 中（本番運用後にフィードバックを収集）
+
+- [ ] **busy_timeoutのタイムアウト保証に関するドキュメント明確化** (PR#56)
+  - 現在: `busy_timeout`はロック待ち時間のみ制限、遅いI/Oは制限しない
+  - 問題: 遅いディスクI/Oで2秒を超える可能性がある（リアルタイム保証が破れる）
+  - 対応案:
+    - ドキュメントコメントで「ロック待ちのみ制限」を明記
+    - または `spawn_blocking` + `timeout` でキャンセル可能にし、タイムアウト時に`conn.detach()`
+    - SQLite interrupt/progress handlerの使用を検討
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（遅いディスクI/Oは稀なケース）
 
 - [ ] **絵文字キャッシュのストレステスト/ベンチマーク** (PR#55)
   - 高スループット時のロック競合によるレイテンシ悪化を検出
@@ -942,6 +967,92 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 多数の絵文字マッチ時のレイテンシ測定
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
   - 優先度: 低（現状のチャット速度では問題なし）
+
+- [ ] **pool.acquire()タイムアウト時のスキップログテスト** (PR#56)
+  - 単一接続プールで接続を保持した状態でacquireタイムアウトを発生させ、スキップログが出力されることを検証
+  - テスト対象: `save_chunk_with_transaction_and_timeout`でTransactionResult::Busy返却時のログ出力
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
+
+- [ ] **bfcache/リロード時のWebSocket再接続テスト** (PR#56)
+  - JSテストハーネスがない場合は手動QA手順を文書化
+  - テスト対象:
+    - pagehide + pageshowのbfcacheフローでcleanup/reconnect idempotencyを検証
+    - cleanup後にオーバーレイがinert状態にならないことを確認
+    - isShuttingDownがpageshow復元時にリセットされる
+    - DensityManager/UpdateBatcherがbfcache復元後も正常に動作する
+    - OBSリロード後にWebSocket再接続が可能
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+  - 優先度: 低（OBSブラウザソースではbfcacheは使用されない）
+
+- [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
+  - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止
+  - 問題: 一時的なBUSYエラーの場合、リトライすべきでは
+  - 対応案:
+    - `Result<u64, sqlx::Error>`に変更
+    - BUSYエラーなら`TransactionResult::Busy`を返してリトライ
+    - 非BUSYエラーならconn.detach()してOtherError
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（PRAGMA busy_timeoutは通常BUSYにならない）
+
+- [ ] **busy_timeout復元のBUSYリトライ回数増加検討** (PR#56)
+  - 現在: 20msバックオフ後1回リトライ、失敗時はdetach
+  - 問題: 高負荷時にBUSYが連続すると接続をchurnしてプール容量が減少
+  - 対応案:
+    - 2-3回のリトライループに変更（例: 20ms, 40ms, 80ms）
+    - リトライ上限に達した場合のみdetach
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（本番運用でBUSY頻発時に検討）
+
+- [x] **beforeunloadイベントのbfcache影響検討** (PR#56)
+  - ~~現在: `beforeunload`を登録しているとブラウザがbfcacheを無効にする可能性がある~~
+  - ~~問題: 通常ブラウザでの戻る/進む時にキャッシュから復元されない~~
+  - 対応済み: `beforeunload`でのcleanup()呼び出しを削除し、`pagehide`のみを使用
+    - `pagehide`で`event.persisted`チェック、falseの場合のみcleanup実行
+    - OBSブラウザソース等のbfcache非対応環境でもpagehide(persisted=false)で確実にクリーンアップ
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+
+- [ ] **トランザクション内でのデッドライン強制** (PR#56)
+  - 現在: 2秒の総予算は`save_chunk_with_retry`ループで管理されているが、トランザクション内の遅いI/Oは制限されない
+  - 問題: 遅いディスクI/O（SQLITE_BUSYなし）で2秒を超える可能性がある
+  - 対応案:
+    - `save_chunk_with_transaction_on_conn`にdeadlineパラメータを追加
+    - 各INSERT前にデッドライン超過チェック
+    - 超過時はrollbackして早期終了
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（遅いディスクI/Oは稀なケース）
+
+- [ ] **遅いINSERTシミュレーションテスト** (PR#56)
+  - 遅いINSERTをシミュレートし、デッドライン超過時に早期rollback + 部分コミットなしを検証
+  - テスト対象: `save_chunk_with_transaction_on_conn`のデッドライン強制
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
+
+- [ ] **テスト用DBファイルの分離改善** (PR#56)
+  - 現在: PIDベースの命名（`test_{}.db`）で分離、テスト終了時に削除
+  - 問題: テスト中断時に古いファイルが残り、再実行時にデータが残留する可能性
+  - 対応案:
+    - `tempfile`クレートを使用して自動削除されるテンポラリファイルを使用
+    - または、テスト開始前にファイルが存在すれば削除するヘルパー関数を追加
+    - ユニークなパス生成にUUIDを併用（PID + UUID）
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現状でも`CREATE TABLE IF NOT EXISTS`で問題回避、テスト終了時に削除処理あり）
+
+- [ ] **busy_timeout=0のfail-fast動作保持検討** (PR#56)
+  - 現在: `original_timeout == 0`は「制限なし」として`u64::MAX`扱い → 500msにクランプ
+  - 問題: SQLiteの`busy_timeout=0`は「即座にBUSYエラーを返す（fail-fast）」という意味
+    - オペレーターが意図的に0を設定した場合、500ms待機するように動作が変わる
+  - 対応案:
+    - Option A: 0は0として扱い、busy_timeout=0で即座にBUSYを返す
+    - Option B: 設定可能な`min_busy_timeout_ms`を追加し、0を上書きするかを制御
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（プール設定でbusy_timeout=0を使うケースは稀）
+  - 備考: 現在の実装は「リトライを優先する」設計判断に基づく
+
+- [ ] **busy_timeout=0のfail-fast動作テスト追加** (PR#56)
+  - `busy_timeout=0`設定時にリトライパスが即座にBUSYを返す（または現在の動作を明示的に検証）
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
 
 ### ドキュメント
 

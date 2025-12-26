@@ -8,9 +8,13 @@
  *   const densityManager = new DensityManager();
  *   densityManager.recordUpdate('right.lowerLeft');
  *   // 高負荷検出時に自動で ComponentRegistry.dispatch('density:high', {...}) が呼ばれる
+ *   // 終了時には densityManager.destroy() を呼び出してタイマーをクリア
  */
 (function () {
   'use strict';
+
+  /** 定期クリーンアップのデフォルト間隔（ms） */
+  const DEFAULT_CLEANUP_INTERVAL_MS = 5000;
 
   class DensityManager {
     /**
@@ -19,6 +23,7 @@
      * @param {string[]} options.slots - 監視対象のslot ID配列
      * @param {number} options.windowMs - 監視ウィンドウ（ms、デフォルト: 2000）
      * @param {number} options.threshold - 高負荷判定閾値（デフォルト: 5）
+     * @param {number} options.cleanupIntervalMs - 定期クリーンアップ間隔（ms、デフォルト: 5000）
      */
     constructor(options = {}) {
       this.monitoredSlots = options.slots || [
@@ -29,6 +34,7 @@
 
       this.windowMs = options.windowMs || 2000;
       this.highDensityThreshold = options.threshold || 5;
+      this.cleanupIntervalMs = options.cleanupIntervalMs || DEFAULT_CLEANUP_INTERVAL_MS;
 
       // 更新履歴（slotId -> タイムスタンプ配列）
       this.updateHistory = new Map();
@@ -50,6 +56,12 @@
         maxItems: 6,
         showSec: 6,
       };
+
+      // 定期クリーンアップタイマーを開始
+      // recordUpdate()が呼ばれない場合でも古いエントリを除去し、メモリリークを防止
+      this._cleanupTimerId = setInterval(() => {
+        this._cleanupOldEntries();
+      }, this.cleanupIntervalMs);
     }
 
     /**
@@ -138,6 +150,52 @@
         history.length = 0;
       });
       this.isDense = false;
+    }
+
+    /**
+     * 古いエントリを削除（定期クリーンアップ）
+     * @private
+     */
+    _cleanupOldEntries() {
+      const now = Date.now();
+      const cutoff = now - this.windowMs;
+      let cleaned = false;
+
+      this.updateHistory.forEach((history, slotId) => {
+        const originalLength = history.length;
+        const filtered = history.filter((t) => t >= cutoff);
+
+        if (filtered.length !== originalLength) {
+          this.updateHistory.set(slotId, filtered);
+          cleaned = true;
+        }
+      });
+
+      // クリーンアップ後に過密状態をチェック
+      // 古いエントリが消えたことで過密状態が解消される可能性がある
+      if (cleaned) {
+        this.checkDensity();
+      }
+    }
+
+    /**
+     * DensityManagerを破棄
+     * 定期クリーンアップタイマーを停止し、リソースを解放
+     */
+    destroy() {
+      if (this._cleanupTimerId) {
+        clearInterval(this._cleanupTimerId);
+        this._cleanupTimerId = null;
+      }
+      this.clearHistory();
+    }
+
+    /**
+     * DensityManagerが破棄されたかどうかを返す
+     * @returns {boolean} 破棄済みならtrue
+     */
+    isDestroyed() {
+      return this._cleanupTimerId === null;
     }
 
     /**

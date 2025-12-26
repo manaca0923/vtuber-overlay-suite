@@ -116,6 +116,23 @@
     setBatchInterval(ms) {
       this.batchInterval = Math.max(50, Math.min(500, ms)); // 50-500msの範囲
     }
+
+    /**
+     * UpdateBatcherを破棄
+     * タイマーを停止し、リソースを解放
+     */
+    destroy() {
+      this.clear();
+      this._destroyed = true;
+    }
+
+    /**
+     * インスタンスが破棄されているかを確認
+     * @returns {boolean}
+     */
+    isDestroyed() {
+      return this._destroyed === true;
+    }
   }
 
   // グローバルに公開

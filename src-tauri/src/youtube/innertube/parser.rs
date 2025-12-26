@@ -1,6 +1,7 @@
 //! InnerTube レスポンスパーサー
 
 use chrono::{TimeZone, Utc};
+use std::collections::HashSet;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -362,8 +363,9 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
 /// ロック範囲を最小化するため:
 /// 0. キャッシュ空チェック（try_lock）- cold-cache時の正規表現スキャンを回避
 /// 1. 正規表現でマッチを検出（ロック外）
-/// 2. キャッシュから絵文字情報を一括取得（ロック範囲最小）
-/// 3. 結果を組み立て（ロック外）
+/// 2. ユニークなショートカットを抽出（ロック外）- 重複排除でget()回数削減
+/// 3. キャッシュからユニークなショートカットのみ一括取得（ロック範囲最小）
+/// 4. 結果を組み立て（ロック外）
 fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
     // Step 0: キャッシュが空なら正規表現スキャンをスキップ（cold-cache最適化）
     // try_lockを使用してブロッキングせずにチェック
@@ -385,9 +387,16 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
         return vec![MessageRun::Text { text: text.to_string() }];
     }
 
-    // Step 2: キャッシュからショートカットを一括検索し、(start, end, Option<EmojiInfo>)を収集
-    // HashMapを介さず直接タプルを構築することでcloneを削減
-    let matches_with_emoji: Vec<(usize, usize, Option<EmojiInfo>)> = {
+    // Step 2: ユニークなショートカットを抽出（ロック外）
+    // 同じ絵文字が複数回使用されても、キャッシュget()は1回だけで済む
+    let unique_shortcuts: HashSet<&str> = matches
+        .iter()
+        .map(|&(start, end)| &text[start..end])
+        .collect();
+
+    // Step 3: キャッシュからユニークなショートカットのみ一括取得
+    // ショートカット -> EmojiInfo のマッピングを構築
+    let emoji_map: std::collections::HashMap<String, EmojiInfo> = {
         let mut cache = match EMOJI_CACHE.lock() {
             Ok(c) => c,
             Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
@@ -411,18 +420,30 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
         // 3. get()はLRU順序の更新のみで、内部的にはポインタ操作のみ（軽量）
         // 4. キャッシュサイズ2000で通常の配信では十分だが、長時間・多絵文字の
         //    配信でもホット絵文字を保持できる方がユーザー体験が良い
-        matches
+        //
+        // 重複排除により、N個の絵文字使用があっても、ユニークなM個のみget()を呼び出す
+        // 例: ":_emoji1: :_emoji1: :_emoji2:" → 2回のget()で済む（3回ではなく）
+        unique_shortcuts
             .iter()
-            .map(|&(start, end)| {
-                let shortcut = &text[start..end];
-                let emoji_info = cache.get(shortcut).cloned();
-                (start, end, emoji_info)
+            .filter_map(|&shortcut| {
+                cache.get(shortcut).cloned().map(|emoji| (shortcut.to_string(), emoji))
             })
             .collect()
         // ここでロック解放
     };
 
-    // Step 3: 結果を組み立て（ロック外）
+    // Step 4: 結果を組み立て（ロック外）
+    // 元のマッチ位置を基にemoji_mapから取得
+    let matches_with_emoji: Vec<(usize, usize, Option<EmojiInfo>)> = matches
+        .iter()
+        .map(|&(start, end)| {
+            let shortcut = &text[start..end];
+            let emoji_info = emoji_map.get(shortcut).cloned();
+            (start, end, emoji_info)
+        })
+        .collect();
+
+    // Step 5: 結果を組み立て（ロック外）
     let mut result: Vec<MessageRun> = Vec::new();
     let mut last_end = 0;
 

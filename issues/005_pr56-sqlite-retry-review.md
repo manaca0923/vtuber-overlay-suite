@@ -1768,6 +1768,70 @@ assert!(elapsed < Duration::from_millis(600), "...");
 - テスト開始時に前回の残留ファイルを削除するか、ユニークなパスを使用
 - `DROP TABLE IF EXISTS`ではなく`CREATE TABLE IF NOT EXISTS`に頼らない設計
 
+### 44. busy_timeout復元時の一時的BUSYエラーによるプール枯渇（高リスク指摘）
+
+**指摘内容**:
+- `set_busy_timeout`でbusy_timeoutを復元する際、**任意の**エラーで`conn.detach()`していた
+- 一時的なSQLITE_BUSYエラー（他のトランザクションがロック中）でも接続を切り離す
+- 高負荷時にプール接続が急速に枯渇する可能性
+
+**問題のあるコード**:
+```rust
+// Before（問題あり）:
+if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+    log::warn!(
+        "Failed to restore busy_timeout to original ({}ms): {:?}, detaching connection from pool",
+        original_timeout,
+        e
+    );
+    conn.detach();  // BUSYエラーでも即座にdetach → プール枯渇
+}
+```
+
+**対応**:
+```rust
+// After（修正済み）:
+// busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
+if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+    if is_sqlite_busy_error(&e) {
+        // BUSYエラーの場合は短いbackoff後にリトライ（プール枯渇防止）
+        log::debug!(
+            "SQLITE_BUSY on restore busy_timeout, retrying after 20ms: {:?}",
+            e
+        );
+        sleep(Duration::from_millis(20)).await;
+
+        // リトライ
+        if let Err(retry_err) = set_busy_timeout(&mut conn, original_timeout).await {
+            log::warn!(
+                "Failed to restore busy_timeout to original ({}ms) after retry, detaching: {:?}",
+                original_timeout,
+                retry_err
+            );
+            conn.detach();
+        }
+    } else {
+        // 非BUSYエラー（IO障害等）は即座にdetach
+        log::warn!(
+            "Failed to restore busy_timeout to original ({}ms): {:?}, detaching connection from pool",
+            original_timeout,
+            e
+        );
+        conn.detach();
+    }
+}
+```
+
+**適用箇所**:
+- `save_chunk_with_transaction_and_timeout` (リトライパス): L405-435
+- `save_chunk_individually` (フォールバックパス): L697-726
+
+**今後の対策**:
+- エラー発生時は種類を区別する: 一時的（BUSY、ネットワーク）vs 恒久的（IO障害、poisoned）
+- 一時的エラーには短いバックオフ + リトライで対応
+- リトライ後も失敗する場合のみ接続を切り離す
+- `conn.detach()`は「接続が完全に使用不能」な場合にのみ使用
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

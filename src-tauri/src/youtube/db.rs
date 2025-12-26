@@ -404,14 +404,32 @@ async fn save_chunk_with_transaction_and_timeout(
 
     // busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
     if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
-        log::warn!(
-            "Failed to restore busy_timeout to original ({}ms): {:?}, detaching connection from pool",
-            original_timeout,
-            e
-        );
-        // 復元失敗時は接続をプールから切り離す（汚染防止）
-        // detach()で接続をプールから切り離し、dropで実際にクローズ
-        conn.detach();
+        if is_sqlite_busy_error(&e) {
+            // BUSYエラーの場合は短いbackoff後にリトライ（プール枯渇防止）
+            log::debug!(
+                "SQLITE_BUSY on restore busy_timeout, retrying after 20ms: {:?}",
+                e
+            );
+            sleep(Duration::from_millis(20)).await;
+
+            // リトライ
+            if let Err(retry_err) = set_busy_timeout(&mut conn, original_timeout).await {
+                log::warn!(
+                    "Failed to restore busy_timeout to original ({}ms) after retry, detaching: {:?}",
+                    original_timeout,
+                    retry_err
+                );
+                conn.detach();
+            }
+        } else {
+            // 非BUSYエラー（IO障害等）は即座にdetach
+            log::warn!(
+                "Failed to restore busy_timeout to original ({}ms): {:?}, detaching connection from pool",
+                original_timeout,
+                e
+            );
+            conn.detach();
+        }
     }
 
     result
@@ -679,12 +697,32 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     // busy_timeoutを元の値に復元
     // 復元失敗時は接続を切り離してプールへの影響を防ぐ（リトライパスと同様）
     if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
-        log::warn!(
-            "Failed to restore busy_timeout in fallback to original ({}ms), detaching connection: {:?}",
-            original_timeout,
-            e
-        );
-        conn.detach();
+        if is_sqlite_busy_error(&e) {
+            // BUSYエラーの場合は短いbackoff後にリトライ（プール枯渇防止）
+            log::debug!(
+                "SQLITE_BUSY on restore busy_timeout in fallback, retrying after 20ms: {:?}",
+                e
+            );
+            sleep(Duration::from_millis(20)).await;
+
+            // リトライ
+            if let Err(retry_err) = set_busy_timeout(&mut conn, original_timeout).await {
+                log::warn!(
+                    "Failed to restore busy_timeout in fallback to original ({}ms) after retry, detaching: {:?}",
+                    original_timeout,
+                    retry_err
+                );
+                conn.detach();
+            }
+        } else {
+            // 非BUSYエラー（IO障害等）は即座にdetach
+            log::warn!(
+                "Failed to restore busy_timeout in fallback to original ({}ms), detaching connection: {:?}",
+                original_timeout,
+                e
+            );
+            conn.detach();
+        }
     }
 
     if error_count > 0 || success_count + error_count < messages.len() {

@@ -388,7 +388,7 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
     // Step 2: キャッシュからショートカットを一括検索し、(start, end, Option<EmojiInfo>)を収集
     // HashMapを介さず直接タプルを構築することでcloneを削減
     let matches_with_emoji: Vec<(usize, usize, Option<EmojiInfo>)> = {
-        let cache = match EMOJI_CACHE.lock() {
+        let mut cache = match EMOJI_CACHE.lock() {
             Ok(c) => c,
             Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
         };
@@ -398,21 +398,24 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
             return vec![MessageRun::Text { text: text.to_string() }];
         }
 
-        // peekを使用して読み取り専用でキャッシュを参照（LRU順序を更新しない）
+        // get()を使用してLRU順序を更新（頻繁にアクセスされる絵文字は残る）
         //
         // 設計判断: get() vs peek()
         // - get(): LRU順序を更新（最近使用した項目は残る）
         // - peek(): LRU順序を更新しない（挿入順でのみeviction）
         //
-        // peek()を選択した理由:
-        // 1. 高スループット時のロック競合軽減（get()は内部でmut操作）
-        // 2. このキャッシュの主目的はメモリ上限の維持であり、厳密なLRUは不要
-        // 3. 絵文字は配信中に繰り返し使用されるため、挿入順でも十分な効果
+        // get()を選択した理由:
+        // 1. 長時間配信で頻繁に使われる絵文字（ホット絵文字）がevictされると
+        //    :_emoji:テキストに戻りユーザー体験が悪化
+        // 2. ロックは既に取得済みなので追加のロックオーバーヘッドはない
+        // 3. get()はLRU順序の更新のみで、内部的にはポインタ操作のみ（軽量）
+        // 4. キャッシュサイズ2000で通常の配信では十分だが、長時間・多絵文字の
+        //    配信でもホット絵文字を保持できる方がユーザー体験が良い
         matches
             .iter()
             .map(|&(start, end)| {
                 let shortcut = &text[start..end];
-                let emoji_info = cache.peek(shortcut).cloned();
+                let emoji_info = cache.get(shortcut).cloned();
                 (start, end, emoji_info)
             })
             .collect()
@@ -1419,14 +1422,13 @@ mod tests {
         clear_emoji_cache();
     }
 
-    /// peek()によるFIFO-like eviction動作のテスト
+    /// get()による真のLRU eviction動作のテスト
     ///
-    /// 設計判断: convert_text_with_emoji_cacheはpeek()を使用するため、
-    /// 頻繁にアクセスされる絵文字もLRU順序は更新されない。
-    /// つまり、挿入順でのみevictionが発生する（FIFO-like）。
-    /// これはロック競合軽減のための意図的な設計。
+    /// 設計判断: convert_text_with_emoji_cacheはget()を使用するため、
+    /// 頻繁にアクセスされる絵文字はLRU順序が更新され、evictされにくくなる。
+    /// これにより、長時間配信でもホット絵文字が保持され、ユーザー体験が向上。
     #[test]
-    fn test_peek_does_not_prevent_eviction() {
+    fn test_hot_emoji_survives_with_lru() {
         // グローバルキャッシュを変更するテストは直列化
         let _lock = lock_cache_test_mutex();
 
@@ -1451,13 +1453,8 @@ mod tests {
             cache.put(hot_shortcut.to_string(), hot_emoji);
         }
 
-        // ホットエントリを繰り返しアクセス（peek経由 = LRU更新なし）
-        for _ in 0..100 {
-            let _ = convert_text_with_emoji_cache(&format!("Test {} text", hot_shortcut));
-        }
-
-        // キャッシュを最大サイズまで埋める
-        // peek()はLRU順序を更新しないため、ホットエントリも他と同様にevictされる
+        // キャッシュを半分埋めつつ、ホットエントリを定期的にアクセス
+        // get()によりLRU順序が更新されるため、ホットエントリは最近使用として扱われる
         for i in 0..EMOJI_CACHE_MAX_SIZE {
             let shortcut = format!(":_newemoji{}:", i);
             let emoji_info = EmojiInfo {
@@ -1470,14 +1467,19 @@ mod tests {
             if let Ok(mut cache) = EMOJI_CACHE.lock() {
                 cache.put(shortcut, emoji_info);
             }
+
+            // 10回に1回ホットエントリにアクセス（LRU更新）
+            if i % 10 == 0 {
+                let _ = convert_text_with_emoji_cache(&format!("Test {} text", hot_shortcut));
+            }
         }
 
-        // ホットエントリがevictされていることを確認
-        // peek()を使用しているため、頻繁なアクセスはevictionを防がない
+        // ホットエントリがまだキャッシュに存在することを確認
+        // get()を使用しているため、頻繁なアクセスでLRU順序が更新されevictを防ぐ
         if let Ok(cache) = EMOJI_CACHE.lock() {
             assert!(
-                cache.peek(hot_shortcut).is_none(),
-                "Hot emoji should be evicted despite frequent access (peek doesn't update LRU)"
+                cache.peek(hot_shortcut).is_some(),
+                "Hot emoji should survive due to frequent access (get updates LRU)"
             );
         }
 

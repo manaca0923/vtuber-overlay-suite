@@ -592,6 +592,98 @@ window.addEventListener('pageshow', (event) => {
 - `connectWebSocket()`前に`ws.readyState`がCONNECTINGまたはOPENでないことを確認
 - WebSocket接続状態の管理には`reconnectTimerId`と`isShuttingDown`の両方を使用
 
+### 15. PRAGMA busy_timeoutがプール接続に漏れる問題（高リスク指摘）
+
+**指摘内容**:
+- リトライ処理で短い`busy_timeout`を設定後、復元せずに接続をプールに戻す
+- プール内の接続が短いタイムアウト（<=500ms）を保持し続ける
+- 通常の操作でもSQLITE_BUSYが発生しやすくなり、フォールバック率が増加
+
+**対応**:
+```rust
+/// プールのデフォルトbusy_timeout（ミリ秒）
+const DEFAULT_POOL_BUSY_TIMEOUT_MS: u64 = 5000;
+
+async fn save_chunk_with_transaction_and_timeout(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    busy_timeout_ms: u64,
+) -> TransactionResult {
+    // コネクション取得
+    let mut conn = match pool.acquire().await { ... };
+
+    // 短いbusy_timeoutを設定
+    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await { ... }
+
+    // トランザクション実行
+    let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
+
+    // ★ busy_timeoutをデフォルトに復元（プール内接続への影響を防ぐ）
+    if let Err(e) = set_busy_timeout(&mut conn, DEFAULT_POOL_BUSY_TIMEOUT_MS).await {
+        log::warn!("Failed to restore busy_timeout: {:?}", e);
+    }
+
+    result
+}
+```
+
+**テスト追加**:
+```rust
+#[tokio::test]
+async fn test_single_connection_pool_timeout_restoration() {
+    // 単一接続プールでbusy_timeout復元を厳密にテスト
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1) // 同じコネクションを再利用
+        .connect_with(connect_options)
+        .await
+        .unwrap();
+
+    save_chunk_with_retry(&pool, &messages).await;
+
+    // 同じコネクションを再取得
+    let mut conn = pool.acquire().await.unwrap();
+    let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+
+    // DEFAULT_POOL_BUSY_TIMEOUT_MS（5000ms）に復元されていること
+    assert_eq!(timeout.0, 5000);
+}
+```
+
+**今後の対策**:
+- プール接続でPRAGMA設定を変更する場合、処理完了後に必ずデフォルト値に復元
+- デフォルト値は定数として定義し、プール作成時の設定と一致させる
+- 復元処理はRAII/guardパターンで確実に実行（Result型なら`?`演算子後でも実行）
+
+### 16. set_busy_timeout失敗時のエラーハンドリング（高リスク指摘）
+
+**指摘内容**:
+- PRAGMA busy_timeout設定失敗を無視して続行していた
+- 設定失敗時はプールのデフォルトbusy_timeout（5秒）でブロックされる可能性
+- 2秒の総タイムアウト目標を達成できなくなる
+
+**対応**:
+```rust
+// busy_timeoutを設定（エラー時は適切に処理）
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    if is_sqlite_busy_error(&e) {
+        log::debug!("SQLITE_BUSY on set busy_timeout: {:?}", e);
+        return TransactionResult::Busy;
+    }
+    log::warn!("Failed to set busy_timeout: {:?}", e);
+    // PRAGMA失敗時は未知のタイムアウトで続行するのは危険なのでエラー
+    return TransactionResult::OtherError;
+}
+```
+
+**今後の対策**:
+- PRAGMA設定失敗は無視せず適切にエラーハンドリング
+- BUSYエラーならリトライ可能として`Busy`を返す
+- その他のエラーなら即座にフォールバックへ移行
+- 未知のタイムアウトで続行するとタイムアウト保証が崩れるため避ける
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

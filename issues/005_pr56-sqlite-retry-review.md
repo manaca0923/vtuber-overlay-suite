@@ -1576,6 +1576,69 @@ if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
 - 「エラー時は接続を使い捨てる」というセーフティネット思想
 - リトライパスとフォールバックパスで一貫した対応を行う
 
+### 38. set_busy_timeout BUSY時はconn.detach()しない（高リスク指摘）
+
+**指摘内容**:
+- `set_busy_timeout`でBUSYエラーが発生した場合に`conn.detach()`を呼んでいた
+- BUSYエラーは一時的なロック競合であり、接続自体は正常
+- 一時的なロック競合で接続を破棄するとプールが枯渇する可能性
+
+**対応**:
+```rust
+// Before（問題あり）:
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    if is_sqlite_busy_error(&e) {
+        log::debug!("SQLITE_BUSY on set busy_timeout, detaching connection: {:?}", e);
+        conn.detach();  // ← BUSYでもdetach
+        return TransactionResult::Busy;
+    }
+    log::warn!("Failed to set busy_timeout, detaching connection: {:?}", e);
+    conn.detach();
+    return TransactionResult::OtherError;
+}
+
+// After（修正済み）:
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    if is_sqlite_busy_error(&e) {
+        log::debug!("SQLITE_BUSY on set busy_timeout: {:?}", e);
+        // 一時的なロック競合なのでdetachせずBusyを返す（リトライ可能）
+        return TransactionResult::Busy;
+    }
+    log::warn!("Failed to set busy_timeout, detaching connection: {:?}", e);
+    conn.detach();  // 非BUSYエラーはIO障害等の可能性があるためdetach
+    return TransactionResult::OtherError;
+}
+```
+
+**フォールバックパスも同様に修正**:
+```rust
+// save_chunk_individually内
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    if is_sqlite_busy_error(&e) {
+        log::warn!(
+            "Skipping individual insert fallback: SQLITE_BUSY on set busy_timeout, {} messages not saved: {:?}",
+            messages.len(),
+            e
+        );
+        // 一時的なロック競合なのでdetachしない
+        return;
+    }
+    log::warn!(
+        "Skipping individual insert fallback: failed to set busy_timeout, detaching connection, {} messages not saved: {:?}",
+        messages.len(),
+        e
+    );
+    conn.detach();  // 非BUSYエラーはdetach
+    return;
+}
+```
+
+**今後の対策**:
+- BUSYエラーは一時的なロック競合であり、接続は正常
+- BUSYエラー時は`conn.detach()`を呼ばずにリトライ可能として返す
+- 非BUSYエラー（IO障害等）は接続が汚染されている可能性があるため`conn.detach()`
+- 「一時的エラー」と「永続的エラー」を区別し、適切に対応する
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

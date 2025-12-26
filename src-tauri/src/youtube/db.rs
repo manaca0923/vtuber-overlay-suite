@@ -379,11 +379,12 @@ async fn save_chunk_with_transaction_and_timeout(
         .min(remaining_after_acquire.as_millis() as u64);
 
     // busy_timeoutを設定（エラー時は適切に処理）
-    // PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
+    // BUSYエラー: 一時的なロック競合なので接続は正常 → detachしない（プール枯渇防止）
+    // その他のエラー: IO障害等の可能性があり、接続をプールに戻さない
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
         if is_sqlite_busy_error(&e) {
-            log::debug!("SQLITE_BUSY on set busy_timeout, detaching connection: {:?}", e);
-            conn.detach();
+            log::debug!("SQLITE_BUSY on set busy_timeout: {:?}", e);
+            // 一時的なロック競合なのでdetachせずBusyを返す（リトライ可能）
             return TransactionResult::Busy;
         }
         log::warn!("Failed to set busy_timeout, detaching connection: {:?}", e);
@@ -634,8 +635,18 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
 
     // busy_timeoutを設定
     // 設定失敗時は予算を強制できないため即座に終了
-    // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
+    // BUSYエラー: 一時的なロック競合なので接続は正常 → detachしない（プール枯渇防止）
+    // その他のエラー: IO障害等の可能性があり、接続をプールに戻さない
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+        if is_sqlite_busy_error(&e) {
+            log::warn!(
+                "Skipping individual insert fallback: SQLITE_BUSY on set busy_timeout, {} messages not saved: {:?}",
+                messages.len(),
+                e
+            );
+            // 一時的なロック競合なのでdetachしない
+            return;
+        }
         log::warn!(
             "Skipping individual insert fallback: failed to set busy_timeout, detaching connection, {} messages not saved: {:?}",
             messages.len(),
@@ -1287,6 +1298,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_writes_with_retry() {
+        // 2つのタスクから同時に30件ずつ書き込み、全60件が保存されることを検証
+        // 注: このテストは2秒の固定予算内で完了することを期待している
+        // 非常に遅いディスク/CI環境では予算超過でスキップが発生しフレーキーになる可能性がある
+        // 将来的にはテスト用に予算を注入可能にすることを検討（docs/900_tasks.md参照）
         use std::sync::Arc;
         use tokio::sync::Barrier;
 

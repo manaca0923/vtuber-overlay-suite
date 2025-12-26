@@ -945,6 +945,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 現状はリアルタイム性を優先し、2秒以内に完了することを保証
     - **戻り値を構造化**: `{ saved: usize, failed: usize, skipped: usize }`を返し、呼び出し元に通知
     - **予算を設定可能に**: メッセージ数/チャンク数に比例させる、または設定ファイルで変更可能に
+    - **テスト用に予算を注入可能に**: `test_concurrent_writes_with_retry`が2秒固定予算でフレーキーになる可能性あり（遅いディスク/CI環境）
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 中（本番運用後にフィードバックを収集）
 

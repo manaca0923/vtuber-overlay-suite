@@ -3,6 +3,7 @@ mod db;
 mod keyring;
 mod server;
 pub mod util; // doctestのためpubにする
+mod weather;
 mod youtube;
 
 use sqlx::SqlitePool;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub poller: Arc<Mutex<Option<youtube::poller::ChatPoller>>>,
     pub server: server::ServerState,
     pub db: SqlitePool,
+    pub weather: Arc<weather::WeatherClient>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -100,6 +102,7 @@ pub fn run() {
       poller: Arc::new(Mutex::new(None)),
       server: server_state_for_manage,
       db: db_pool,
+      weather: Arc::new(weather::WeatherClient::new()),
     })
     .invoke_handler({
       // デバッグビルドではtest_innertube_connectionを含む
@@ -159,6 +162,17 @@ pub fn run() {
           commands::youtube::stop_unified_polling,
           commands::youtube::is_unified_polling_running,
           commands::youtube::get_unified_polling_mode,
+          commands::youtube::get_live_stream_stats,
+          commands::youtube::broadcast_kpi_update,
+          commands::weather::set_weather_api_key,
+          commands::weather::has_weather_api_key,
+          commands::weather::set_weather_city,
+          commands::weather::get_weather_city,
+          commands::weather::get_weather,
+          commands::weather::fetch_weather,
+          commands::weather::broadcast_weather_update,
+          commands::weather::clear_weather_cache,
+          commands::weather::get_weather_cache_ttl,
         ]
       }
       // リリースビルドではtest_innertube_connectionを除外
@@ -217,6 +231,17 @@ pub fn run() {
           commands::youtube::stop_unified_polling,
           commands::youtube::is_unified_polling_running,
           commands::youtube::get_unified_polling_mode,
+          commands::youtube::get_live_stream_stats,
+          commands::youtube::broadcast_kpi_update,
+          commands::weather::set_weather_api_key,
+          commands::weather::has_weather_api_key,
+          commands::weather::set_weather_city,
+          commands::weather::get_weather_city,
+          commands::weather::get_weather,
+          commands::weather::fetch_weather,
+          commands::weather::broadcast_weather_update,
+          commands::weather::clear_weather_cache,
+          commands::weather::get_weather_cache_ttl,
         ]
       }
     })

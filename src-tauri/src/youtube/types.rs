@@ -191,12 +191,43 @@ pub struct VideoResponse {
 pub struct VideoItem {
     #[serde(rename = "liveStreamingDetails")]
     pub live_streaming_details: Option<LiveStreamingDetails>,
+    /// 動画統計情報
+    pub statistics: Option<VideoStatistics>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LiveStreamingDetails {
     #[serde(rename = "activeLiveChatId")]
     pub active_live_chat_id: Option<String>,
+    /// 同時視聴者数（配信中のみ）
+    #[serde(rename = "concurrentViewers")]
+    pub concurrent_viewers: Option<String>,
+}
+
+/// 動画統計情報
+#[derive(Debug, Deserialize)]
+pub struct VideoStatistics {
+    /// 再生回数
+    #[serde(rename = "viewCount")]
+    pub view_count: Option<String>,
+    /// 高評価数
+    #[serde(rename = "likeCount")]
+    pub like_count: Option<String>,
+    /// コメント数
+    #[serde(rename = "commentCount")]
+    pub comment_count: Option<String>,
+}
+
+/// ライブ配信ステータス
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveStreamStats {
+    /// 同時視聴者数
+    pub concurrent_viewers: Option<i64>,
+    /// 高評価数
+    pub like_count: Option<i64>,
+    /// 総再生回数
+    pub view_count: Option<i64>,
 }
 
 /// YouTube APIのメッセージタイプを解析してMessageTypeに変換

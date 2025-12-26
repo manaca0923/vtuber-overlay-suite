@@ -1,7 +1,8 @@
 use reqwest::Client;
 use std::fmt;
 
-use super::{errors::YouTubeError, types::*};
+use super::errors::YouTubeError;
+use super::types::{LiveChatMessagesResponse, LiveStreamStats, VideoResponse};
 
 const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
 
@@ -247,5 +248,76 @@ impl YouTubeClient {
                 )))
             }
         }
+    }
+
+    /// ライブ配信の視聴者数・統計情報を取得（クォータ消費: 約3 units）
+    pub async fn get_live_stream_stats(
+        &self,
+        video_id: &str,
+    ) -> Result<LiveStreamStats, YouTubeError> {
+        log::debug!(
+            "Fetching live stream stats for video: {} (quota cost: ~3 units)",
+            video_id
+        );
+
+        let url = format!("{}/videos", API_BASE);
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&[
+                ("part", "liveStreamingDetails,statistics"),
+                ("id", video_id),
+                ("key", &self.api_key),
+            ])
+            .send()
+            .await?;
+
+        match response.status() {
+            reqwest::StatusCode::OK => {}
+            reqwest::StatusCode::FORBIDDEN => {
+                let error_text = response.text().await?;
+                if error_text.contains("quotaExceeded") {
+                    return Err(YouTubeError::QuotaExceeded);
+                } else if error_text.contains("rateLimitExceeded") {
+                    return Err(YouTubeError::RateLimitExceeded);
+                }
+                return Err(YouTubeError::InvalidApiKey);
+            }
+            reqwest::StatusCode::UNAUTHORIZED => {
+                return Err(YouTubeError::InvalidApiKey);
+            }
+            _ => {
+                return Err(YouTubeError::VideoNotFound);
+            }
+        }
+
+        let data: VideoResponse = response.json().await?;
+
+        let item = data.items.first().ok_or(YouTubeError::VideoNotFound)?;
+
+        let concurrent_viewers = item
+            .live_streaming_details
+            .as_ref()
+            .and_then(|d| d.concurrent_viewers.as_ref())
+            .and_then(|v| v.parse::<i64>().ok());
+
+        let like_count = item
+            .statistics
+            .as_ref()
+            .and_then(|s| s.like_count.as_ref())
+            .and_then(|v| v.parse::<i64>().ok());
+
+        let view_count = item
+            .statistics
+            .as_ref()
+            .and_then(|s| s.view_count.as_ref())
+            .and_then(|v| v.parse::<i64>().ok());
+
+        Ok(LiveStreamStats {
+            concurrent_viewers,
+            like_count,
+            view_count,
+        })
     }
 }

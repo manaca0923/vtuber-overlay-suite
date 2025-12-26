@@ -25,10 +25,26 @@ pub async fn set_weather_api_key(
     Ok(())
 }
 
-/// 天気APIキーが設定されているか確認（keyringから確認）
+/// 天気APIキーが設定されているか確認（keyringから確認 + メモリと同期）
+///
+/// keyringにキーがある場合はメモリにもロードして状態を同期する。
+/// これにより、起動時のkeyring復元が失敗した場合でも、
+/// UIが「設定済み」を表示するタイミングでメモリにもキーがロードされる。
 #[tauri::command]
-pub async fn has_weather_api_key(_state: State<'_, AppState>) -> Result<bool, String> {
-    keyring::has_weather_api_key().map_err(|e| e.to_string())
+pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    // keyringから確認
+    match keyring::get_weather_api_key() {
+        Ok(api_key) => {
+            // keyringにキーがある場合、メモリにもセット（まだ無い場合）
+            if !state.weather.has_api_key().await {
+                state.weather.set_api_key(api_key).await;
+                log::info!("Weather API key synced from keyring to memory");
+            }
+            Ok(true)
+        }
+        Err(keyring::KeyringError::NotFound) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// 都市名を設定

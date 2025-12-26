@@ -259,6 +259,75 @@ if let Ok(api_key) = keyring::get_weather_api_key() {
 
 ---
 
+### 8. タイムアウトフォールバック問題（高リスク・追加指摘）
+
+**問題**:
+`Client::builder().build().unwrap_or_else(|_| Client::new())` としていたため、ビルダーが失敗した場合にタイムアウトなしの `Client::new()` にフォールバックしていた。これでは「外部APIがハングするとUIがフリーズする」問題が再発する。
+
+**解決策**:
+```rust
+// Before: フォールバックでタイムアウトなしクライアントを使用
+let client = Client::builder()
+    .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+    .build()
+    .unwrap_or_else(|_| Client::new());
+
+// After: expect()で確実にタイムアウト付きクライアントを使用
+let client = Client::builder()
+    .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+    .build()
+    .expect("Failed to build HTTP client with timeout - this should never fail");
+```
+
+**教訓**:
+- エラー回復時にセキュリティ/信頼性要件を緩めるフォールバックは避ける
+- HTTPクライアント構築の失敗は起動時のみ発生し得るため、panicで早期発見する方が安全
+- タイムアウト設定は「あれば良い」ではなく「必須」として扱う
+
+---
+
+### 9. APIキー状態の非同期問題（高リスク・追加指摘）
+
+**問題**:
+`has_weather_api_key`コマンドはkeyringから確認し、`get_weather`はメモリ内のキーを使用していた。起動時のkeyring復元が失敗した場合（キーチェーンロック解除遅延等）、UIは「設定済み」を表示するが、天気取得は`ApiKeyNotConfigured`で失敗する。
+
+**解決策**:
+```rust
+// Before: keyringの確認のみ
+#[tauri::command]
+pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    match keyring::get_weather_api_key() {
+        Ok(_) => Ok(true),
+        Err(keyring::KeyringError::NotFound) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+// After: keyringにあるがメモリにない場合は同期
+#[tauri::command]
+pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    match keyring::get_weather_api_key() {
+        Ok(api_key) => {
+            // keyringにキーがある場合、メモリにもセット（まだ無い場合）
+            if !state.weather.has_api_key().await {
+                state.weather.set_api_key(api_key).await;
+                log::info!("Weather API key synced from keyring to memory");
+            }
+            Ok(true)
+        }
+        Err(keyring::KeyringError::NotFound) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+```
+
+**教訓**:
+- 永続ストレージとメモリキャッシュの両方を持つ場合、同期ポイントを設ける
+- UI表示用の確認関数で同期を行うと、表示タイミングで自動的に状態が整合する
+- 起動時の復元失敗を想定し、後からリカバリできる設計にする
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -269,3 +338,5 @@ if let Ok(api_key) = keyring::get_weather_api_key() {
 6. **テスト**: 境界条件（TTL期限切れ、空データ、エッジケース、競合状態）を網羅する
 7. **並行処理の状態読み取り**: 複数回の読み取りは競合を招くため、一度だけ読み取って使い回す
 8. **APIキーのセキュリティ**: 新規API連携時は必ずkeyringパターンに従い永続化する
+9. **フォールバックの安全性**: エラー回復時にセキュリティ/信頼性要件を緩めないこと
+10. **永続ストレージとメモリの同期**: 両方を持つ場合、UI確認時などに同期ポイントを設ける

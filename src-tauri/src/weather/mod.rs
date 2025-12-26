@@ -68,10 +68,14 @@ pub struct WeatherClient {
 impl WeatherClient {
     /// 新しい天気クライアントを作成
     pub fn new() -> Self {
+        // タイムアウト付きのHTTPクライアントを構築
+        // フォールバックでタイムアウトなしのクライアントを使用すると
+        // 外部APIがハングした場合にUIがフリーズするリスクがあるため、
+        // 構築失敗時はpanicさせる（起動時のみ発生し得る）
         let client = Client::builder()
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
             .build()
-            .unwrap_or_else(|_| Client::new());
+            .expect("Failed to build HTTP client with timeout - this should never fail");
 
         Self {
             client,

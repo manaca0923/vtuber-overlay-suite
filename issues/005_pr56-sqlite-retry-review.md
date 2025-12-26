@@ -2067,6 +2067,32 @@ connectWebSocket();
 - リトライ回数は本番運用のメトリクスに基づいて調整
 - detachによるプール容量減少を監視
 
+### 54. 繰り返しレビュー指摘のまとめ（PR Approve後）
+
+**状況**:
+- PRは5件のレビューコメント全てでApprove推奨
+- `.codex/review.md`で繰り返し指摘される2つの高リスク問題は将来タスクとして記録済み
+
+**繰り返し指摘される内容**:
+1. **`save_comments_to_db`の構造化戻り値**: `{ saved, failed, skipped }`を返すべき
+   - 現状: `()`を返し、スキップ時はwarnログのみ
+   - 将来タスク: `docs/900_tasks.md`に記録済み（優先度: 中）
+
+2. **busy_timeout復元のBUSYリトライ回数**: 1回→2-3回に増加すべき
+   - 現状: 20msバックオフ後1回リトライ、失敗時detach
+   - 将来タスク: `docs/900_tasks.md`に記録済み（優先度: 低）
+
+**軽微な改善提案（PRコメントより）**:
+- `original_timeout == 0`のコメント追加（設計判断の明記）
+- `UpdateBatcher._destroyed`の明示的初期化（`= false`をコンストラクタに）
+- `DensityManager.isDestroyed()`の一貫性（`_destroyed`フラグ使用を検討）
+- テスト用DBファイルの`tempfile`クレート使用（将来タスクに記録済み）
+
+**今後の対策**:
+- 将来タスクとして記録済みの指摘は、対応時期まで繰り返し指摘される可能性がある
+- 優先度と本番運用での影響を考慮して対応タイミングを判断
+- 本番リリース前チェックリストで優先度を再評価
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

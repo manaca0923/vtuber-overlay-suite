@@ -992,14 +992,29 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（PRAGMA busy_timeoutは通常BUSYにならない）
 
-- [ ] **beforeunloadイベントのbfcache影響検討** (PR#56)
-  - 現在: `beforeunload`を登録しているとブラウザがbfcacheを無効にする可能性がある
-  - 問題: 通常ブラウザでの戻る/進む時にキャッシュから復元されない
-  - 対応案:
-    - OBSブラウザソース専用チェックを追加し、OBS以外では`beforeunload`を登録しない
-    - または`pagehide`のみを使用し、`event.persisted`チェックでcleanupを制御
+- [x] **beforeunloadイベントのbfcache影響検討** (PR#56)
+  - ~~現在: `beforeunload`を登録しているとブラウザがbfcacheを無効にする可能性がある~~
+  - ~~問題: 通常ブラウザでの戻る/進む時にキャッシュから復元されない~~
+  - 対応済み: `beforeunload`でのcleanup()呼び出しを削除し、`pagehide`のみを使用
+    - `pagehide`で`event.persisted`チェック、falseの場合のみcleanup実行
+    - OBSブラウザソース等のbfcache非対応環境でもpagehide(persisted=false)で確実にクリーンアップ
   - 対象ファイル: `src-tauri/overlays/combined-v2.html`
-  - 優先度: 低（OBSブラウザソースではbfcacheは使われない）
+
+- [ ] **トランザクション内でのデッドライン強制** (PR#56)
+  - 現在: 2秒の総予算は`save_chunk_with_retry`ループで管理されているが、トランザクション内の遅いI/Oは制限されない
+  - 問題: 遅いディスクI/O（SQLITE_BUSYなし）で2秒を超える可能性がある
+  - 対応案:
+    - `save_chunk_with_transaction_on_conn`にdeadlineパラメータを追加
+    - 各INSERT前にデッドライン超過チェック
+    - 超過時はrollbackして早期終了
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（遅いディスクI/Oは稀なケース）
+
+- [ ] **遅いINSERTシミュレーションテスト** (PR#56)
+  - 遅いINSERTをシミュレートし、デッドライン超過時に早期rollback + 部分コミットなしを検証
+  - テスト対象: `save_chunk_with_transaction_on_conn`のデッドライン強制
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
 
 - [ ] **テスト用DBファイルの分離改善** (PR#56)
   - 現在: PIDベースの命名（`test_{}.db`）で分離、テスト終了時に削除

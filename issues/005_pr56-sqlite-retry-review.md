@@ -1993,6 +1993,21 @@ if (!updateBatcher || updateBatcher.isDestroyed()) {
 - 外部からインスタンスの状態を確認できるようにする（カプセル化）
 - 復元処理ではnullチェックだけでなく`isDestroyed()`も確認する
 
+### 50. トランザクション内での遅いI/Oによるデッドライン超過（将来タスク）
+
+**指摘内容**:
+- 2秒の総予算は`save_chunk_with_retry`ループで管理されているが、トランザクション内の遅いI/Oは制限されない
+- 遅いディスクI/O（SQLITE_BUSYなし）で2秒を超える可能性がある
+
+**対応（将来タスクとして記録）**:
+- `docs/900_tasks.md`に「トランザクション内でのデッドライン強制」として記録
+- 優先度: 低（遅いディスクI/Oは稀なケース）
+
+**今後の対策**:
+- リアルタイム保証が必要な場合は、トランザクション内でもデッドラインをチェックする
+- 各操作前にデッドライン超過チェックを挿入し、超過時はrollbackして早期終了
+- SQLite progress handlerの使用も検討
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

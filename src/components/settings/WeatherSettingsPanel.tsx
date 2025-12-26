@@ -136,14 +136,32 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
     }
   }, []);
 
-  // ブロードキャスト
+  // ブロードキャスト（キャッシュ優先）
   const handleBroadcast = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await broadcastWeatherUpdate();
+      await broadcastWeatherUpdate(false);
     } catch (err) {
       setError('ブロードキャストに失敗しました');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 強制更新＋ブロードキャスト（都市/APIキー変更後に使用）
+  const handleForceRefreshAndBroadcast = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 強制リフレッシュでブロードキャスト
+      await broadcastWeatherUpdate(true);
+      // ローカル表示も更新
+      const data = await getWeather();
+      setWeather(data);
+    } catch (err) {
+      setError('強制更新・ブロードキャストに失敗しました');
       console.error(err);
     } finally {
       setLoading(false);
@@ -286,12 +304,12 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               type="button"
               onClick={handleFetchWeather}
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+              className="flex-1 min-w-[80px] px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
             >
               取得
             </button>
@@ -299,7 +317,7 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
               type="button"
               onClick={handleForceRefresh}
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50"
+              className="flex-1 min-w-[80px] px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50"
             >
               強制更新
             </button>
@@ -307,9 +325,18 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
               type="button"
               onClick={handleBroadcast}
               disabled={loading || !weather}
-              className="flex-1 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
+              className="flex-1 min-w-[80px] px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
             >
               配信
+            </button>
+            <button
+              type="button"
+              onClick={handleForceRefreshAndBroadcast}
+              disabled={loading}
+              className="flex-1 min-w-[80px] px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50"
+              title="キャッシュを無視して最新データを取得・配信"
+            >
+              強制配信
             </button>
           </div>
         </div>

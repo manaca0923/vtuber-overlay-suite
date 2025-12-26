@@ -206,8 +206,12 @@ impl WeatherClient {
     }
 
     /// キャッシュの残りTTLを取得（秒）
+    ///
+    /// 現在の都市に対するキャッシュのTTLを返す。
+    /// 都市が異なるキャッシュがある場合は0を返す。
     pub async fn cache_ttl_remaining(&self) -> u64 {
-        self.cache.ttl_remaining().await
+        let city = self.city.read().await.clone();
+        self.cache.ttl_remaining(&city).await
     }
 }
 

@@ -116,11 +116,11 @@ impl WeatherCache {
 
     /// キャッシュの残り有効期限（秒）を取得
     ///
-    /// キャッシュがない場合は0を返す
-    pub async fn ttl_remaining(&self) -> u64 {
+    /// キャッシュがない、期限切れ、または都市が異なる場合は0を返す
+    pub async fn ttl_remaining(&self, city: &str) -> u64 {
         let entry = self.entry.read().await;
         match entry.as_ref() {
-            Some(e) => {
+            Some(e) if e.matches_city(city) => {
                 let elapsed = e.created_at.elapsed().as_secs();
                 if elapsed >= self.ttl_secs {
                     0
@@ -128,7 +128,8 @@ impl WeatherCache {
                     self.ttl_secs - elapsed
                 }
             }
-            None => 0,
+            // 都市不一致または期限切れの場合は0
+            _ => 0,
         }
     }
 }
@@ -192,13 +193,30 @@ mod tests {
         let data = create_test_weather_data();
 
         // キャッシュなしの場合は0
-        assert_eq!(cache.ttl_remaining().await, 0);
+        assert_eq!(cache.ttl_remaining("Tokyo").await, 0);
 
         cache.set(data, "Tokyo".to_string()).await;
 
         // キャッシュ直後はTTLに近い値
-        let ttl = cache.ttl_remaining().await;
+        let ttl = cache.ttl_remaining("Tokyo").await;
         assert!(ttl > 0 && ttl <= 10);
+    }
+
+    #[tokio::test]
+    async fn test_cache_ttl_remaining_city_mismatch() {
+        // 都市不一致時はTTLが0を返すことを確認
+        let cache = WeatherCache::with_ttl(10);
+        let data = create_test_weather_data();
+
+        cache.set(data, "Tokyo".to_string()).await;
+
+        // Tokyoに対してはTTLが正の値
+        let ttl_tokyo = cache.ttl_remaining("Tokyo").await;
+        assert!(ttl_tokyo > 0);
+
+        // Osakaに対してはTTLが0（都市不一致）
+        let ttl_osaka = cache.ttl_remaining("Osaka").await;
+        assert_eq!(ttl_osaka, 0);
     }
 
     #[tokio::test]
@@ -219,7 +237,7 @@ mod tests {
         assert!(cache.get("Tokyo").await.is_none());
 
         // TTL remainingも0
-        assert_eq!(cache.ttl_remaining().await, 0);
+        assert_eq!(cache.ttl_remaining("Tokyo").await, 0);
     }
 
     #[tokio::test]
@@ -235,14 +253,14 @@ mod tests {
 
         // まだ有効（2秒未満）
         assert!(cache.get("Tokyo").await.is_some());
-        assert!(cache.ttl_remaining().await > 0);
+        assert!(cache.ttl_remaining("Tokyo").await > 0);
 
         // さらに1秒待機（合計2.5秒経過）
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
         // 期限切れ
         assert!(cache.get("Tokyo").await.is_none());
-        assert_eq!(cache.ttl_remaining().await, 0);
+        assert_eq!(cache.ttl_remaining("Tokyo").await, 0);
     }
 
     #[tokio::test]

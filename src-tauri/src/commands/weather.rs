@@ -75,9 +75,24 @@ pub async fn fetch_weather(state: State<'_, AppState>) -> Result<WeatherData, St
 }
 
 /// 天気情報をWebSocketでブロードキャスト
+///
+/// # Arguments
+/// * `force_refresh` - trueの場合、キャッシュを無視して最新データを取得してからブロードキャスト
+///                     都市やAPIキー変更直後に呼び出す場合はtrueを指定
 #[tauri::command]
-pub async fn broadcast_weather_update(state: State<'_, AppState>) -> Result<(), String> {
-    let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
+pub async fn broadcast_weather_update(
+    state: State<'_, AppState>,
+    force_refresh: Option<bool>,
+) -> Result<(), String> {
+    let weather_data = if force_refresh.unwrap_or(false) {
+        // 強制リフレッシュ: キャッシュをクリアしてから取得
+        state.weather.clear_cache().await;
+        log::info!("Force refresh requested for weather broadcast");
+        state.weather.get_weather().await.map_err(|e| e.to_string())?
+    } else {
+        // 通常: キャッシュ優先
+        state.weather.get_weather().await.map_err(|e| e.to_string())?
+    };
 
     let payload = WeatherUpdatePayload {
         icon: weather_data.icon,
@@ -92,7 +107,7 @@ pub async fn broadcast_weather_update(state: State<'_, AppState>) -> Result<(), 
         .broadcast(WsMessage::WeatherUpdate { payload })
         .await;
 
-    log::info!("Weather update broadcasted");
+    log::info!("Weather update broadcasted (force_refresh: {})", force_refresh.unwrap_or(false));
     Ok(())
 }
 

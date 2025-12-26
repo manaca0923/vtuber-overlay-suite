@@ -328,6 +328,90 @@ pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, Str
 
 ---
 
+### 10. TTL残り時間の都市考慮不足（高リスク・追加指摘）
+
+**問題**:
+`ttl_remaining()`が都市を考慮せずにキャッシュの残り時間を返していた。都市変更後でもUIに正の値のTTLが表示され、実際にはキャッシュミスになるのにユーザーが有効なキャッシュがあると誤解する。
+
+**解決策**:
+```rust
+// Before: 都市を無視
+pub async fn ttl_remaining(&self) -> u64 {
+    match entry.as_ref() {
+        Some(e) => { /* TTL計算 */ }
+        None => 0,
+    }
+}
+
+// After: 都市も検証
+pub async fn ttl_remaining(&self, city: &str) -> u64 {
+    match entry.as_ref() {
+        Some(e) if e.matches_city(city) => { /* TTL計算 */ }
+        _ => 0,  // 都市不一致または期限切れの場合は0
+    }
+}
+
+// WeatherClientでも現在の都市を渡す
+pub async fn cache_ttl_remaining(&self) -> u64 {
+    let city = self.city.read().await.clone();
+    self.cache.ttl_remaining(&city).await
+}
+```
+
+**教訓**:
+- キャッシュの`get()`と`ttl_remaining()`は同じ条件で判定すること
+- TTL表示とキャッシュヒット条件が乖離するとUXが混乱する
+- テスト追加: `test_cache_ttl_remaining_city_mismatch`
+
+---
+
+### 11. ブロードキャスト時のキャッシュデータ問題（高リスク・追加指摘）
+
+**問題**:
+`broadcast_weather_update`が常にキャッシュ優先で天気データを取得していた。都市やAPIキー変更直後に呼び出すと、古いキャッシュデータがブロードキャストされる可能性があった。
+
+**解決策**:
+```rust
+// Before: 常にキャッシュ優先
+#[tauri::command]
+pub async fn broadcast_weather_update(state: State<'_, AppState>) -> Result<(), String> {
+    let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
+    // ...
+}
+
+// After: force_refreshオプションを追加
+#[tauri::command]
+pub async fn broadcast_weather_update(
+    state: State<'_, AppState>,
+    force_refresh: Option<bool>,
+) -> Result<(), String> {
+    let weather_data = if force_refresh.unwrap_or(false) {
+        state.weather.clear_cache().await;
+        state.weather.get_weather().await.map_err(|e| e.to_string())?
+    } else {
+        state.weather.get_weather().await.map_err(|e| e.to_string())?
+    };
+    // ...
+}
+```
+
+**フロントエンド対応**:
+```typescript
+// TypeScript側も更新
+export const broadcastWeatherUpdate = (forceRefresh?: boolean) =>
+  invoke<void>('broadcast_weather_update', { forceRefresh });
+
+// UIに「強制配信」ボタンを追加
+<button onClick={() => broadcastWeatherUpdate(true)}>強制配信</button>
+```
+
+**教訓**:
+- ブロードキャスト/通知系コマンドには強制リフレッシュオプションを設ける
+- 設定変更直後は古いキャッシュが残っている可能性を考慮する
+- UIでユーザーが意図的に最新データを送信できる手段を提供する
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -340,3 +424,5 @@ pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, Str
 8. **APIキーのセキュリティ**: 新規API連携時は必ずkeyringパターンに従い永続化する
 9. **フォールバックの安全性**: エラー回復時にセキュリティ/信頼性要件を緩めないこと
 10. **永続ストレージとメモリの同期**: 両方を持つ場合、UI確認時などに同期ポイントを設ける
+11. **TTLとキャッシュヒット条件の一致**: TTL表示はキャッシュヒット条件と同じ条件で判定すること
+12. **ブロードキャスト時の強制リフレッシュ**: 設定変更後に確実に最新データを送信できるオプションを提供

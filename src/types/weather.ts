@@ -37,8 +37,8 @@ export const getWeather = () =>
 export const fetchWeather = () =>
   invoke<WeatherData>('fetch_weather');
 
-export const broadcastWeatherUpdate = () =>
-  invoke<void>('broadcast_weather_update');
+export const broadcastWeatherUpdate = (forceRefresh?: boolean) =>
+  invoke<void>('broadcast_weather_update', { forceRefresh });
 
 export const clearWeatherCache = () =>
   invoke<void>('clear_weather_cache');

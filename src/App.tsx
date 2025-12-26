@@ -51,7 +51,7 @@ function App() {
   // コメント取得開始ハンドラ
   const handleStartPolling = useCallback(async (videoId: string) => {
     try {
-      await invoke('start_polling_innertube', { videoId });
+      await invoke('start_polling_innertube', { video_id: videoId });
       setIsPolling(true);
       showStatus('success', 'コメント取得を開始しました');
     } catch (e) {

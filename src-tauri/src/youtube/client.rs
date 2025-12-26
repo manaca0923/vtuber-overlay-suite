@@ -1,7 +1,8 @@
 use reqwest::Client;
 use std::fmt;
 
-use super::{errors::YouTubeError, types::*};
+use super::errors::YouTubeError;
+use super::types::{LiveChatMessagesResponse, LiveStreamStats, VideoResponse};
 
 const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
 
@@ -247,5 +248,104 @@ impl YouTubeClient {
                 )))
             }
         }
+    }
+
+    /// ライブ配信の視聴者数・統計情報を取得（クォータ消費: 約3 units）
+    pub async fn get_live_stream_stats(
+        &self,
+        video_id: &str,
+    ) -> Result<LiveStreamStats, YouTubeError> {
+        log::debug!(
+            "Fetching live stream stats for video: {} (quota cost: ~3 units)",
+            video_id
+        );
+
+        let url = format!("{}/videos", API_BASE);
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&[
+                ("part", "liveStreamingDetails,statistics"),
+                ("id", video_id),
+                ("key", &self.api_key),
+            ])
+            .send()
+            .await?;
+
+        let status = response.status();
+        match status {
+            reqwest::StatusCode::OK => {}
+            reqwest::StatusCode::FORBIDDEN => {
+                let error_text = response.text().await?;
+                log::warn!("YouTube API 403 Forbidden: {}", error_text);
+                if error_text.contains("quotaExceeded") {
+                    return Err(YouTubeError::QuotaExceeded);
+                } else if error_text.contains("rateLimitExceeded") {
+                    return Err(YouTubeError::RateLimitExceeded);
+                }
+                return Err(YouTubeError::InvalidApiKey);
+            }
+            reqwest::StatusCode::UNAUTHORIZED => {
+                log::warn!("YouTube API 401 Unauthorized");
+                return Err(YouTubeError::InvalidApiKey);
+            }
+            reqwest::StatusCode::NOT_FOUND => {
+                log::warn!("YouTube API 404 Not Found for video: {}", video_id);
+                return Err(YouTubeError::VideoNotFound);
+            }
+            reqwest::StatusCode::BAD_REQUEST => {
+                let error_text = response.text().await?;
+                log::warn!("YouTube API 400 Bad Request: {}", error_text);
+                // 不正な動画IDの可能性
+                return Err(YouTubeError::VideoNotFound);
+            }
+            _ if status.is_server_error() => {
+                // 5xx サーバーエラー: 一時的な障害の可能性
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("YouTube API server error ({}): {}", status, error_text);
+                return Err(YouTubeError::ApiError(format!(
+                    "サーバーエラー ({}): 一時的な障害の可能性があります",
+                    status
+                )));
+            }
+            _ => {
+                // その他の予期しないステータス
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                return Err(YouTubeError::ApiError(format!(
+                    "予期しないエラー ({})",
+                    status
+                )));
+            }
+        }
+
+        let data: VideoResponse = response.json().await?;
+
+        let item = data.items.first().ok_or(YouTubeError::VideoNotFound)?;
+
+        let concurrent_viewers = item
+            .live_streaming_details
+            .as_ref()
+            .and_then(|d| d.concurrent_viewers.as_ref())
+            .and_then(|v| v.parse::<i64>().ok());
+
+        let like_count = item
+            .statistics
+            .as_ref()
+            .and_then(|s| s.like_count.as_ref())
+            .and_then(|v| v.parse::<i64>().ok());
+
+        let view_count = item
+            .statistics
+            .as_ref()
+            .and_then(|s| s.view_count.as_ref())
+            .and_then(|v| v.parse::<i64>().ok());
+
+        Ok(LiveStreamStats {
+            concurrent_viewers,
+            like_count,
+            view_count,
+        })
     }
 }

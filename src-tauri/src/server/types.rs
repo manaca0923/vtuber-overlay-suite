@@ -40,6 +40,10 @@ pub enum WsMessage {
     /// 告知更新
     #[serde(rename = "promo:update")]
     PromoUpdate { payload: PromoUpdatePayload },
+
+    /// 天気更新
+    #[serde(rename = "weather:update")]
+    WeatherUpdate { payload: WeatherUpdatePayload },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,4 +225,20 @@ pub struct PromoItem {
     pub text: String,
     /// アイコン（絵文字など）
     pub icon: Option<String>,
+}
+
+/// 天気更新ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherUpdatePayload {
+    /// 天気アイコン（絵文字）
+    pub icon: String,
+    /// 気温（摂氏）
+    pub temp: f64,
+    /// 天気の説明
+    pub description: String,
+    /// 地域名
+    pub location: String,
+    /// 湿度（%）
+    pub humidity: Option<i32>,
 }

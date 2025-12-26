@@ -1128,4 +1128,72 @@ pub async fn get_unified_polling_mode() -> Result<Option<ApiMode>, String> {
     Ok(poller.current_mode().await)
 }
 
+// ================================
+// KPI（視聴者数等）コマンド
+// ================================
+
+use crate::server::types::KpiUpdatePayload;
+use crate::youtube::types::LiveStreamStats;
+
+/// ライブ配信の統計情報を取得
+///
+/// 視聴者数、高評価数、再生回数を取得。
+/// APIキーが必要（同梱キーまたはBYOK）。
+/// クォータ消費: 約3 units
+#[tauri::command]
+pub async fn get_live_stream_stats(
+    video_id: String,
+    use_bundled_key: bool,
+) -> Result<LiveStreamStats, String> {
+    log::debug!(
+        "Fetching live stream stats: video_id={}, use_bundled_key={}",
+        video_id,
+        use_bundled_key
+    );
+
+    // APIキーを取得
+    let api_key = {
+        let manager = get_api_key_manager()
+            .read()
+            .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+        manager
+            .get_active_key(use_bundled_key)
+            .map(|s| s.to_string())
+            .ok_or_else(|| "APIキーが設定されていません".to_string())?
+    };
+
+    let client = YouTubeClient::new(api_key);
+    client
+        .get_live_stream_stats(&video_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// KPI情報をWebSocketでブロードキャスト
+///
+/// 視聴者数と高評価数をオーバーレイに配信
+#[tauri::command]
+pub async fn broadcast_kpi_update(
+    main: Option<i64>,
+    label: Option<String>,
+    sub: Option<i64>,
+    sub_label: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let payload = KpiUpdatePayload {
+        main,
+        label,
+        sub,
+        sub_label,
+    };
+
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
+        .await;
+
+    log::debug!("KPI update broadcasted");
+    Ok(())
+}
 

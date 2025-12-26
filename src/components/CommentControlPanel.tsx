@@ -334,10 +334,10 @@ export function CommentControlPanel({
       try {
         // 統合ポーラーを使用
         await invoke('start_unified_polling', {
-          videoId: videoId,
+          video_id: videoId,
           mode: apiMode,
-          useBundledKey: useBundledKey,
-          userApiKey: hasValidApiKey ? apiKey : null,
+          use_bundled_key: useBundledKey,
+          user_api_key: hasValidApiKey ? apiKey : null,
         });
         if (isMountedRef.current) {
           setIsPolling(true);
@@ -431,8 +431,8 @@ export function CommentControlPanel({
       if (apiKey) {
         // 公式API経由
         newLiveChatId = await invoke<string>('get_live_chat_id', {
-          apiKey: apiKey,
-          videoId: newVideoId,
+          api_key: apiKey,
+          video_id: newVideoId,
         });
       } else {
         // InnerTube経由（APIキー不要）
@@ -443,8 +443,8 @@ export function CommentControlPanel({
 
       // 設定を保存
       await invoke('save_wizard_settings', {
-        videoId: newVideoId,
-        liveChatId: newLiveChatId,
+        video_id: newVideoId,
+        live_chat_id: newLiveChatId,
       });
 
       // 親コンポーネントに通知

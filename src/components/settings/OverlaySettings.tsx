@@ -3,6 +3,7 @@ import { ThemeSelector } from './ThemeSelector';
 import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
 import { SetlistSettingsPanel } from './SetlistSettingsPanel';
+import { WeatherSettingsPanel } from './WeatherSettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
   DEFAULT_OVERLAY_SETTINGS,
@@ -23,7 +24,7 @@ export function OverlaySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activePanel, setActivePanel] = useState<'comment' | 'setlist'>('comment');
+  const [activePanel, setActivePanel] = useState<'comment' | 'setlist' | 'weather'>('comment');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
 
   useEffect(() => {
@@ -167,6 +168,16 @@ export function OverlaySettings() {
               >
                 セットリスト設定
               </button>
+              <button
+                onClick={() => setActivePanel('weather')}
+                className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
+                  activePanel === 'weather'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                天気設定
+              </button>
             </div>
 
             <div className="p-6">
@@ -185,6 +196,9 @@ export function OverlaySettings() {
                     setSettings((prev) => ({ ...prev, setlist, layout: 'custom' }));
                   }}
                 />
+              )}
+              {activePanel === 'weather' && (
+                <WeatherSettingsPanel />
               )}
             </div>
           </div>
@@ -246,7 +260,7 @@ export function OverlaySettings() {
           <div className="h-[500px]">
             <OverlayPreview
               settings={settings}
-              activePanel={activePanel}
+              activePanel={activePanel === 'weather' ? 'comment' : activePanel}
               mode={previewMode}
             />
           </div>

@@ -26,27 +26,28 @@ export const createSetlist = (input: CreateSetlistInput) =>
 export const deleteSetlist = (id: string) =>
   invoke<void>('delete_setlist', { id });
 
+// 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
 export const addSongToSetlist = (setlistId: string, songId: string) =>
-  invoke<void>('add_song_to_setlist', { setlistId, songId });
+  invoke<void>('add_song_to_setlist', { setlist_id: setlistId, song_id: songId });
 
 export const removeSongFromSetlist = (setlistId: string, setlistSongId: string) =>
-  invoke<void>('remove_song_from_setlist', { setlistId, setlistSongId });
+  invoke<void>('remove_song_from_setlist', { setlist_id: setlistId, setlist_song_id: setlistSongId });
 
 // Song control commands
 export const setCurrentSong = (setlistId: string, position: number) =>
-  invoke<void>('set_current_song', { setlistId, position });
+  invoke<void>('set_current_song', { setlist_id: setlistId, position });
 
 export const nextSong = (setlistId: string) =>
-  invoke<void>('next_song', { setlistId });
+  invoke<void>('next_song', { setlist_id: setlistId });
 
 export const previousSong = (setlistId: string) =>
-  invoke<void>('previous_song', { setlistId });
+  invoke<void>('previous_song', { setlist_id: setlistId });
 
 export const reorderSetlistSongs = (setlistId: string, setlistSongIds: string[]) =>
-  invoke<void>('reorder_setlist_songs', { setlistId, setlistSongIds });
+  invoke<void>('reorder_setlist_songs', { setlist_id: setlistId, setlist_song_ids: setlistSongIds });
 
 export const broadcastSetlistUpdate = (setlistId: string) =>
-  invoke<void>('broadcast_setlist_update', { setlistId });
+  invoke<void>('broadcast_setlist_update', { setlist_id: setlistId });
 
 // Test mode commands
 export type TestMessageType = 'text' | 'superChat' | 'superSticker' | 'membership' | 'membershipGift';
@@ -56,4 +57,4 @@ export const sendTestComment = (
   authorName: string,
   messageTypeName?: TestMessageType
 ) =>
-  invoke<void>('send_test_comment', { commentText, authorName, messageTypeName });
+  invoke<void>('send_test_comment', { comment_text: commentText, author_name: authorName, message_type_name: messageTypeName });

@@ -15,8 +15,11 @@ use thiserror::Error;
 /// アプリケーション識別子（サービス名として使用）
 const SERVICE_NAME: &str = "com.vtuber-overlay-suite.desktop";
 
-/// APIキー用のエントリ名
-const API_KEY_ENTRY: &str = "youtube_api_key";
+/// YouTube APIキー用のエントリ名
+const YOUTUBE_API_KEY_ENTRY: &str = "youtube_api_key";
+
+/// 天気APIキー用のエントリ名
+const WEATHER_API_KEY_ENTRY: &str = "weather_api_key";
 
 #[derive(Debug, Error)]
 pub enum KeyringError {
@@ -27,24 +30,28 @@ pub enum KeyringError {
     NotFound,
 }
 
-/// APIキーをOSのセキュアストレージに保存
+// =============================================================================
+// YouTube APIキー操作
+// =============================================================================
+
+/// YouTube APIキーをOSのセキュアストレージに保存
 ///
 /// - macOS: Keychain
 /// - Windows: Credential Manager
 /// - Linux: Secret Service API
 pub fn save_api_key(api_key: &str) -> Result<(), KeyringError> {
-    let entry = Entry::new(SERVICE_NAME, API_KEY_ENTRY)?;
+    let entry = Entry::new(SERVICE_NAME, YOUTUBE_API_KEY_ENTRY)?;
     entry.set_password(api_key)?;
-    log::info!("API key saved to secure storage");
+    log::info!("YouTube API key saved to secure storage");
     Ok(())
 }
 
-/// APIキーをセキュアストレージから取得
+/// YouTube APIキーをセキュアストレージから取得
 pub fn get_api_key() -> Result<String, KeyringError> {
-    let entry = Entry::new(SERVICE_NAME, API_KEY_ENTRY)?;
+    let entry = Entry::new(SERVICE_NAME, YOUTUBE_API_KEY_ENTRY)?;
     match entry.get_password() {
         Ok(password) => {
-            log::debug!("API key retrieved from secure storage");
+            log::debug!("YouTube API key retrieved from secure storage");
             Ok(password)
         }
         Err(keyring::Error::NoEntry) => Err(KeyringError::NotFound),
@@ -52,35 +59,94 @@ pub fn get_api_key() -> Result<String, KeyringError> {
     }
 }
 
-/// APIキーをセキュアストレージから削除
+/// YouTube APIキーをセキュアストレージから削除
 pub fn delete_api_key() -> Result<(), KeyringError> {
-    let entry = Entry::new(SERVICE_NAME, API_KEY_ENTRY)?;
+    let entry = Entry::new(SERVICE_NAME, YOUTUBE_API_KEY_ENTRY)?;
     match entry.delete_credential() {
         Ok(()) => {
-            log::info!("API key deleted from secure storage");
+            log::info!("YouTube API key deleted from secure storage");
             Ok(())
         }
         Err(keyring::Error::NoEntry) => {
-            log::warn!("Attempted to delete non-existent API key");
+            log::warn!("Attempted to delete non-existent YouTube API key");
             Ok(()) // 既に存在しない場合も成功扱い
         }
         Err(e) => Err(KeyringError::KeyringError(e)),
     }
 }
 
-/// APIキーが保存されているかチェック
+/// YouTube APIキーが保存されているかチェック
 pub fn has_api_key() -> Result<bool, KeyringError> {
     match get_api_key() {
         Ok(_) => {
-            log::debug!("has_api_key: true (API key found in keyring)");
+            log::debug!("has_api_key: true (YouTube API key found in keyring)");
             Ok(true)
         }
         Err(KeyringError::NotFound) => {
-            log::debug!("has_api_key: false (API key not found in keyring)");
+            log::debug!("has_api_key: false (YouTube API key not found in keyring)");
             Ok(false)
         }
         Err(e) => {
             log::error!("has_api_key: error - {:?}", e);
+            Err(e)
+        }
+    }
+}
+
+// =============================================================================
+// 天気APIキー操作
+// =============================================================================
+
+/// 天気APIキーをOSのセキュアストレージに保存
+pub fn save_weather_api_key(api_key: &str) -> Result<(), KeyringError> {
+    let entry = Entry::new(SERVICE_NAME, WEATHER_API_KEY_ENTRY)?;
+    entry.set_password(api_key)?;
+    log::info!("Weather API key saved to secure storage");
+    Ok(())
+}
+
+/// 天気APIキーをセキュアストレージから取得
+pub fn get_weather_api_key() -> Result<String, KeyringError> {
+    let entry = Entry::new(SERVICE_NAME, WEATHER_API_KEY_ENTRY)?;
+    match entry.get_password() {
+        Ok(password) => {
+            log::debug!("Weather API key retrieved from secure storage");
+            Ok(password)
+        }
+        Err(keyring::Error::NoEntry) => Err(KeyringError::NotFound),
+        Err(e) => Err(KeyringError::KeyringError(e)),
+    }
+}
+
+/// 天気APIキーをセキュアストレージから削除
+pub fn delete_weather_api_key() -> Result<(), KeyringError> {
+    let entry = Entry::new(SERVICE_NAME, WEATHER_API_KEY_ENTRY)?;
+    match entry.delete_credential() {
+        Ok(()) => {
+            log::info!("Weather API key deleted from secure storage");
+            Ok(())
+        }
+        Err(keyring::Error::NoEntry) => {
+            log::warn!("Attempted to delete non-existent Weather API key");
+            Ok(())
+        }
+        Err(e) => Err(KeyringError::KeyringError(e)),
+    }
+}
+
+/// 天気APIキーが保存されているかチェック
+pub fn has_weather_api_key() -> Result<bool, KeyringError> {
+    match get_weather_api_key() {
+        Ok(_) => {
+            log::debug!("has_weather_api_key: true (Weather API key found in keyring)");
+            Ok(true)
+        }
+        Err(KeyringError::NotFound) => {
+            log::debug!("has_weather_api_key: false (Weather API key not found in keyring)");
+            Ok(false)
+        }
+        Err(e) => {
+            log::error!("has_weather_api_key: error - {:?}", e);
             Err(e)
         }
     }

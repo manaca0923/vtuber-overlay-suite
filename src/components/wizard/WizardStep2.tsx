@@ -53,8 +53,8 @@ export default function WizardStep2({
     const timer = setTimeout(async () => {
       try {
         const chatId = await invoke<string>('get_live_chat_id', {
-          apiKey: apiKey,
-          videoId: videoId,
+          api_key: apiKey,
+          video_id: videoId,
         });
         
         // キャンセルされていなければ更新

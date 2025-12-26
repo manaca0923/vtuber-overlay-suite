@@ -3,6 +3,7 @@ mod db;
 mod keyring;
 mod server;
 pub mod util; // doctestのためpubにする
+mod weather;
 mod youtube;
 
 use sqlx::SqlitePool;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub poller: Arc<Mutex<Option<youtube::poller::ChatPoller>>>,
     pub server: server::ServerState,
     pub db: SqlitePool,
+    pub weather: Arc<weather::WeatherClient>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -96,10 +98,38 @@ pub fn run() {
 
       Ok(())
     })
-    .manage(AppState {
-      poller: Arc::new(Mutex::new(None)),
-      server: server_state_for_manage,
-      db: db_pool,
+    .manage({
+      // 天気クライアントを作成し、keyringからAPIキーを読み込む
+      let weather_client = Arc::new(weather::WeatherClient::new());
+
+      // 起動時にkeyringから天気APIキーを復元
+      // keyringアクセスはブロッキング呼び出しなので、spawn_blockingでラップ
+      // block_on内でspawn_blockingを使用し、UIスレッドのブロックを最小化
+      let weather_clone = Arc::clone(&weather_client);
+      tauri::async_runtime::block_on(async move {
+        match tokio::task::spawn_blocking(keyring::get_weather_api_key).await {
+          Ok(Ok(api_key)) => {
+            weather_clone.set_api_key(api_key).await;
+            log::info!("Weather API key restored from keyring");
+          }
+          Ok(Err(keyring::KeyringError::NotFound)) => {
+            log::debug!("No weather API key found in keyring");
+          }
+          Ok(Err(e)) => {
+            log::warn!("Failed to read weather API key from keyring: {}", e);
+          }
+          Err(e) => {
+            log::warn!("spawn_blocking failed for weather keyring read: {}", e);
+          }
+        }
+      });
+
+      AppState {
+        poller: Arc::new(Mutex::new(None)),
+        server: server_state_for_manage,
+        db: db_pool,
+        weather: weather_client,
+      }
     })
     .invoke_handler({
       // デバッグビルドではtest_innertube_connectionを含む
@@ -159,6 +189,17 @@ pub fn run() {
           commands::youtube::stop_unified_polling,
           commands::youtube::is_unified_polling_running,
           commands::youtube::get_unified_polling_mode,
+          commands::youtube::get_live_stream_stats,
+          commands::youtube::broadcast_kpi_update,
+          commands::weather::set_weather_api_key,
+          commands::weather::has_weather_api_key,
+          commands::weather::set_weather_city,
+          commands::weather::get_weather_city,
+          commands::weather::get_weather,
+          commands::weather::fetch_weather,
+          commands::weather::broadcast_weather_update,
+          commands::weather::clear_weather_cache,
+          commands::weather::get_weather_cache_ttl,
         ]
       }
       // リリースビルドではtest_innertube_connectionを除外
@@ -217,6 +258,17 @@ pub fn run() {
           commands::youtube::stop_unified_polling,
           commands::youtube::is_unified_polling_running,
           commands::youtube::get_unified_polling_mode,
+          commands::youtube::get_live_stream_stats,
+          commands::youtube::broadcast_kpi_update,
+          commands::weather::set_weather_api_key,
+          commands::weather::has_weather_api_key,
+          commands::weather::set_weather_city,
+          commands::weather::get_weather_city,
+          commands::weather::get_weather,
+          commands::weather::fetch_weather,
+          commands::weather::broadcast_weather_update,
+          commands::weather::clear_weather_cache,
+          commands::weather::get_weather_cache_ttl,
         ]
       }
     })

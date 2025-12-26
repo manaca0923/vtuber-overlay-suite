@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use sqlx::sqlite::SqliteConnection;
 use sqlx::SqlitePool;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 use super::types::{ChatMessage, MessageType};
 
@@ -58,17 +58,43 @@ enum TransactionResult {
 /// - SQLITE_BUSYエラー: exponential backoffでリトライ（最大3回）
 /// - トランザクション開始/コミット失敗時: 1件ずつ個別INSERTにフォールバック
 /// - 個別INSERT失敗時: ログ出力して次のメッセージへ進む
+///
+/// ## タイムアウト保証
+/// 全チャンクの処理は総タイムアウト（RETRY_TOTAL_TIMEOUT_MS）内で完了する。
+/// フォールバックパスも同じ予算を共有し、予算超過時はスキップする。
 pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
     if messages.is_empty() {
         return;
     }
 
+    let start_time = Instant::now();
+    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+
     // チャンクに分割して処理（ロック保持時間を短縮）
     for chunk in messages.chunks(BATCH_CHUNK_SIZE) {
+        // 総タイムアウトチェック
+        if start_time.elapsed() >= total_timeout {
+            log::warn!(
+                "save_comments_to_db: Total timeout ({}ms) exceeded, skipping remaining chunks",
+                RETRY_TOTAL_TIMEOUT_MS
+            );
+            return;
+        }
+
         if !save_chunk_with_retry(pool, chunk).await {
             // トランザクション失敗時は1件ずつ個別INSERTにフォールバック
+            // ただし総タイムアウトを超過している場合はスキップ
+            let elapsed = start_time.elapsed();
+            if elapsed >= total_timeout {
+                log::warn!(
+                    "save_comments_to_db: Total timeout exceeded, skipping fallback for chunk"
+                );
+                continue;
+            }
+
             log::debug!("Transaction failed after retries, falling back to individual inserts");
-            save_chunk_individually(pool, chunk).await;
+            let remaining = total_timeout - elapsed;
+            save_chunk_individually(pool, chunk, remaining).await;
         }
     }
 }
@@ -228,12 +254,18 @@ async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
 /// コネクションを取得し、busy_timeoutを設定してからトランザクションを開始する。
 /// これにより、各試行のブロック時間を確実に制限できる。
 ///
+/// ## pool.acquire()のタイムアウト
+/// pool.acquire()自体が残り予算を超えてブロックしないよう、
+/// tokio::time::timeoutでラップする。これにより総タイムアウトがend-to-endで強制される。
+///
 /// ## busy_timeout復元
 /// トランザクション完了後（成功/失敗問わず）、busy_timeoutを元の値に復元する。
 /// 元の値は接続から直接取得するため、プール設定に依存しない。
 /// これにより、プール内の接続が短いタイムアウトを保持しない。
 ///
 /// ## エラーハンドリング
+/// - pool.acquire()タイムアウト → `TransactionResult::Busy`を返す（リトライ可能）
+/// - 元のbusy_timeout取得失敗 → `TransactionResult::OtherError`を返す（復元不能なため）
 /// - PRAGMA busy_timeout設定がBUSYで失敗 → `TransactionResult::Busy`を返す
 /// - PRAGMA設定がその他のエラーで失敗 → `TransactionResult::OtherError`を返す
 async fn save_chunk_with_transaction_and_timeout(
@@ -241,10 +273,12 @@ async fn save_chunk_with_transaction_and_timeout(
     messages: &[ChatMessage],
     busy_timeout_ms: u64,
 ) -> TransactionResult {
-    // コネクションを取得
-    let mut conn = match pool.acquire().await {
-        Ok(conn) => conn,
-        Err(e) => {
+    // コネクションを取得（残り予算でタイムアウト）
+    // pool.acquire()が残り予算を超えてブロックしないよう制限
+    let acquire_timeout = Duration::from_millis(busy_timeout_ms);
+    let mut conn = match timeout(acquire_timeout, pool.acquire()).await {
+        Ok(Ok(conn)) => conn,
+        Ok(Err(e)) => {
             if is_sqlite_busy_error(&e) {
                 log::debug!("SQLITE_BUSY on connection acquire: {:?}", e);
                 return TransactionResult::Busy;
@@ -252,11 +286,26 @@ async fn save_chunk_with_transaction_and_timeout(
             log::warn!("Failed to acquire connection: {:?}", e);
             return TransactionResult::OtherError;
         }
+        Err(_) => {
+            // タイムアウト: プール接続待ちが予算を超過
+            log::debug!(
+                "Connection acquire timed out after {}ms",
+                busy_timeout_ms
+            );
+            return TransactionResult::Busy;
+        }
     };
 
     // 元のbusy_timeoutを取得（復元用）
-    // 取得失敗時はNoneとなり、後で復元をスキップする
-    let original_timeout = get_busy_timeout(&mut conn).await;
+    // 取得失敗時は復元不能なため、OtherErrorを返して続行しない
+    // → 短いbusy_timeoutを設定後に復元できず、接続が劣化するリスクを回避
+    let original_timeout = match get_busy_timeout(&mut conn).await {
+        Some(timeout) => timeout,
+        None => {
+            log::warn!("Cannot proceed: failed to get original busy_timeout for restoration");
+            return TransactionResult::OtherError;
+        }
+    };
 
     // busy_timeoutを設定（エラー時は適切に処理）
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
@@ -273,18 +322,12 @@ async fn save_chunk_with_transaction_and_timeout(
     let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
 
     // busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
-    // original_timeoutがNone（取得失敗）の場合は復元をスキップ
-    // → 未知の値で上書きするリスクを回避
-    if let Some(timeout) = original_timeout {
-        if let Err(e) = set_busy_timeout(&mut conn, timeout).await {
-            log::warn!(
-                "Failed to restore busy_timeout to original ({}ms): {:?}",
-                timeout,
-                e
-            );
-        }
-    } else {
-        log::debug!("Skipping busy_timeout restoration (original value unknown)");
+    if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+        log::warn!(
+            "Failed to restore busy_timeout to original ({}ms): {:?}",
+            original_timeout,
+            e
+        );
     }
 
     result
@@ -415,21 +458,61 @@ async fn save_chunk_with_transaction_on_conn(
 
 /// チャンクを1件ずつ個別に保存（フォールバック用）
 ///
-/// 単一接続を取得して再利用し、行ごとのpool checkout回避でパフォーマンス向上
-async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage]) {
+/// 単一接続を取得して再利用し、行ごとのpool checkout回避でパフォーマンス向上。
+/// 残り予算を受け取り、予算内でのみ処理を実行する。
+/// pool.acquire()も短いbusy_timeoutも残り予算で制限される。
+async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], remaining: Duration) {
     let mut success_count = 0;
     let mut error_count = 0;
+    let start_time = Instant::now();
+
+    // 残り時間が少なすぎる場合はスキップ
+    if remaining.as_millis() < 50 {
+        log::debug!(
+            "Skipping individual insert fallback: remaining time ({}ms) too short",
+            remaining.as_millis()
+        );
+        return;
+    }
+
+    // 接続取得のタイムアウト（残り予算の半分、最大500ms）
+    let acquire_timeout_ms = (remaining.as_millis() as u64 / 2).min(500);
+    let acquire_timeout = Duration::from_millis(acquire_timeout_ms);
 
     // 単一接続を取得して再利用（行ごとのpool checkout回避）
-    let mut conn = match pool.acquire().await {
-        Ok(conn) => conn,
-        Err(e) => {
+    let mut conn = match timeout(acquire_timeout, pool.acquire()).await {
+        Ok(Ok(conn)) => conn,
+        Ok(Err(e)) => {
             log::warn!("Failed to acquire connection for fallback: {:?}", e);
+            return;
+        }
+        Err(_) => {
+            log::debug!(
+                "Connection acquire for fallback timed out after {}ms",
+                acquire_timeout_ms
+            );
             return;
         }
     };
 
+    // busy_timeoutを残り予算で制限（最大500ms）
+    let busy_timeout_ms = ((remaining - start_time.elapsed()).as_millis() as u64).min(500);
+    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+        log::warn!("Failed to set busy_timeout for fallback: {:?}", e);
+        // 設定失敗時もデフォルトのbusy_timeoutで続行
+    }
+
     for msg in messages {
+        // 予算チェック
+        if start_time.elapsed() >= remaining {
+            log::debug!(
+                "Individual insert fallback: budget exhausted after {}/{} messages",
+                success_count + error_count,
+                messages.len()
+            );
+            break;
+        }
+
         match insert_comment(&mut *conn, msg).await {
             Ok(_) => success_count += 1,
             Err(e) => {
@@ -439,11 +522,12 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage]) {
         }
     }
 
-    if error_count > 0 {
+    if error_count > 0 || success_count + error_count < messages.len() {
         log::warn!(
-            "Individual insert fallback: {} succeeded, {} failed",
+            "Individual insert fallback: {} succeeded, {} failed, {} skipped (budget)",
             success_count,
-            error_count
+            error_count,
+            messages.len() - success_count - error_count
         );
     }
 }

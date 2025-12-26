@@ -890,6 +890,103 @@ ws.onopen = () => {
 - `pageshow`だけでなく`onopen`でもタイマー管理を行う
 - 接続成功時点で予約済みタイマーは不要になるため、即座にクリア
 
+### 22. pool.acquire()のタイムアウト制限（高リスク指摘）
+
+**指摘内容**:
+- `pool.acquire().await`が残り予算を超えてブロックする可能性
+- プール枯渇時に無期限待機となり、総タイムアウト保証が崩れる
+- `save_comments_to_db`が2秒を大幅に超えて停滞する可能性
+
+**対応**:
+```rust
+// pool.acquire()をtokio::time::timeoutでラップ
+let acquire_timeout = Duration::from_millis(busy_timeout_ms);
+let mut conn = match timeout(acquire_timeout, pool.acquire()).await {
+    Ok(Ok(conn)) => conn,
+    Ok(Err(e)) => {
+        if is_sqlite_busy_error(&e) {
+            return TransactionResult::Busy;
+        }
+        return TransactionResult::OtherError;
+    }
+    Err(_) => {
+        // タイムアウト: プール接続待ちが予算を超過
+        log::debug!("Connection acquire timed out after {}ms", busy_timeout_ms);
+        return TransactionResult::Busy;
+    }
+};
+```
+
+**今後の対策**:
+- `pool.acquire()`は必ず`tokio::time::timeout`でラップ
+- タイムアウト値は残り予算から計算
+- タイムアウト時は`Busy`として扱い、リトライ可能にする
+
+### 23. get_busy_timeout()失敗時は処理を中止（高リスク指摘）
+
+**指摘内容**:
+- `get_busy_timeout()`失敗時に短い`busy_timeout`を設定後、復元をスキップ
+- 接続が劣化した状態でプールに戻され、他の呼び出し元に影響
+- SQLITE_BUSY発生率が増加する可能性
+
+**対応**:
+```rust
+// 元のbusy_timeoutを取得（復元用）
+// 取得失敗時は復元不能なため、OtherErrorを返して続行しない
+let original_timeout = match get_busy_timeout(&mut conn).await {
+    Some(timeout) => timeout,
+    None => {
+        log::warn!("Cannot proceed: failed to get original busy_timeout for restoration");
+        return TransactionResult::OtherError;
+    }
+};
+
+// ここで初めてbusy_timeoutを設定
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await { ... }
+```
+
+**今後の対策**:
+- PRAGMA値の変更前に必ず元の値を取得
+- 取得失敗時は変更を行わずにエラー終了
+- 「変更 → 復元スキップ」の状態を作らない
+
+### 24. フォールバックパスの予算制限（高リスク指摘）
+
+**指摘内容**:
+- `save_chunk_individually`がプールのデフォルト`busy_timeout`を使用
+- フォールバックパスで2秒を超える可能性
+- end-to-endのタイムアウト保証が崩れる
+
+**対応**:
+```rust
+// save_comments_to_dbからremainingを渡す
+save_chunk_individually(pool, chunk, remaining).await;
+
+// save_chunk_individually内でも予算を制限
+async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], remaining: Duration) {
+    // 接続取得にもタイムアウトを適用
+    let acquire_timeout_ms = (remaining.as_millis() as u64 / 2).min(500);
+    let mut conn = match timeout(acquire_timeout, pool.acquire()).await { ... };
+
+    // busy_timeoutも残り予算で制限
+    let busy_timeout_ms = ((remaining - start_time.elapsed()).as_millis() as u64).min(500);
+    set_busy_timeout(&mut conn, busy_timeout_ms).await?;
+
+    for msg in messages {
+        // 予算チェック
+        if start_time.elapsed() >= remaining {
+            break;
+        }
+        insert_comment(&mut *conn, msg).await;
+    }
+}
+```
+
+**今後の対策**:
+- フォールバックパスにも同じ予算制限を適用
+- `remaining`パラメータで予算を明示的に渡す
+- 予算超過時は処理を中断し、残りをスキップ
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

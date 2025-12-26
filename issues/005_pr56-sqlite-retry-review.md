@@ -2008,6 +2008,23 @@ if (!updateBatcher || updateBatcher.isDestroyed()) {
 - 各操作前にデッドライン超過チェックを挿入し、超過時はrollbackして早期終了
 - SQLite progress handlerの使用も検討
 
+### 51. save_comments_to_dbの構造化戻り値（繰り返し指摘）
+
+**指摘内容**（複数回のレビューで指摘）:
+- `save_comments_to_db`が2秒の総予算でスキップされたチャンクを呼び出し元に通知せず`()`を返す
+- 上流が損失を検出・補償できない
+- 非BUSYパスでもデータがドロップされる可能性がある
+
+**対応状況**:
+- `docs/900_tasks.md`の「save_comments_to_dbの総予算によるデータスキップ検討」として記録済み
+- 本PRではリアルタイム性を優先し、本番運用後にフィードバックを収集する設計判断
+- スキップ発生時は`log::warn`でメッセージ数を出力済み
+
+**今後の対策**:
+- 本番運用でスキップが頻発する場合は構造化戻り値を実装
+- 戻り値: `SaveResult { saved: usize, failed: usize, skipped: usize }`
+- 予算を設定可能にする（メッセージ数/チャンク数に比例）
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

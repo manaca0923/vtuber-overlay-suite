@@ -263,6 +263,29 @@ fn test_hot_emoji_survives_with_lru() {
 - VTuber配信アプリではユーザー体験を優先すべき
 - パフォーマンス最適化は実測データに基づいて行う
 
+### 8. clampMaxLinesの文字列入力テスト追加（template.test.ts）
+
+**指摘内容**:
+- clampMaxItemsには文字列入力テストがあるが、clampMaxLinesには同様のテストがない
+- Number()変換のテストカバレッジが不十分
+
+**対応**:
+```typescript
+it('数値文字列は正しくパースされる', () => {
+  expect(clampMaxLines('10' as any)).toBe(10);
+  expect(clampMaxLines('8' as any)).toBe(8);
+});
+
+it('非数値文字列は最小値にクランプされる', () => {
+  expect(clampMaxLines('abc' as any)).toBe(CLAMP_RANGES.maxLines.min);
+  expect(clampMaxLines('' as any)).toBe(CLAMP_RANGES.maxLines.min);
+});
+```
+
+**今後の対策**:
+- 同じロジックを持つ関数には同等のテストカバレッジを確保
+- clamp系関数を追加・変更した場合は文字列入力テストも忘れずに追加
+
 ## 未対応（将来対応）
 
 ### 1. SQLITE_BUSY時の並行書き込みテスト
@@ -278,6 +301,15 @@ fn test_hot_emoji_survives_with_lru() {
 - トランザクション開始/コミット時にSQLITE_BUSYが発生した場合のリトライロジック
 - 現状はbusy_timeoutで軽減、フォールバック処理（個別INSERT）で対応
 - 高負荷環境で問題が発生したら検討
+- `docs/900_tasks.md`に追加済み
+
+### 4. 絵文字キャッシュのMutex contention最適化
+- `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出している
+- 高スループット時にロック競合が発生しパース遅延が悪化する可能性
+- 対応案:
+  1. ショートカットの重複排除をロック取得前に行う
+  2. 並行キャッシュ（`moka::sync::Cache`など）への置き換え
+- 現状のキャッシュサイズ2000・通常のチャット速度では問題なし
 - `docs/900_tasks.md`に追加済み
 
 ## 参照

@@ -240,4 +240,20 @@ describe('clampMaxLines', () => {
     // Number.isFinite(-Infinity) === false なので最小値にフォールバック
     expect(clampMaxLines(-Infinity)).toBe(CLAMP_RANGES.maxLines.min);
   });
+
+  it('数値文字列は正しくパースされる', () => {
+    // Number()で変換されるため、数値文字列は正常に処理される
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxLines('10' as any)).toBe(10);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxLines('8' as any)).toBe(8);
+  });
+
+  it('非数値文字列は最小値にクランプされる', () => {
+    // Number("abc") === NaN なので最小値にフォールバック
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxLines('abc' as any)).toBe(CLAMP_RANGES.maxLines.min);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(clampMaxLines('' as any)).toBe(CLAMP_RANGES.maxLines.min);
+  });
 });

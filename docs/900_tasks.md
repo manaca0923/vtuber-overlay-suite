@@ -891,6 +891,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（現状のbusy_timeout+フォールバックで問題なし）
 
+- [ ] **絵文字キャッシュのMutex contention最適化** (PR#55)
+  - 現在: `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出し
+  - 問題: 高スループット時にロック競合が発生しパース遅延が悪化する可能性
+  - 対応案:
+    1. ショートカットの重複排除をロック取得前に行い、ユニークなショートカットのみget()
+    2. 並行キャッシュ（`moka::sync::Cache`など）への置き換え
+  - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
+  - 優先度: 低（現状のキャッシュサイズ2000・通常のチャット速度では問題なし）
+
 ### テスト
 
 - [ ] **手動テスト項目の実施**

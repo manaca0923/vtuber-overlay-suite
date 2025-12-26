@@ -796,6 +796,100 @@ TransactionResult::Busy => {
 - 残り時間が次の試行に十分でない場合は早めに諦める
 - 総タイムアウトはbusy_timeout + backoff + 試行時間の合計で強制
 
+### 19. get_busy_timeout()失敗時のOption型対応（高リスク指摘）
+
+**指摘内容**:
+- `get_busy_timeout()`が失敗時にフォールバック値（5000ms）を返していた
+- 一時的な障害時にプール設定とは異なる値で復元してしまう
+- 非デフォルトbusy_timeout（例: 150ms）のプールが5000msに上書きされる
+
+**対応**:
+```rust
+/// コネクションの現在のbusy_timeoutを取得
+/// 取得失敗時はNoneを返す（呼び出し元で復元をスキップする判断材料として）
+async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
+    match sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
+        .fetch_one(&mut *conn)
+        .await
+    {
+        Ok(timeout) => Some(timeout as u64),
+        Err(e) => {
+            log::debug!("Failed to get busy_timeout: {:?}", e);
+            None
+        }
+    }
+}
+
+// 呼び出し側
+let original_timeout = get_busy_timeout(&mut conn).await;
+// ...トランザクション...
+// 復元: Noneの場合はスキップして未知の値での上書きを回避
+if let Some(timeout) = original_timeout {
+    if let Err(e) = set_busy_timeout(&mut conn, timeout).await {
+        log::warn!("Failed to restore busy_timeout: {:?}", e);
+    }
+} else {
+    log::debug!("Skipping busy_timeout restoration (original value unknown)");
+}
+```
+
+**今後の対策**:
+- PRAGMA取得失敗時はフォールバック値を使わずOption::Noneを返す
+- 元の値が不明な場合は復元をスキップして既存設定を維持
+- 確実に復元できる値がある場合のみ復元処理を実行
+
+### 20. BUSY時のrollback失敗をOtherErrorとして扱う（高リスク指摘）
+
+**指摘内容**:
+- BUSY発生時のrollback失敗を無視して`TransactionResult::Busy`を返していた
+- rollback失敗時は接続が汚染されている可能性がある
+- 汚染された接続でリトライすると予期しない動作になる
+
+**対応**:
+```rust
+if is_sqlite_busy_error(&e) {
+    log::debug!("SQLITE_BUSY during insert: {:?}", e);
+    // rollback失敗時は接続が汚染されている可能性があるためOtherErrorとして扱う
+    if let Err(rb_err) = tx.rollback().await {
+        log::warn!("Rollback failed after BUSY during insert: {:?}", rb_err);
+        return TransactionResult::OtherError;
+    }
+    return TransactionResult::Busy;
+}
+```
+
+**今後の対策**:
+- rollback失敗はトランザクション状態が不定のため深刻なエラーとして扱う
+- rollback失敗時はリトライ不可（OtherError）として、フォールバック処理へ移行
+- 汚染された可能性のある接続でのリトライは避ける
+
+### 21. ws.onopenで再接続タイマーをクリア（高リスク指摘）
+
+**指摘内容**:
+- `ws.onopen`で`reconnectTimerId`をクリアしていない
+- 手動/早期再接続で`onopen`に到達した場合、予約済みタイマーが残っている可能性
+- タイマーが発火すると二重WebSocket接続が発生
+
+**対応**:
+```javascript
+ws.onopen = () => {
+  console.log('WebSocket connected');
+  reconnectDelay = 1000;
+  // ペンディング中の再接続タイマーをクリア（二重接続防止）
+  // 手動/早期再接続でonopenに到達した場合、予約済みタイマーが残っている可能性がある
+  if (reconnectTimerId) {
+    clearTimeout(reconnectTimerId);
+    reconnectTimerId = null;
+  }
+  // ...
+};
+```
+
+**今後の対策**:
+- WebSocketの`onopen`では必ず再接続タイマーをクリア
+- `pageshow`だけでなく`onopen`でもタイマー管理を行う
+- 接続成功時点で予約済みタイマーは不要になるため、即座にクリア
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

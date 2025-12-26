@@ -32,10 +32,6 @@ const RETRY_TOTAL_TIMEOUT_MS: u64 = 2000;
 /// この値を超えないようにしつつ、残り時間に応じて短縮する
 const MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: u64 = 500;
 
-/// busy_timeout取得失敗時のフォールバック値（ミリ秒）
-/// プール設定に依存しない安全なデフォルト値
-const FALLBACK_BUSY_TIMEOUT_MS: u64 = 5000;
-
 /// トランザクション処理の結果
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TransactionResult {
@@ -213,16 +209,16 @@ async fn set_busy_timeout(conn: &mut SqliteConnection, timeout_ms: u64) -> Resul
 /// コネクションの現在のbusy_timeoutを取得
 ///
 /// プール設定に依存せず、接続の実際の値を取得する。
-/// 取得失敗時はフォールバック値を返す。
-async fn get_busy_timeout(conn: &mut SqliteConnection) -> u64 {
+/// 取得失敗時はNoneを返す（呼び出し元で復元をスキップする判断材料として）。
+async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
     match sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
         .fetch_one(&mut *conn)
         .await
     {
-        Ok(timeout) => timeout as u64,
+        Ok(timeout) => Some(timeout as u64),
         Err(e) => {
-            log::debug!("Failed to get busy_timeout, using fallback: {:?}", e);
-            FALLBACK_BUSY_TIMEOUT_MS
+            log::debug!("Failed to get busy_timeout: {:?}", e);
+            None
         }
     }
 }
@@ -259,6 +255,7 @@ async fn save_chunk_with_transaction_and_timeout(
     };
 
     // 元のbusy_timeoutを取得（復元用）
+    // 取得失敗時はNoneとなり、後で復元をスキップする
     let original_timeout = get_busy_timeout(&mut conn).await;
 
     // busy_timeoutを設定（エラー時は適切に処理）
@@ -276,13 +273,18 @@ async fn save_chunk_with_transaction_and_timeout(
     let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
 
     // busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
-    // 復元失敗はログ出力のみ（トランザクション結果は変えない）
-    if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
-        log::warn!(
-            "Failed to restore busy_timeout to original ({}ms): {:?}",
-            original_timeout,
-            e
-        );
+    // original_timeoutがNone（取得失敗）の場合は復元をスキップ
+    // → 未知の値で上書きするリスクを回避
+    if let Some(timeout) = original_timeout {
+        if let Err(e) = set_busy_timeout(&mut conn, timeout).await {
+            log::warn!(
+                "Failed to restore busy_timeout to original ({}ms): {:?}",
+                timeout,
+                e
+            );
+        }
+    } else {
+        log::debug!("Skipping busy_timeout restoration (original value unknown)");
     }
 
     result
@@ -380,7 +382,11 @@ async fn save_chunk_with_transaction_on_conn(
             if is_sqlite_busy_error(&e) {
                 log::debug!("SQLITE_BUSY during insert: {:?}", e);
                 // ロールバック（dropで自動的に行われるが明示的に）
-                let _ = tx.rollback().await;
+                // rollback失敗時は接続が汚染されている可能性があるためOtherErrorとして扱う
+                if let Err(rb_err) = tx.rollback().await {
+                    log::warn!("Rollback failed after BUSY during insert: {:?}", rb_err);
+                    return TransactionResult::OtherError;
+                }
                 return TransactionResult::Busy;
             }
             log::warn!("Insert failed in transaction, rolling back: {:?}", e);

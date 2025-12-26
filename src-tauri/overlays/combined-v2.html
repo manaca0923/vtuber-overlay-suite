@@ -397,6 +397,12 @@
       ws.onopen = () => {
         console.log('WebSocket connected');
         reconnectDelay = 1000;
+        // ペンディング中の再接続タイマーをクリア（二重接続防止）
+        // 手動/早期再接続でonopenに到達した場合、予約済みタイマーが残っている可能性がある
+        if (reconnectTimerId) {
+          clearTimeout(reconnectTimerId);
+          reconnectTimerId = null;
+        }
         if (!settingsFetchSucceeded) {
           fetchAndApplySettings();
         }

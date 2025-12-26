@@ -149,9 +149,10 @@ async fn save_chunk_with_retry(
         let elapsed = start_time.elapsed();
         if elapsed >= total_timeout {
             log::warn!(
-                "SQLITE_BUSY: Total timeout ({}ms) exceeded before attempt {}, giving up",
+                "SQLITE_BUSY: Total timeout ({}ms) exceeded before attempt {}, giving up ({} messages skipped)",
                 total_timeout.as_millis(),
-                attempt + 1
+                attempt + 1,
+                messages.len()
             );
             return false;
         }
@@ -160,8 +161,9 @@ async fn save_chunk_with_retry(
         // 残り時間が少なすぎる場合はスキップ（50ms未満は無意味）
         if remaining.as_millis() < 50 {
             log::warn!(
-                "SQLITE_BUSY: Remaining time ({}ms) too short for retry, giving up",
-                remaining.as_millis()
+                "SQLITE_BUSY: Remaining time ({}ms) too short for retry, giving up ({} messages skipped)",
+                remaining.as_millis(),
+                messages.len()
             );
             return false;
         }
@@ -185,8 +187,9 @@ async fn save_chunk_with_retry(
                 // 試行回数チェック
                 if attempt >= MAX_ATTEMPTS {
                     log::warn!(
-                        "SQLITE_BUSY: Max attempts ({}) exceeded, giving up",
-                        MAX_ATTEMPTS
+                        "SQLITE_BUSY: Max attempts ({}) exceeded, giving up ({} messages skipped)",
+                        MAX_ATTEMPTS,
+                        messages.len()
                     );
                     return false;
                 }
@@ -195,9 +198,10 @@ async fn save_chunk_with_retry(
                 let elapsed = start_time.elapsed();
                 if elapsed >= total_timeout {
                     log::warn!(
-                        "SQLITE_BUSY: Total timeout ({}ms) exceeded after {} attempts, giving up",
+                        "SQLITE_BUSY: Total timeout ({}ms) exceeded after {} attempts, giving up ({} messages skipped)",
                         total_timeout.as_millis(),
-                        attempt
+                        attempt,
+                        messages.len()
                     );
                     return false;
                 }
@@ -208,9 +212,10 @@ async fn save_chunk_with_retry(
                 // 残り時間がbackoff + 最小試行時間(50ms)未満なら諦める
                 if remaining_ms < backoff_ms + 50 {
                     log::warn!(
-                        "SQLITE_BUSY: Remaining time ({}ms) too short for backoff ({}ms) + retry, giving up",
+                        "SQLITE_BUSY: Remaining time ({}ms) too short for backoff ({}ms) + retry, giving up ({} messages skipped)",
                         remaining_ms,
-                        backoff_ms
+                        backoff_ms,
+                        messages.len()
                     );
                     return false;
                 }

@@ -967,6 +967,21 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
   - 優先度: 低（現状のチャット速度では問題なし）
 
+- [ ] **pool.acquire()タイムアウト時のスキップログテスト** (PR#56)
+  - 単一接続プールで接続を保持した状態でacquireタイムアウトを発生させ、スキップログが出力されることを検証
+  - テスト対象: `save_chunk_with_transaction_and_timeout`でTransactionResult::Busy返却時のログ出力
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
+
+- [ ] **bfcache/リロード時のWebSocket再接続テスト** (PR#56)
+  - JSテストハーネスがない場合は手動QA手順を文書化
+  - テスト対象:
+    - pagehide + beforeunloadの両方発火時にcleanup()が1回のみ実行される
+    - isShuttingDownがpageshow復元時にリセットされる
+    - OBSリロード後にWebSocket再接続が可能
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+  - 優先度: 低（OBSブラウザソースではbfcacheは使用されない）
+
 - [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
   - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止
   - 問題: 一時的なBUSYエラーの場合、リトライすべきでは

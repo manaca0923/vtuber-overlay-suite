@@ -393,6 +393,11 @@
     }
 
     function connectWebSocket() {
+      // OBSリロード時などでisShuttingDownがtrueのまま呼ばれる場合に備えてリセット
+      // ※ connectWebSocket()が呼ばれる = 接続を意図しているため、シャットダウン状態を解除
+      isShuttingDown = false;
+      cleanupCalled = false;
+
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
@@ -526,8 +531,14 @@
     // ===== クリーンアップ =====
     // オーバーレイのアンロード/リロード時にタイマーをクリーンアップ
     // pagehide: 最新ブラウザで推奨（bfcache対応）
-    // beforeunload: フォールバック用
+    // beforeunload: OBSブラウザソース等の古いブラウザ向けフォールバック
+    let cleanupCalled = false; // 二重実行防止フラグ
+
     function cleanup() {
+      // 二重実行を防止（beforeunload + pagehideの両方が発火する場合）
+      if (cleanupCalled) return;
+      cleanupCalled = true;
+
       // シャットダウンフラグを立てて再接続を防止
       isShuttingDown = true;
 
@@ -541,6 +552,7 @@
       if (ws) {
         ws.onclose = null;
         ws.close();
+        ws = null; // 閉じたソケットを"生きている"と誤認しないようnull化
       }
 
       if (densityManager) {
@@ -558,14 +570,18 @@
         cleanup();
       }
     });
+
+    // beforeunload: OBSブラウザソース向けフォールバック
+    // cleanup()内で二重実行を防止しているため、pagehideと両方発火しても安全
     window.addEventListener('beforeunload', cleanup);
 
     // bfcache復元時の再接続
     window.addEventListener('pageshow', (event) => {
       if (event.persisted) {
-        // bfcacheから復元された場合、isShuttingDownをリセットして再接続
+        // bfcacheから復元された場合、フラグをリセットして再接続可能にする
         console.log('Page restored from bfcache, reconnecting...');
         isShuttingDown = false;
+        cleanupCalled = false; // 次回のcleanup()を有効にする
         reconnectDelay = 1000;
 
         // ペンディング中の再接続タイマーをクリア（二重接続防止）

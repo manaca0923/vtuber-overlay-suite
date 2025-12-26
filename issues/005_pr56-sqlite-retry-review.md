@@ -1832,6 +1832,105 @@ if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
 - リトライ後も失敗する場合のみ接続を切り離す
 - `conn.detach()`は「接続が完全に使用不能」な場合にのみ使用
 
+### 45. beforeunloadとpagehideの二重発火によるbfcache無効化（高リスク指摘）
+
+**指摘内容**:
+- `pagehide`で`event.persisted`がtrueの場合は`cleanup()`をスキップするが、`beforeunload`は常に`cleanup()`を呼ぶ
+- 両方発火するブラウザではbfcacheの意図が無効になる
+- cleanup()後にwsがnullにならず、後続のロジックで閉じたソケットを"生きている"と誤認
+
+**対応**:
+```javascript
+// Before（問題あり）:
+window.addEventListener('pagehide', (event) => {
+  if (!event.persisted) { cleanup(); }
+});
+window.addEventListener('beforeunload', cleanup); // 常に実行 → bfcache無効化
+
+// After（修正済み）:
+let cleanupCalled = false; // 二重実行防止フラグ
+
+function cleanup() {
+  if (cleanupCalled) return; // 二重実行防止
+  cleanupCalled = true;
+  isShuttingDown = true;
+  // ...
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+    ws = null; // 閉じたソケットを"生きている"と誤認しないようnull化
+  }
+  // ...
+}
+
+// pageshow復元時
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    isShuttingDown = false;
+    cleanupCalled = false; // 次回のcleanup()を有効にする
+    // ...
+  }
+});
+```
+
+**今後の対策**:
+- イベントリスナーが複数発火する可能性を考慮し、フラグで二重実行を防止
+- cleanup()後はリソースをnull化して後続のロジックでの誤認を防止
+- bfcache復元時はフラグをリセットして次回のcleanup()を有効にする
+
+### 46. OBSリロード時のisShuttingDownリセット漏れ（高リスク指摘）
+
+**指摘内容**:
+- OBSブラウザソースのリロード時、ページは完全に再読み込みされるがJSの状態がリセットされない場合がある
+- `isShuttingDown = true`のままだと再接続が抑制される
+
+**対応**:
+```javascript
+function connectWebSocket() {
+  // OBSリロード時などでisShuttingDownがtrueのまま呼ばれる場合に備えてリセット
+  // ※ connectWebSocket()が呼ばれる = 接続を意図しているため、シャットダウン状態を解除
+  isShuttingDown = false;
+  cleanupCalled = false;
+
+  ws = new WebSocket(WS_URL);
+  // ...
+}
+```
+
+**今後の対策**:
+- 接続開始時に状態フラグをリセットする（接続意図が明確なため）
+- シャットダウンフラグはグローバル状態であることを意識し、適切なタイミングでリセット
+
+### 47. スキップログへのメッセージ数追加（ログ品質）
+
+**指摘内容**:
+- `save_chunk_with_retry`のスキップログにメッセージ数が含まれていなかった
+- サイレントなデータ損失の診断が困難
+
+**対応**:
+```rust
+// Before（問題あり）:
+log::warn!(
+    "SQLITE_BUSY: Max attempts ({}) exceeded, giving up",
+    MAX_ATTEMPTS
+);
+
+// After（修正済み）:
+log::warn!(
+    "SQLITE_BUSY: Max attempts ({}) exceeded, giving up ({} messages skipped)",
+    MAX_ATTEMPTS,
+    messages.len()
+);
+```
+
+**適用箇所**:
+- save_chunk_with_retry内のすべてのスキップログ（5箇所）
+
+**今後の対策**:
+- データを処理する関数のスキップログには必ず処理対象の件数を含める
+- スキップの原因（タイムアウト、リトライ超過等）と影響（件数）を明確にログ出力
+- ログレベルはwarnを使用し、運用時に検知可能にする
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

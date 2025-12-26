@@ -169,20 +169,18 @@ describe('clampMaxItems', () => {
     expect(clampMaxItems(10.6)).toBe(11);
   });
 
-  it('NaNはデフォルト値（最小値）にクランプされる', () => {
-    // NaN は Math.round で NaN のまま、Math.min/max も NaN を返す
-    // 実装によっては最小値または最大値に丸められる
-    const result = clampMaxItems(NaN);
-    // NaN の場合、Math.min/max の動作により結果は NaN になる可能性がある
-    // 安全な実装では最小値にフォールバックすることを期待
-    expect(Number.isNaN(result) || result === CLAMP_RANGES.maxItems.min || result === CLAMP_RANGES.maxItems.max).toBe(true);
+  it('NaNは決定論的に最小値にクランプされる', () => {
+    // Number.isFinite(NaN) === false なので最小値にフォールバック
+    expect(clampMaxItems(NaN)).toBe(CLAMP_RANGES.maxItems.min);
   });
 
-  it('Infinityは最大値にクランプされる', () => {
-    expect(clampMaxItems(Infinity)).toBe(CLAMP_RANGES.maxItems.max);
+  it('Infinityは決定論的に最小値にクランプされる', () => {
+    // Number.isFinite(Infinity) === false なので最小値にフォールバック
+    expect(clampMaxItems(Infinity)).toBe(CLAMP_RANGES.maxItems.min);
   });
 
-  it('-Infinityは最小値にクランプされる', () => {
+  it('-Infinityは決定論的に最小値にクランプされる', () => {
+    // Number.isFinite(-Infinity) === false なので最小値にフォールバック
     expect(clampMaxItems(-Infinity)).toBe(CLAMP_RANGES.maxItems.min);
   });
 });
@@ -212,18 +210,18 @@ describe('clampMaxLines', () => {
     expect(clampMaxLines(100)).toBe(14);
   });
 
-  it('NaNはデフォルト値にクランプされる', () => {
-    const result = clampMaxLines(NaN);
-    // NaN の場合、Math.min/max の動作により結果は NaN になる可能性がある
-    // 安全な実装では最小値にフォールバックすることを期待
-    expect(Number.isNaN(result) || result === CLAMP_RANGES.maxLines.min || result === CLAMP_RANGES.maxLines.max).toBe(true);
+  it('NaNは決定論的に最小値にクランプされる', () => {
+    // Number.isFinite(NaN) === false なので最小値にフォールバック
+    expect(clampMaxLines(NaN)).toBe(CLAMP_RANGES.maxLines.min);
   });
 
-  it('Infinityは最大値にクランプされる', () => {
-    expect(clampMaxLines(Infinity)).toBe(CLAMP_RANGES.maxLines.max);
+  it('Infinityは決定論的に最小値にクランプされる', () => {
+    // Number.isFinite(Infinity) === false なので最小値にフォールバック
+    expect(clampMaxLines(Infinity)).toBe(CLAMP_RANGES.maxLines.min);
   });
 
-  it('-Infinityは最小値にクランプされる', () => {
+  it('-Infinityは決定論的に最小値にクランプされる', () => {
+    // Number.isFinite(-Infinity) === false なので最小値にフォールバック
     expect(clampMaxLines(-Infinity)).toBe(CLAMP_RANGES.maxLines.min);
   });
 });

@@ -164,7 +164,7 @@ pub struct ComponentRules {
     /// 最大行数（4〜14）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_lines: Option<u32>,
-    /// 最大アイテム数（6〜20）
+    /// 最大アイテム数（3〜20, SetList推奨:14, QueueList推奨:6）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_items: Option<u32>,
     /// サイクル秒数（10〜120）

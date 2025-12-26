@@ -150,8 +150,14 @@ export const CLAMP_RANGES = {
 
 /**
  * 汎用クランプ関数
+ *
+ * NaN/Infinity/-Infinityなど非有限数は最小値にフォールバック
  */
 function clamp(value: number, min: number, max: number): number {
+  // NaN/Infinityなど非有限数は最小値にフォールバック
+  if (!Number.isFinite(value)) {
+    return min;
+  }
   return Math.max(min, Math.min(max, value));
 }
 

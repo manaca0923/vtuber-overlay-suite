@@ -293,12 +293,108 @@ destroy() {
 - 使用側で `pagehide`/`beforeunload` イベントで `destroy()` を呼び出す
 - `pagehide` が推奨（bfcache対応）、`beforeunload` はフォールバック
 
+### 8. WebSocket再接続がcleanup時に発生する問題（追加指摘）
+
+**指摘内容**:
+- `cleanup()`で`ws.close()`を呼び出すが、`ws.onclose`が常に再接続をスケジュール
+- `pagehide`/`beforeunload`時に新しいソケットが作成される可能性
+- 両イベントで二重に再接続がスケジュールされる可能性
+
+**対応**:
+```javascript
+let reconnectTimerId = null;
+let isShuttingDown = false;
+
+ws.onclose = () => {
+  // シャットダウン中は再接続しない
+  if (isShuttingDown) {
+    console.log('WebSocket closed (shutdown)');
+    return;
+  }
+  console.log('WebSocket closed, reconnecting...');
+  reconnectTimerId = setTimeout(() => {
+    reconnectTimerId = null;
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    connectWebSocket();
+  }, reconnectDelay);
+};
+
+function cleanup() {
+  // シャットダウンフラグを立てて再接続を防止
+  isShuttingDown = true;
+
+  // 再接続タイマーをクリア
+  if (reconnectTimerId) {
+    clearTimeout(reconnectTimerId);
+    reconnectTimerId = null;
+  }
+
+  // WebSocketを閉じる（oncloseハンドラを無効化してから）
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+  }
+  // ...その他のクリーンアップ
+}
+```
+
+**今後の対策**:
+- WebSocket再接続ロジックにはシャットダウンフラグを設ける
+- `onclose`ハンドラを無効化してからclose()を呼び出す
+- 再接続タイマーIDを保持し、cleanup時にclearTimeout()
+
+### 9. リトライ処理の総タイムアウト追加（追加指摘）
+
+**指摘内容**:
+- `busy_timeout`(5秒) × リトライ回数(3回) = 最大15秒のブロック
+- チャット取り込みが長時間停滞する可能性
+
+**対応**:
+```rust
+/// リトライ処理の総タイムアウト（ミリ秒）
+const RETRY_TOTAL_TIMEOUT_MS: u64 = 2000;
+
+async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
+    let start_time = Instant::now();
+    let timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+    // ...
+
+    loop {
+        match save_chunk_with_transaction(pool, messages).await {
+            // ...
+            TransactionResult::Busy => {
+                // 総タイムアウトチェック
+                let elapsed = start_time.elapsed();
+                if elapsed >= timeout {
+                    log::warn!(
+                        "SQLITE_BUSY: Total timeout ({}ms) exceeded after {} attempts, giving up",
+                        RETRY_TOTAL_TIMEOUT_MS,
+                        attempt
+                    );
+                    return false;
+                }
+                // ...
+            }
+        }
+    }
+}
+```
+
+**今後の対策**:
+- リトライ処理には総タイムアウトを設ける
+- `busy_timeout`とリトライの組み合わせで最悪ケースを計算
+- チャットのようなリアルタイム処理では短いタイムアウト（2秒程度）を使用
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト
 - 一方の接続がEXCLUSIVEロックを保持した状態で、他方からsave_chunk_with_retryを呼び出す
 - リトライロジックが正しく動作し、ロック解放後に成功することを検証
 - 複雑なテストセットアップが必要なため、優先度低
+
+### 2. cleanup()が再接続をスケジュールしないことのテスト
+- JSテストハーネスを追加した場合に検証
+- 現状は手動QAで対応
 
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56

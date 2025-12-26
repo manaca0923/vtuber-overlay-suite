@@ -148,6 +148,8 @@
 
     let ws = null;
     let reconnectDelay = 1000;
+    let reconnectTimerId = null;
+    let isShuttingDown = false;
 
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
     const updateBatcher = new UpdateBatcher({ batchInterval: 150 });
@@ -459,8 +461,14 @@
       };
 
       ws.onclose = () => {
+        // シャットダウン中は再接続しない
+        if (isShuttingDown) {
+          console.log('WebSocket closed (shutdown)');
+          return;
+        }
         console.log('WebSocket closed, reconnecting...');
-        setTimeout(() => {
+        reconnectTimerId = setTimeout(() => {
+          reconnectTimerId = null;
           reconnectDelay = Math.min(reconnectDelay * 2, 30000);
           connectWebSocket();
         }, reconnectDelay);
@@ -513,14 +521,26 @@
     // pagehide: 最新ブラウザで推奨（bfcache対応）
     // beforeunload: フォールバック用
     function cleanup() {
+      // シャットダウンフラグを立てて再接続を防止
+      isShuttingDown = true;
+
+      // 再接続タイマーをクリア
+      if (reconnectTimerId) {
+        clearTimeout(reconnectTimerId);
+        reconnectTimerId = null;
+      }
+
+      // WebSocketを閉じる（oncloseハンドラを無効化してから）
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+
       if (densityManager) {
         densityManager.destroy();
       }
       if (updateBatcher) {
         updateBatcher.destroy();
-      }
-      if (ws) {
-        ws.close();
       }
     }
 

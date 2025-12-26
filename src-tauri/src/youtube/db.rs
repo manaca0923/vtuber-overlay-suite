@@ -1,6 +1,6 @@
 //! YouTube関連のDB操作を共通化したモジュール
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sqlx::SqlitePool;
 use tokio::time::sleep;
@@ -20,6 +20,11 @@ const INITIAL_BACKOFF_MS: u64 = 100;
 
 /// 最大バックオフ時間（ミリ秒）
 const MAX_BACKOFF_MS: u64 = 1000;
+
+/// リトライ処理の総タイムアウト（ミリ秒）
+/// busy_timeout(5秒)×リトライ回数で長時間ブロックされないよう上限を設ける
+/// 2秒あれば通常の一時的なロック競合は解消される
+const RETRY_TOTAL_TIMEOUT_MS: u64 = 2000;
 
 /// トランザクション処理の結果
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -64,15 +69,20 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 
 /// チャンクをexponential backoffでリトライしながら保存
 ///
-/// SQLITE_BUSYエラーが発生した場合、最大MAX_ATTEMPTS回試行する。
+/// SQLITE_BUSYエラーが発生した場合、以下の制約内でリトライする:
+/// - 最大試行回数: MAX_ATTEMPTS回
+/// - 総タイムアウト: RETRY_TOTAL_TIMEOUT_MS（busy_timeout×リトライで長時間ブロックを防止）
+///
 /// 試行間隔はexponential backoffで増加（100ms → 200ms...最大1000ms）。
 ///
-/// 例: MAX_ATTEMPTS=3の場合
+/// 例: MAX_ATTEMPTS=3、RETRY_TOTAL_TIMEOUT_MS=2000msの場合
 ///   1回目: 即時試行
-///   2回目: 100ms後にリトライ
-///   3回目: 200ms後にリトライ
-///   → 失敗時はフォールバック（個別INSERT）
+///   2回目: 100ms後にリトライ（総経過時間が2秒以内なら）
+///   3回目: 200ms後にリトライ（総経過時間が2秒以内なら）
+///   → タイムアウトまたは試行回数超過でフォールバック（個別INSERT）
 async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
+    let start_time = Instant::now();
+    let timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
     let mut attempt = 0;
     let mut backoff_ms = INITIAL_BACKOFF_MS;
 
@@ -85,6 +95,19 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
             }
             TransactionResult::Busy => {
                 attempt += 1;
+
+                // 総タイムアウトチェック
+                let elapsed = start_time.elapsed();
+                if elapsed >= timeout {
+                    log::warn!(
+                        "SQLITE_BUSY: Total timeout ({}ms) exceeded after {} attempts, giving up",
+                        RETRY_TOTAL_TIMEOUT_MS,
+                        attempt
+                    );
+                    return false;
+                }
+
+                // 試行回数チェック
                 if attempt >= MAX_ATTEMPTS {
                     log::warn!(
                         "SQLITE_BUSY: Max attempts ({}) exceeded, giving up",
@@ -92,11 +115,13 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
                     );
                     return false;
                 }
+
                 log::debug!(
-                    "SQLITE_BUSY: Attempt {}/{} failed, retrying after {}ms",
+                    "SQLITE_BUSY: Attempt {}/{} failed, retrying after {}ms (elapsed: {}ms)",
                     attempt,
                     MAX_ATTEMPTS,
-                    backoff_ms
+                    backoff_ms,
+                    elapsed.as_millis()
                 );
                 sleep(Duration::from_millis(backoff_ms)).await;
                 backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);

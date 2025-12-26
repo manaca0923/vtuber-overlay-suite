@@ -1,27 +1,25 @@
 //! InnerTube レスポンスパーサー
 
 use chrono::{TimeZone, Utc};
-use std::num::NonZeroUsize;
+use std::collections::HashMap;
 use std::sync::Mutex;
-use lru::LruCache;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 
 use super::types::*;
 use crate::youtube::types::{ChatMessage, EmojiImage, EmojiInfo, EmojiThumbnail, MessageRun, MessageType};
 
-/// 絵文字キャッシュの最大エントリ数
-/// チャンネル固有のカスタム絵文字は通常数十〜数百程度なので、2000で十分な余裕がある
+/// 絵文字キャッシュの最大サイズ
+/// YouTube絵文字は通常数百程度なので、2000で十分
 const EMOJI_CACHE_MAX_SIZE: usize = 2000;
 
-/// 絵文字キャッシュ: ショートカット -> EmojiInfo (LRU方式)
+/// 絵文字キャッシュ: ショートカット -> EmojiInfo (LRUキャッシュ)
 /// InnerTubeレスポンスで取得した絵文字情報をキャッシュし、
 /// テキストトークンで送られてきた絵文字ショートカットを画像に変換するために使用
-/// 長時間運用時のメモリ増加を防ぐためLRUキャッシュを使用
 static EMOJI_CACHE: Lazy<Mutex<LruCache<String, EmojiInfo>>> = Lazy::new(|| {
-    Mutex::new(LruCache::new(
-        NonZeroUsize::new(EMOJI_CACHE_MAX_SIZE).expect("Cache size must be non-zero")
-    ))
+    Mutex::new(LruCache::new(NonZeroUsize::new(EMOJI_CACHE_MAX_SIZE).unwrap()))
 });
 
 /// 絵文字ショートカットパターン（:_xxx:形式）
@@ -337,7 +335,6 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
             };
 
             // キャッシュに追加/更新（ショートカットごとに登録、常に最新を反映）
-            // LRUキャッシュのため、上限を超えると古いエントリが自動削除される
             if let Ok(mut cache) = EMOJI_CACHE.lock() {
                 for shortcut in &emoji_info.shortcuts {
                     cache.put(shortcut.clone(), emoji_info.clone());
@@ -362,41 +359,67 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
 /// テキスト内の:_xxx:パターンを絵文字キャッシュから画像に変換
 ///
 /// 例: "こんにちは:_草lol:です" → [Text("こんにちは"), Emoji(...), Text("です")]
+///
+/// ロック範囲を最小化するため:
+/// 1. 正規表現でマッチを検出（ロック外）
+/// 2. キャッシュから絵文字情報を一括取得（ロック範囲最小）
+/// 3. 結果を組み立て（ロック外）
 fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
-    let mut cache = match EMOJI_CACHE.lock() {
-        Ok(c) => c,
-        Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
-    };
+    // Step 1: 正規表現でマッチを検出（ロック外）
+    let matches: Vec<_> = EMOJI_SHORTCUT_REGEX
+        .find_iter(text)
+        .map(|m| (m.start(), m.end(), m.as_str().to_string()))
+        .collect();
 
-    // キャッシュが空ならそのままテキストを返す
-    if cache.is_empty() {
+    // マッチがなければテキストをそのまま返す
+    if matches.is_empty() {
         return vec![MessageRun::Text { text: text.to_string() }];
     }
 
+    // Step 2: キャッシュからショートカットを一括検索（ロック範囲を最小化）
+    let emoji_map: HashMap<String, EmojiInfo> = {
+        let mut cache = match EMOJI_CACHE.lock() {
+            Ok(c) => c,
+            Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
+        };
+
+        // キャッシュが空ならそのままテキストを返す
+        if cache.is_empty() {
+            return vec![MessageRun::Text { text: text.to_string() }];
+        }
+
+        // 必要なショートカットのみを取得（getはLRUを更新するのでmut）
+        matches
+            .iter()
+            .filter_map(|(_, _, shortcut)| {
+                cache.get(shortcut.as_str()).map(|info| (shortcut.clone(), info.clone()))
+            })
+            .collect()
+        // ここでロック解放
+    };
+
+    // Step 3: 結果を組み立て（ロック外）
     let mut result: Vec<MessageRun> = Vec::new();
     let mut last_end = 0;
 
-    for mat in EMOJI_SHORTCUT_REGEX.find_iter(text) {
-        let shortcut = mat.as_str();
-
+    for (start, end, shortcut) in matches {
         // マッチ前のテキストを追加
-        if mat.start() > last_end {
-            let prefix = &text[last_end..mat.start()];
+        if start > last_end {
+            let prefix = &text[last_end..start];
             if !prefix.is_empty() {
                 result.push(MessageRun::Text { text: prefix.to_string() });
             }
         }
 
         // キャッシュに絵文字があれば画像に変換、なければテキストのまま
-        // get()を使用してLRUの最近使用順を更新（よく使う絵文字が削除されにくくなる）
-        if let Some(emoji_info) = cache.get(shortcut) {
+        if let Some(emoji_info) = emoji_map.get(&shortcut) {
             result.push(MessageRun::Emoji { emoji: emoji_info.clone() });
             log::debug!("Converted text emoji from cache: {}", shortcut);
         } else {
             result.push(MessageRun::Text { text: shortcut.to_string() });
         }
 
-        last_end = mat.end();
+        last_end = end;
     }
 
     // 残りのテキストを追加
@@ -405,11 +428,6 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
         if !suffix.is_empty() {
             result.push(MessageRun::Text { text: suffix.to_string() });
         }
-    }
-
-    // マッチがなかった場合は元のテキストをそのまま返す
-    if result.is_empty() {
-        result.push(MessageRun::Text { text: text.to_string() });
     }
 
     result
@@ -1064,6 +1082,89 @@ mod tests {
         let messages = parse_action(action);
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].id, "single-msg");
+    }
+
+    // ========================================
+    // LRUキャッシュテスト
+    // ========================================
+
+    #[test]
+    fn test_emoji_cache_size_limit() {
+        // キャッシュをクリア
+        clear_emoji_cache();
+
+        // 最大サイズ + 1 個のエントリを追加
+        for i in 0..(EMOJI_CACHE_MAX_SIZE + 10) {
+            let shortcut = format!(":_test{}:", i);
+            let emoji_info = EmojiInfo {
+                emoji_id: format!("emoji_{}", i),
+                shortcuts: vec![shortcut.clone()],
+                image: EmojiImage { thumbnails: vec![] },
+                is_custom_emoji: true,
+            };
+
+            if let Ok(mut cache) = EMOJI_CACHE.lock() {
+                cache.put(shortcut, emoji_info);
+            }
+        }
+
+        // キャッシュサイズが最大値を超えないことを確認
+        let size = get_emoji_cache_size();
+        assert!(size <= EMOJI_CACHE_MAX_SIZE,
+            "Cache size {} should not exceed max size {}", size, EMOJI_CACHE_MAX_SIZE);
+
+        // 最新のエントリが存在することを確認
+        let latest_shortcut = format!(":_test{}:", EMOJI_CACHE_MAX_SIZE + 9);
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            assert!(cache.get(&latest_shortcut).is_some(),
+                "Latest entry should be in cache");
+        }
+
+        // 最も古いエントリがLRUで削除されていることを確認
+        let oldest_shortcut = ":_test0:".to_string();
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            assert!(cache.get(&oldest_shortcut).is_none(),
+                "Oldest entry should have been evicted");
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
+    #[test]
+    fn test_emoji_cache_lru_update() {
+        // キャッシュをクリア
+        clear_emoji_cache();
+
+        // 3つのエントリを追加
+        for i in 0..3 {
+            let shortcut = format!(":_lru{}:", i);
+            let emoji_info = EmojiInfo {
+                emoji_id: format!("lru_{}", i),
+                shortcuts: vec![shortcut.clone()],
+                image: EmojiImage { thumbnails: vec![] },
+                is_custom_emoji: true,
+            };
+
+            if let Ok(mut cache) = EMOJI_CACHE.lock() {
+                cache.put(shortcut, emoji_info);
+            }
+        }
+
+        // 最初のエントリにアクセス（LRUが更新される）
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            let _ = cache.get(":_lru0:");
+        }
+
+        // すべてのエントリが存在することを確認
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            assert!(cache.get(":_lru0:").is_some());
+            assert!(cache.get(":_lru1:").is_some());
+            assert!(cache.get(":_lru2:").is_some());
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
     }
 }
 

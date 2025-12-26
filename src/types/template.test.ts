@@ -6,6 +6,9 @@ import { describe, it, expect } from 'vitest';
 import {
   hasSlotDuplicates,
   hasIdDuplicates,
+  clampMaxItems,
+  clampMaxLines,
+  CLAMP_RANGES,
   type TemplateComponent,
 } from './template';
 import type { SlotId } from './slot';
@@ -131,5 +134,64 @@ describe('hasIdDuplicates', () => {
       createComponent('', 'left.middle'), // duplicate empty ID!
     ];
     expect(hasIdDuplicates(components)).toBe(true);
+  });
+});
+
+describe('clampMaxItems', () => {
+  it('範囲内の値はそのまま返す', () => {
+    expect(clampMaxItems(10)).toBe(10);
+    expect(clampMaxItems(6)).toBe(6);
+    expect(clampMaxItems(14)).toBe(14);
+  });
+
+  it('最小値3に設定されている（QueueList対応）', () => {
+    expect(CLAMP_RANGES.maxItems.min).toBe(3);
+  });
+
+  it('最大値20に設定されている', () => {
+    expect(CLAMP_RANGES.maxItems.max).toBe(20);
+  });
+
+  it('最小値未満は3にクランプされる', () => {
+    expect(clampMaxItems(1)).toBe(3);
+    expect(clampMaxItems(2)).toBe(3);
+    expect(clampMaxItems(0)).toBe(3);
+    expect(clampMaxItems(-5)).toBe(3);
+  });
+
+  it('最大値超過は20にクランプされる', () => {
+    expect(clampMaxItems(21)).toBe(20);
+    expect(clampMaxItems(100)).toBe(20);
+  });
+
+  it('小数点は丸められる', () => {
+    expect(clampMaxItems(10.4)).toBe(10);
+    expect(clampMaxItems(10.6)).toBe(11);
+  });
+});
+
+describe('clampMaxLines', () => {
+  it('範囲内の値はそのまま返す', () => {
+    expect(clampMaxLines(10)).toBe(10);
+    expect(clampMaxLines(4)).toBe(4);
+    expect(clampMaxLines(14)).toBe(14);
+  });
+
+  it('最小値は4', () => {
+    expect(CLAMP_RANGES.maxLines.min).toBe(4);
+  });
+
+  it('最大値は14', () => {
+    expect(CLAMP_RANGES.maxLines.max).toBe(14);
+  });
+
+  it('最小値未満は4にクランプされる', () => {
+    expect(clampMaxLines(1)).toBe(4);
+    expect(clampMaxLines(3)).toBe(4);
+  });
+
+  it('最大値超過は14にクランプされる', () => {
+    expect(clampMaxLines(15)).toBe(14);
+    expect(clampMaxLines(100)).toBe(14);
   });
 });

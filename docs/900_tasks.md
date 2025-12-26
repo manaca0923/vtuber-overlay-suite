@@ -966,6 +966,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
   - 優先度: 低（現状のチャット速度では問題なし）
 
+- [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
+  - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止
+  - 問題: 一時的なBUSYエラーの場合、リトライすべきでは
+  - 対応案:
+    - `Result<u64, sqlx::Error>`に変更
+    - BUSYエラーなら`TransactionResult::Busy`を返してリトライ
+    - 非BUSYエラーならconn.detach()してOtherError
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（PRAGMA busy_timeoutは通常BUSYにならない）
+
 ### ドキュメント
 
 - [x] **README更新** (2025-12-22対応済み)

@@ -1407,6 +1407,54 @@ let busy_timeout_ms = original_timeout
 - オペレータが意図的に設定した制約は尊重する
 - リトライパスとフォールバックパスで一貫したロジックを使用
 
+### 34. original_timeout==0で無限ブロックする問題（高リスク指摘）
+
+**指摘内容**:
+- `original_timeout`が0の場合（SQLiteデフォルトまたは設定ミス）
+- `busy_timeout_ms`が0になり、SQLiteが無限にブロックする可能性
+- 2秒の予算保証が破れる
+
+**対応**:
+```rust
+// Before（問題あり）:
+let busy_timeout_ms = original_timeout
+    .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)
+    .min(remaining_after_acquire.as_millis() as u64);
+// original_timeout == 0 なら busy_timeout_ms == 0 → 無限ブロック
+
+// After（修正済み）:
+// original_timeout == 0 は「制限なし」を意味するため、u64::MAXとして扱う
+let effective_original = if original_timeout == 0 {
+    u64::MAX
+} else {
+    original_timeout
+};
+
+let busy_timeout_ms = effective_original
+    .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)
+    .min(remaining_after_acquire.as_millis() as u64);
+// original_timeout == 0 でも MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS と remaining で適切にクランプ
+```
+
+**フォールバックパスも同様に修正**。
+
+**今後の対策**:
+- タイムアウト値0は「制限なし」として扱うのがSQLiteの仕様
+- 0をそのまま使用すると無限ブロックになるため、u64::MAXに変換
+- MIN関数でクランプする際は、0の特殊な意味を考慮
+
+### 35. get_busy_timeout失敗時のBUSYエラー対応（将来検討）
+
+**指摘内容**:
+- `get_busy_timeout()`失敗時に`OtherError`としてリトライを停止
+- 一時的なBUSYエラーの場合、リトライすべきでは
+
+**対応**:
+- PRAGMA busy_timeoutは通常SQLITE_BUSYにならない（データベースファイルにアクセスしない）
+- 現状はログレベルを`warn`に変更し、エラー内容を可視化
+- 将来的に`Result<u64, sqlx::Error>`に変更し、BUSYならリトライ可能にすることを検討
+- `docs/900_tasks.md`に将来タスクとして記載
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

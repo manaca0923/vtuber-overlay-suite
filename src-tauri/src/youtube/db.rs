@@ -259,7 +259,9 @@ async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
     {
         Ok(timeout) => Some(timeout as u64),
         Err(e) => {
-            log::debug!("Failed to get busy_timeout: {:?}", e);
+            // PRAGMA busy_timeoutは通常SQLITE_BUSYにならないが、
+            // 念のためエラー内容をログ出力（将来的にResult<u64, sqlx::Error>に変更を検討）
+            log::warn!("Failed to get busy_timeout: {:?}", e);
             None
         }
     }
@@ -358,11 +360,19 @@ async fn save_chunk_with_transaction_and_timeout(
     };
 
     // busy_timeoutをacquire後の残り時間で計算
+    // original_timeout == 0 は「制限なし」を意味するため、u64::MAXとして扱う
+    // これにより、MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS と remaining で適切にクランプされる
+    let effective_original = if original_timeout == 0 {
+        u64::MAX
+    } else {
+        original_timeout
+    };
+
     // 3つの制約でクランプ:
-    // 1. original_timeout: プール設定を超えない（オペレータ意図を尊重）
+    // 1. effective_original: プール設定を超えない（0は制限なしなのでu64::MAX）
     // 2. MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: 1回の試行での最大待ち時間
     // 3. remaining_after_acquire: 残り予算を超えない
-    let busy_timeout_ms = original_timeout
+    let busy_timeout_ms = effective_original
         .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)
         .min(remaining_after_acquire.as_millis() as u64);
 
@@ -596,11 +606,18 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     }
 
     // busy_timeoutを計算
+    // original_timeout == 0 は「制限なし」を意味するため、u64::MAXとして扱う
+    let effective_original = if original_timeout == 0 {
+        u64::MAX
+    } else {
+        original_timeout
+    };
+
     // 3つの制約でクランプ（リトライパスと同様）:
-    // 1. original_timeout: プール設定を超えない（オペレータ意図を尊重）
+    // 1. effective_original: プール設定を超えない（0は制限なしなのでu64::MAX）
     // 2. 500ms: フォールバックでの最大待ち時間
     // 3. remaining_after_acquire: 残り予算を超えない
-    let busy_timeout_ms = original_timeout
+    let busy_timeout_ms = effective_original
         .min(500)
         .min(remaining_after_acquire.as_millis() as u64);
 

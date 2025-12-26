@@ -508,6 +508,25 @@
       initDefaultComponents();
     }
 
+    // ===== クリーンアップ =====
+    // オーバーレイのアンロード/リロード時にタイマーをクリーンアップ
+    // pagehide: 最新ブラウザで推奨（bfcache対応）
+    // beforeunload: フォールバック用
+    function cleanup() {
+      if (densityManager) {
+        densityManager.destroy();
+      }
+      if (updateBatcher) {
+        updateBatcher.destroy();
+      }
+      if (ws) {
+        ws.close();
+      }
+    }
+
+    window.addEventListener('pagehide', cleanup);
+    window.addEventListener('beforeunload', cleanup);
+
     // ===== 初期化 =====
     applyUrlSettings();
     fetchAndApplySettings();

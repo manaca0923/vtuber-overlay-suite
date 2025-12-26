@@ -110,21 +110,29 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
 /// リトライ可能なエラー:
 /// - SQLITE_BUSY (5): 他の接続がロックを保持している
 /// - SQLITE_LOCKED (6): 同一接続内でのデッドロック検出
-/// - SQLITE_BUSY_RECOVERY, SQLITE_BUSY_SNAPSHOT などの拡張コード
+/// - 拡張エラーコード: SQLITE_BUSY_RECOVERY(261), SQLITE_BUSY_SNAPSHOT(517)等
+///
+/// 拡張エラーコードは (extended_code % 256) で基本コードを取得できる。
+/// 例: 517 % 256 = 5 (SQLITE_BUSY), 261 % 256 = 5 (SQLITE_BUSY)
 ///
 /// 参考: https://www.sqlite.org/rescode.html
 fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
     if let sqlx::Error::Database(db_err) = e {
         // エラーコードで判定（優先）
         if let Some(code) = db_err.code() {
-            let code = code.as_ref();
-            // SQLite拡張エラーコードは (extended_code % 256) で基本コードを取得
+            let code_str = code.as_ref();
+
+            // 数値コードの場合: パースして % 256 で基本コードを取得
             // 5 = SQLITE_BUSY, 6 = SQLITE_LOCKED
-            if code == "5" || code == "6" {
-                return true;
+            if let Ok(code_num) = code_str.parse::<i32>() {
+                let base_code = code_num % 256;
+                if base_code == 5 || base_code == 6 {
+                    return true;
+                }
             }
+
             // 文字列として"SQLITE_BUSY"/"SQLITE_LOCKED"が返される場合も対応
-            let code_upper = code.to_uppercase();
+            let code_upper = code_str.to_uppercase();
             if code_upper.starts_with("SQLITE_BUSY") || code_upper.starts_with("SQLITE_LOCKED") {
                 return true;
             }
@@ -680,6 +688,38 @@ mod tests {
     }
 
     #[test]
+    fn test_is_sqlite_busy_error_extended_codes() {
+        // 拡張エラーコードの検出テスト
+        // 517 = SQLITE_BUSY_SNAPSHOT (517 % 256 = 5)
+        let err = create_mock_db_error(Some("517"), "snapshot busy");
+        assert!(
+            is_sqlite_busy_error(&err),
+            "Should detect code 517 (SQLITE_BUSY_SNAPSHOT) as busy"
+        );
+
+        // 261 = SQLITE_BUSY_RECOVERY (261 % 256 = 5)
+        let err = create_mock_db_error(Some("261"), "recovery busy");
+        assert!(
+            is_sqlite_busy_error(&err),
+            "Should detect code 261 (SQLITE_BUSY_RECOVERY) as busy"
+        );
+
+        // 262 = SQLITE_LOCKED_SHAREDCACHE (262 % 256 = 6)
+        let err = create_mock_db_error(Some("262"), "shared cache locked");
+        assert!(
+            is_sqlite_busy_error(&err),
+            "Should detect code 262 (SQLITE_LOCKED_SHAREDCACHE) as busy"
+        );
+
+        // 非拡張busyコード（257 % 256 = 1 = SQLITE_ERROR）
+        let err = create_mock_db_error(Some("257"), "generic error");
+        assert!(
+            !is_sqlite_busy_error(&err),
+            "Should not detect code 257 (base code 1) as busy"
+        );
+    }
+
+    #[test]
     fn test_is_sqlite_busy_error_non_busy_code() {
         // 非busy/lockedエラーコードはfalse
         let err = create_mock_db_error(Some("1"), "SQL logic error");
@@ -743,13 +783,16 @@ mod tests {
     }
 
     /// 並行書き込みテスト用のファイルベースプールを作成
-    async fn create_file_based_pool(path: &str) -> SqlitePool {
+    ///
+    /// `SqliteConnectOptions::new().filename()`を使用してWindowsパス問題を回避
+    async fn create_file_based_pool(path: &std::path::Path) -> SqlitePool {
         use sqlx::sqlite::SqliteConnectOptions;
-        use std::str::FromStr;
 
+        // SqliteConnectOptions::new().filename()を使用（from_strはWindows/特殊パスで問題あり）
         // busy_timeoutを短く設定（テスト用）
-        let connect_options = SqliteConnectOptions::from_str(&format!("sqlite:{}?mode=rwc", path))
-            .unwrap()
+        let connect_options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
             .busy_timeout(std::time::Duration::from_millis(50)); // 短いタイムアウト
 
         SqlitePoolOptions::new()
@@ -767,10 +810,9 @@ mod tests {
         // テンポラリファイルを使用
         let temp_dir = std::env::temp_dir();
         let db_path = temp_dir.join(format!("concurrent_test_{}.db", std::process::id()));
-        let db_path_str = db_path.to_str().unwrap();
 
         // ファイルベースのプールを作成
-        let pool = create_file_based_pool(db_path_str).await;
+        let pool = create_file_based_pool(&db_path).await;
 
         // テーブル作成
         sqlx::query(

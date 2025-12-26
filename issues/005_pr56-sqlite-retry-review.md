@@ -177,13 +177,125 @@ fn test_is_sqlite_busy_error_message_fallback() {
 - モックエラーを使用して各条件分岐をカバー
 - 新しいエラーコードを追加する場合はテストも追加
 
+### 5. 数値拡張エラーコードの % 256 判定（追加指摘）
+
+**指摘内容**:
+- 数値エラーコード（517, 261等）を文字列比較でしか判定していない
+- 拡張エラーコードは `extended_code % 256` で基本コードを取得する必要がある
+- 例: 517 (SQLITE_BUSY_SNAPSHOT) は 517 % 256 = 5 (SQLITE_BUSY)
+
+**対応**:
+```rust
+fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
+    if let sqlx::Error::Database(db_err) = e {
+        if let Some(code) = db_err.code() {
+            let code_str = code.as_ref();
+
+            // 数値コードの場合: パースして % 256 で基本コードを取得
+            if let Ok(code_num) = code_str.parse::<i32>() {
+                let base_code = code_num % 256;
+                if base_code == 5 || base_code == 6 {
+                    return true;
+                }
+            }
+            // ...文字列判定...
+        }
+        // ...メッセージフォールバック...
+    }
+    false
+}
+```
+
+**テスト追加**:
+```rust
+#[test]
+fn test_is_sqlite_busy_error_extended_codes() {
+    // 517 = SQLITE_BUSY_SNAPSHOT (517 % 256 = 5)
+    let err = create_mock_db_error(Some("517"), "snapshot busy");
+    assert!(is_sqlite_busy_error(&err));
+
+    // 261 = SQLITE_BUSY_RECOVERY (261 % 256 = 5)
+    let err = create_mock_db_error(Some("261"), "recovery busy");
+    assert!(is_sqlite_busy_error(&err));
+
+    // 262 = SQLITE_LOCKED_SHAREDCACHE (262 % 256 = 6)
+    let err = create_mock_db_error(Some("262"), "shared cache locked");
+    assert!(is_sqlite_busy_error(&err));
+}
+```
+
+**今後の対策**:
+- SQLite拡張エラーコードは常に `% 256` で基本コードを取得して判定
+- 主要な拡張コード:
+  - 261 = SQLITE_BUSY_RECOVERY
+  - 517 = SQLITE_BUSY_SNAPSHOT
+  - 262 = SQLITE_LOCKED_SHAREDCACHE
+
+### 6. SqliteConnectOptions::new().filename()の使用（追加指摘）
+
+**指摘内容**:
+- `SqliteConnectOptions::from_str()` はWindows/特殊パスで問題が発生する可能性
+- `sqlite:C:\path\to\file.db` のようなパスが正しくパースされない場合がある
+
+**対応**:
+```rust
+// Before（問題あり）:
+let connect_options = SqliteConnectOptions::from_str(&format!("sqlite:{}?mode=rwc", path))
+    .unwrap()
+    .busy_timeout(Duration::from_millis(50));
+
+// After（修正済み）:
+let connect_options = SqliteConnectOptions::new()
+    .filename(path)
+    .create_if_missing(true)
+    .busy_timeout(Duration::from_millis(50));
+```
+
+**今後の対策**:
+- SQLite接続オプションは `SqliteConnectOptions::new().filename()` を使用
+- `from_str()` はURI形式のパース問題があるため避ける
+- `create_if_missing(true)` で `?mode=rwc` と同等の動作
+
+### 7. combined-v2.htmlでdestroy()呼び出し追加（追加指摘 → 対応済み）
+
+**指摘内容**:
+- `densityManager.destroy()` が呼び出されていない
+- オーバーレイのリロード時にタイマーがリークし、多重dispatchの可能性
+
+**対応**:
+```javascript
+// combined-v2.htmlに追加
+function cleanup() {
+  if (densityManager) {
+    densityManager.destroy();
+  }
+  if (updateBatcher) {
+    updateBatcher.destroy();
+  }
+  if (ws) {
+    ws.close();
+  }
+}
+
+window.addEventListener('pagehide', cleanup);
+window.addEventListener('beforeunload', cleanup);
+```
+
+**UpdateBatcherにも`destroy()`追加**:
+```javascript
+destroy() {
+  this.clear();
+}
+```
+
+**今後の対策**:
+- setInterval/setTimeoutを使用するクラスには必ず `destroy()` メソッドを実装
+- 使用側で `pagehide`/`beforeunload` イベントで `destroy()` を呼び出す
+- `pagehide` が推奨（bfcache対応）、`beforeunload` はフォールバック
+
 ## 未対応（将来対応）
 
-### 1. DensityManager destroy()呼び出しの追加
-- `combined-v2.html`でbeforeunloadイベントをリッスンしてdestroy()を呼び出す
-- `docs/900_tasks.md`に追加済み
-
-### 2. EXCLUSIVEトランザクションを使用したデッドロックテスト
+### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト
 - 一方の接続がEXCLUSIVEロックを保持した状態で、他方からsave_chunk_with_retryを呼び出す
 - リトライロジックが正しく動作し、ロック解放後に成功することを検証
 - 複雑なテストセットアップが必要なため、優先度低

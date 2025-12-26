@@ -11,8 +11,9 @@ use super::types::{ChatMessage, MessageType};
 /// ロック保持時間を短縮するため、大きなバッチを分割して処理
 const BATCH_CHUNK_SIZE: usize = 50;
 
-/// SQLITE_BUSYエラー時の最大リトライ回数
-const MAX_RETRY_ATTEMPTS: u32 = 3;
+/// SQLITE_BUSYエラー時の最大試行回数（初回 + リトライ）
+/// 3回 = 初回試行 + 2回リトライ（100ms, 200ms後）
+const MAX_ATTEMPTS: u32 = 3;
 
 /// 初回リトライ時のバックオフ時間（ミリ秒）
 const INITIAL_BACKOFF_MS: u64 = 100;
@@ -63,8 +64,14 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 
 /// チャンクをexponential backoffでリトライしながら保存
 ///
-/// SQLITE_BUSYエラーが発生した場合、最大MAX_RETRY_ATTEMPTS回リトライする。
-/// リトライ間隔はexponential backoffで増加（100ms → 200ms → 400ms...最大1000ms）。
+/// SQLITE_BUSYエラーが発生した場合、最大MAX_ATTEMPTS回試行する。
+/// 試行間隔はexponential backoffで増加（100ms → 200ms...最大1000ms）。
+///
+/// 例: MAX_ATTEMPTS=3の場合
+///   1回目: 即時試行
+///   2回目: 100ms後にリトライ
+///   3回目: 200ms後にリトライ
+///   → 失敗時はフォールバック（個別INSERT）
 async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
     let mut attempt = 0;
     let mut backoff_ms = INITIAL_BACKOFF_MS;
@@ -78,17 +85,17 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
             }
             TransactionResult::Busy => {
                 attempt += 1;
-                if attempt >= MAX_RETRY_ATTEMPTS {
+                if attempt >= MAX_ATTEMPTS {
                     log::warn!(
-                        "SQLITE_BUSY: Max retries ({}) exceeded, giving up",
-                        MAX_RETRY_ATTEMPTS
+                        "SQLITE_BUSY: Max attempts ({}) exceeded, giving up",
+                        MAX_ATTEMPTS
                     );
                     return false;
                 }
                 log::debug!(
-                    "SQLITE_BUSY: Retry {}/{} after {}ms",
+                    "SQLITE_BUSY: Attempt {}/{} failed, retrying after {}ms",
                     attempt,
-                    MAX_RETRY_ATTEMPTS,
+                    MAX_ATTEMPTS,
                     backoff_ms
                 );
                 sleep(Duration::from_millis(backoff_ms)).await;
@@ -98,18 +105,36 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
     }
 }
 
-/// エラーがSQLITE_BUSYかどうかを判定
+/// エラーがSQLITE_BUSY/SQLITE_LOCKEDかどうかを判定
 ///
-/// SQLITE_BUSYはエラーコード5で、データベースがロックされている場合に発生する。
+/// リトライ可能なエラー:
+/// - SQLITE_BUSY (5): 他の接続がロックを保持している
+/// - SQLITE_LOCKED (6): 同一接続内でのデッドロック検出
+/// - SQLITE_BUSY_RECOVERY, SQLITE_BUSY_SNAPSHOT などの拡張コード
+///
+/// 参考: https://www.sqlite.org/rescode.html
 fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
     if let sqlx::Error::Database(db_err) = e {
-        // SQLiteのエラーコード5はSQLITE_BUSY
+        // エラーコードで判定（優先）
         if let Some(code) = db_err.code() {
-            return code.as_ref() == "5";
+            let code = code.as_ref();
+            // SQLite拡張エラーコードは (extended_code % 256) で基本コードを取得
+            // 5 = SQLITE_BUSY, 6 = SQLITE_LOCKED
+            if code == "5" || code == "6" {
+                return true;
+            }
+            // 文字列として"SQLITE_BUSY"/"SQLITE_LOCKED"が返される場合も対応
+            let code_upper = code.to_uppercase();
+            if code_upper.starts_with("SQLITE_BUSY") || code_upper.starts_with("SQLITE_LOCKED") {
+                return true;
+            }
         }
         // エラーメッセージでも判定（フォールバック）
+        // コードが取得できない場合やコードが未知の場合に対応
         let msg = db_err.message().to_lowercase();
-        return msg.contains("database is locked") || msg.contains("busy");
+        if msg.contains("database is locked") || msg.contains("busy") || msg.contains("locked") {
+            return true;
+        }
     }
     false
 }
@@ -562,6 +587,123 @@ mod tests {
         assert_eq!(TransactionResult::Busy, TransactionResult::Busy);
         assert_eq!(TransactionResult::OtherError, TransactionResult::OtherError);
         assert_ne!(TransactionResult::Success, TransactionResult::Busy);
+    }
+
+    /// MockDatabaseErrorでエラー判定のテスト用構造体
+    #[derive(Debug)]
+    struct MockDatabaseError {
+        code: Option<String>,
+        message: String,
+    }
+
+    impl std::fmt::Display for MockDatabaseError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.message)
+        }
+    }
+
+    impl std::error::Error for MockDatabaseError {}
+
+    impl sqlx::error::DatabaseError for MockDatabaseError {
+        fn message(&self) -> &str {
+            &self.message
+        }
+
+        fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+            self.code.as_ref().map(|c| std::borrow::Cow::Borrowed(c.as_str()))
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::Other
+        }
+    }
+
+    fn create_mock_db_error(code: Option<&str>, message: &str) -> sqlx::Error {
+        sqlx::Error::Database(Box::new(MockDatabaseError {
+            code: code.map(|c| c.to_string()),
+            message: message.to_string(),
+        }))
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_code_5() {
+        // エラーコード5（SQLITE_BUSY）を検出
+        let err = create_mock_db_error(Some("5"), "database is busy");
+        assert!(is_sqlite_busy_error(&err), "Should detect code 5 as busy");
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_code_6() {
+        // エラーコード6（SQLITE_LOCKED）を検出
+        let err = create_mock_db_error(Some("6"), "database table is locked");
+        assert!(is_sqlite_busy_error(&err), "Should detect code 6 as busy");
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_string_code() {
+        // 文字列コード "SQLITE_BUSY" を検出
+        let err = create_mock_db_error(Some("SQLITE_BUSY"), "database is busy");
+        assert!(is_sqlite_busy_error(&err), "Should detect SQLITE_BUSY string as busy");
+
+        // 文字列コード "SQLITE_BUSY_TIMEOUT" を検出
+        let err = create_mock_db_error(Some("SQLITE_BUSY_TIMEOUT"), "timeout");
+        assert!(is_sqlite_busy_error(&err), "Should detect SQLITE_BUSY_TIMEOUT as busy");
+
+        // 文字列コード "SQLITE_LOCKED" を検出
+        let err = create_mock_db_error(Some("SQLITE_LOCKED"), "locked");
+        assert!(is_sqlite_busy_error(&err), "Should detect SQLITE_LOCKED as busy");
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_message_fallback() {
+        // コードがない場合、メッセージで判定
+        let err = create_mock_db_error(None, "database is locked");
+        assert!(is_sqlite_busy_error(&err), "Should detect 'database is locked' message as busy");
+
+        let err = create_mock_db_error(None, "The database is busy");
+        assert!(is_sqlite_busy_error(&err), "Should detect 'busy' message as busy");
+
+        let err = create_mock_db_error(None, "table is locked by another connection");
+        assert!(is_sqlite_busy_error(&err), "Should detect 'locked' message as busy");
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_non_busy_code() {
+        // 非busy/lockedエラーコードはfalse
+        let err = create_mock_db_error(Some("1"), "SQL logic error");
+        assert!(!is_sqlite_busy_error(&err), "Should not detect code 1 as busy");
+
+        let err = create_mock_db_error(Some("19"), "constraint failed");
+        assert!(!is_sqlite_busy_error(&err), "Should not detect code 19 as busy");
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_non_busy_message() {
+        // 非busyエラーメッセージはfalse
+        let err = create_mock_db_error(None, "syntax error");
+        assert!(!is_sqlite_busy_error(&err), "Should not detect syntax error as busy");
+
+        let err = create_mock_db_error(None, "table does not exist");
+        assert!(!is_sqlite_busy_error(&err), "Should not detect table error as busy");
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_non_database_error() {
+        // 非Databaseエラーはfalse
+        let err = sqlx::Error::RowNotFound;
+        assert!(!is_sqlite_busy_error(&err), "Should not detect RowNotFound as busy");
     }
 
     #[tokio::test]

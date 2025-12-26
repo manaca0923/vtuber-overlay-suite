@@ -879,6 +879,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
   - 優先度: 低
 
+- [ ] **DensityManager destroy()呼び出しの追加** (PR#56)
+  - 現在: `destroy()`メソッドは実装済みだが、呼び出し箇所がない
+  - 問題: オーバーレイがアンロードされた場合にタイマーがリークする可能性
+  - 対応: `combined-v2.html`でbeforeunloadイベントをリッスンしてdestroy()を呼び出す
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+  - 優先度: 低（OBSブラウザソースはアンロードされることがほとんどない）
+
 - [x] **keyringブロッキング呼び出し対応** (PR#15, PR#26で対応済み)
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ

@@ -2,8 +2,9 @@
 
 use std::time::{Duration, Instant};
 
+use sqlx::sqlite::SqliteConnection;
 use sqlx::SqlitePool;
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 
 use super::types::{ChatMessage, MessageType};
 
@@ -22,9 +23,14 @@ const INITIAL_BACKOFF_MS: u64 = 100;
 const MAX_BACKOFF_MS: u64 = 1000;
 
 /// リトライ処理の総タイムアウト（ミリ秒）
-/// busy_timeout(5秒)×リトライ回数で長時間ブロックされないよう上限を設ける
+/// 各試行のbusy_timeout合計がこの値を超えないように制御
 /// 2秒あれば通常の一時的なロック競合は解消される
 const RETRY_TOTAL_TIMEOUT_MS: u64 = 2000;
+
+/// 1回の試行あたりの最大busy_timeout（ミリ秒）
+/// 総タイムアウトを試行回数で割った値を基準に、各試行で動的に調整
+/// この値を超えないようにしつつ、残り時間に応じて短縮する
+const MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: u64 = 500;
 
 /// トランザクション処理の結果
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -71,20 +77,24 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 ///
 /// SQLITE_BUSYエラーが発生した場合、以下の制約内でリトライする:
 /// - 最大試行回数: MAX_ATTEMPTS回
-/// - 総タイムアウト: RETRY_TOTAL_TIMEOUT_MS（各試行をtokio::time::timeoutでラップ）
+/// - 総タイムアウト: RETRY_TOTAL_TIMEOUT_MS
 ///
 /// 試行間隔はexponential backoffで増加（100ms → 200ms...最大1000ms）。
 ///
 /// ## タイムアウトの強制
-/// 各試行を`tokio::time::timeout(remaining, ...)`でラップし、プールの`busy_timeout`(5秒)に
-/// 関係なく総タイムアウトを強制する。タイムアウト発生時はBusyとして扱い、
-/// 残り時間がなければフォールバックに移行する。
+/// 各試行前にコネクションを取得し、`PRAGMA busy_timeout`を残り時間に応じて
+/// 動的に設定する。これにより、SQLiteレベルでブロック時間を制限し、
+/// 総タイムアウトを確実に強制する。
+///
+/// `tokio::time::timeout`はブロッキングSQLite操作をキャンセルできないため使用しない。
+/// 代わりに、各試行でbusy_timeoutを明示的に制限することで、
+/// ブロック時間がタイムアウト予算を超えないことを保証する。
 ///
 /// 例: MAX_ATTEMPTS=3、RETRY_TOTAL_TIMEOUT_MS=2000msの場合
-///   1回目: 即時試行（残り2000ms以内でタイムアウト）
-///   2回目: 100ms後にリトライ（残り時間以内でタイムアウト）
-///   3回目: 200ms後にリトライ（残り時間以内でタイムアウト）
-///   → タイムアウトまたは試行回数超過でフォールバック（個別INSERT）
+///   1回目: busy_timeout=500ms（残り2000ms、最大500ms）
+///   2回目: 100ms後、busy_timeout=500ms（残り1400ms程度、最大500ms）
+///   3回目: 200ms後、busy_timeout=残り時間以内（最大500ms）
+///   → 試行回数超過または残り時間なしでフォールバック（個別INSERT）
 async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
     let start_time = Instant::now();
     let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
@@ -104,25 +114,39 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
         }
         let remaining = total_timeout - elapsed;
 
-        // 各試行をtokio::time::timeoutでラップしてbusy_timeoutによるブロックを制限
-        let result = timeout(remaining, save_chunk_with_transaction(pool, messages)).await;
+        // 残り時間に応じてbusy_timeoutを計算（最大500ms、残り時間を超えない）
+        let busy_timeout_ms = remaining
+            .as_millis()
+            .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS as u128) as u64;
+
+        // busy_timeoutが極端に短い場合はスキップ（50ms未満は無意味）
+        if busy_timeout_ms < 50 {
+            log::warn!(
+                "SQLITE_BUSY: Remaining time ({}ms) too short for retry, giving up",
+                remaining.as_millis()
+            );
+            return false;
+        }
+
+        let result =
+            save_chunk_with_transaction_and_timeout(pool, messages, busy_timeout_ms).await;
 
         match result {
-            Ok(TransactionResult::Success) => return true,
-            Ok(TransactionResult::OtherError) => {
+            TransactionResult::Success => return true,
+            TransactionResult::OtherError => {
                 // 非SQLITE_BUSYエラー（テーブル不存在など）はリトライしない
                 return false;
             }
-            Ok(TransactionResult::Busy) | Err(_) => {
-                // Busyまたはタイムアウト → リトライ可能
+            TransactionResult::Busy => {
                 attempt += 1;
 
-                if result.is_err() {
-                    log::debug!(
-                        "SQLITE_BUSY: Attempt {} timed out after {}ms",
-                        attempt,
-                        remaining.as_millis()
+                // 試行回数チェック
+                if attempt >= MAX_ATTEMPTS {
+                    log::warn!(
+                        "SQLITE_BUSY: Max attempts ({}) exceeded, giving up",
+                        MAX_ATTEMPTS
                     );
+                    return false;
                 }
 
                 // 総タイムアウトチェック（再計算）
@@ -136,19 +160,11 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
                     return false;
                 }
 
-                // 試行回数チェック
-                if attempt >= MAX_ATTEMPTS {
-                    log::warn!(
-                        "SQLITE_BUSY: Max attempts ({}) exceeded, giving up",
-                        MAX_ATTEMPTS
-                    );
-                    return false;
-                }
-
                 log::debug!(
-                    "SQLITE_BUSY: Attempt {}/{} failed, retrying after {}ms (elapsed: {}ms)",
+                    "SQLITE_BUSY: Attempt {}/{} failed (busy_timeout={}ms), retrying after {}ms (elapsed: {}ms)",
                     attempt,
                     MAX_ATTEMPTS,
+                    busy_timeout_ms,
                     backoff_ms,
                     elapsed.as_millis()
                 );
@@ -157,6 +173,49 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
             }
         }
     }
+}
+
+/// コネクションにPRAGMA busy_timeoutを設定
+///
+/// 各試行前にbusy_timeoutを動的に設定することで、
+/// SQLiteレベルでブロック時間を制限する。
+async fn set_busy_timeout(conn: &mut SqliteConnection, timeout_ms: u64) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!("PRAGMA busy_timeout = {}", timeout_ms))
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// busy_timeoutを指定してトランザクション処理を実行
+///
+/// コネクションを取得し、busy_timeoutを設定してからトランザクションを開始する。
+/// これにより、各試行のブロック時間を確実に制限できる。
+async fn save_chunk_with_transaction_and_timeout(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    busy_timeout_ms: u64,
+) -> TransactionResult {
+    // コネクションを取得
+    let mut conn = match pool.acquire().await {
+        Ok(conn) => conn,
+        Err(e) => {
+            if is_sqlite_busy_error(&e) {
+                log::debug!("SQLITE_BUSY on connection acquire: {:?}", e);
+                return TransactionResult::Busy;
+            }
+            log::warn!("Failed to acquire connection: {:?}", e);
+            return TransactionResult::OtherError;
+        }
+    };
+
+    // busy_timeoutを設定
+    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+        log::warn!("Failed to set busy_timeout: {:?}", e);
+        // busy_timeout設定失敗は致命的ではないので続行
+    }
+
+    // トランザクションを実行
+    save_chunk_with_transaction_on_conn(&mut conn, messages).await
 }
 
 /// エラーがSQLITE_BUSY/SQLITE_LOCKEDかどうかを判定
@@ -210,7 +269,7 @@ fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
     false
 }
 
-/// チャンクをトランザクション内で保存
+/// コネクション上でトランザクション処理を実行
 ///
 /// INSERT OR IGNOREを使用しているため、UNIQUE/CHECK等の制約エラーは発生しない。
 /// エラーが発生した場合は以下の致命的な問題のみ:
@@ -221,12 +280,17 @@ fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
 ///
 /// これらの致命的エラー発生時は最初のエラーで即座にロールバックする。
 /// SQLITE_BUSYの場合はリトライ可能として`TransactionResult::Busy`を返す。
-async fn save_chunk_with_transaction(
-    pool: &SqlitePool,
+///
+/// 呼び出し元でbusy_timeoutを設定済みのコネクションを渡すことで、
+/// ブロック時間を制限できる。
+async fn save_chunk_with_transaction_on_conn(
+    conn: &mut SqliteConnection,
     messages: &[ChatMessage],
 ) -> TransactionResult {
+    use sqlx::Connection;
+
     // トランザクションを開始
-    let mut tx = match pool.begin().await {
+    let mut tx = match conn.begin().await {
         Ok(tx) => tx,
         Err(e) => {
             if is_sqlite_busy_error(&e) {

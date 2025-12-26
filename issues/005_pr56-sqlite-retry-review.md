@@ -506,6 +506,92 @@ fn test_is_sqlite_busy_error_code_overrides_message() {
 - フレーズはSQLite固有のものに絞り込む（"database is locked"、"database is busy"）
 - 単に"busy"や"locked"を含むだけでは検出しない
 
+### 13. tokio::time::timeoutはブロッキングSQLiteをキャンセルしない（高リスク指摘）
+
+**指摘内容**:
+- `tokio::time::timeout`は基盤となるブロッキングSQLite操作をキャンセルしない
+- タイムアウトした後もトランザクションが実行中/ロック保持を続ける可能性
+- リトライが並行して動作し、複数の書き込みが重複する危険性
+- プール枯渇や「2秒総タイムアウト」が実際には強制されない
+
+**対応**:
+```rust
+/// 1回の試行あたりの最大busy_timeout（ミリ秒）
+const MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: u64 = 500;
+
+/// コネクションにPRAGMA busy_timeoutを設定
+async fn set_busy_timeout(conn: &mut SqliteConnection, timeout_ms: u64) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!("PRAGMA busy_timeout = {}", timeout_ms))
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
+    let start_time = Instant::now();
+    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+
+    loop {
+        let elapsed = start_time.elapsed();
+        if elapsed >= total_timeout {
+            return false;
+        }
+        let remaining = total_timeout - elapsed;
+
+        // 残り時間に応じてbusy_timeoutを計算（最大500ms、残り時間を超えない）
+        let busy_timeout_ms = remaining
+            .as_millis()
+            .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS as u128) as u64;
+
+        // コネクション取得 → busy_timeout設定 → トランザクション実行
+        let result = save_chunk_with_transaction_and_timeout(pool, messages, busy_timeout_ms).await;
+        // ...
+    }
+}
+```
+
+**今後の対策**:
+- `tokio::time::timeout`はブロッキング操作をキャンセルしないことを認識
+- SQLiteのブロック時間を制限するには`PRAGMA busy_timeout`を使用
+- 各試行前にコネクションを取得し、busy_timeoutを残り時間に応じて動的設定
+- プールの`busy_timeout`設定とは別に、リトライパスでは短いbusy_timeoutを使用
+
+### 14. bfcache復元時の二重WebSocket接続問題（高リスク指摘）
+
+**指摘内容**:
+- `pageshow`での再接続前に、`ws.onclose`がスケジュールした再接続タイマーをクリアしていない
+- bfcacheから復元時に複数のWebSocketが開かれる可能性
+- メッセージの重複処理が発生する危険性
+
+**対応**:
+```javascript
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    console.log('Page restored from bfcache, reconnecting...');
+    isShuttingDown = false;
+    reconnectDelay = 1000;
+
+    // ペンディング中の再接続タイマーをクリア（二重接続防止）
+    // ws.oncloseがタイマーをスケジュール済みの場合があるため、
+    // connectWebSocket()を呼ぶ前にクリアする
+    if (reconnectTimerId) {
+      clearTimeout(reconnectTimerId);
+      reconnectTimerId = null;
+    }
+
+    // 二重接続を防止: CONNECTING/OPEN状態では再接続しない
+    if (!ws || (ws.readyState !== WebSocket.CONNECTING && ws.readyState !== WebSocket.OPEN)) {
+      connectWebSocket();
+    }
+  }
+});
+```
+
+**今後の対策**:
+- bfcache復元時には必ずペンディング中の再接続タイマーをクリア
+- `connectWebSocket()`前に`ws.readyState`がCONNECTINGまたはOPENでないことを確認
+- WebSocket接続状態の管理には`reconnectTimerId`と`isShuttingDown`の両方を使用
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

@@ -561,9 +561,19 @@
         isShuttingDown = false;
         reconnectDelay = 1000;
 
+        // ペンディング中の再接続タイマーをクリア（二重接続防止）
+        // ws.oncloseがタイマーをスケジュール済みの場合があるため、
+        // connectWebSocket()を呼ぶ前にクリアする
+        if (reconnectTimerId) {
+          clearTimeout(reconnectTimerId);
+          reconnectTimerId = null;
+        }
+
         // マネージャーを再作成（destroyされている可能性があるため）
         // 注: OBSブラウザソースではbfcacheは使われないため、通常このコードは実行されない
-        if (!ws || ws.readyState === WebSocket.CLOSED) {
+
+        // 二重接続を防止: CONNECTING/OPEN状態では再接続しない
+        if (!ws || (ws.readyState !== WebSocket.CONNECTING && ws.readyState !== WebSocket.OPEN)) {
           connectWebSocket();
         }
       }

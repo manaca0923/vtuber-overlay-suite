@@ -987,6 +987,87 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
 - `remaining`パラメータで予算を明示的に渡す
 - 予算超過時は処理を中断し、残りをスキップ
 
+### 25. Duration::saturating_subでアンダーフロー防止（高リスク指摘）
+
+**指摘内容**:
+- `remaining - start_time.elapsed()`でsaturationなし
+- スケジューラ遅延等でelapsedがremainingを超えるとパニック
+- フォールバックパスがクラッシュする可能性
+
+**対応**:
+```rust
+// saturating_subでアンダーフローを防止
+let remaining_after_acquire = remaining.saturating_sub(start_time.elapsed());
+if remaining_after_acquire.as_millis() < 50 {
+    log::debug!("...");
+    return;
+}
+let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64).min(500);
+```
+
+**今後の対策**:
+- Duration間の減算は必ず`saturating_sub()`を使用
+- アンダーフロー後のゼロチェックを必ず行う
+- 時間計算ではスケジューラ遅延を考慮
+
+### 26. フォールバックパスのbusy_timeout復元（高リスク指摘）
+
+**指摘内容**:
+- フォールバックパスで短い`busy_timeout`を設定後、復元していない
+- 接続がプールに戻され、他の呼び出し元に影響
+- SQLITE_BUSY発生率が増加、ドロップされる書き込みが増加
+
+**対応**:
+```rust
+// 元のbusy_timeoutを取得
+let original_timeout = get_busy_timeout(&mut conn).await;
+
+// original_timeoutがSomeの場合のみbusy_timeoutを変更
+let should_restore = if let Some(_) = original_timeout {
+    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+        false // 設定失敗時は復元不要
+    } else {
+        true // 設定成功時は後で復元
+    }
+} else {
+    false // 元の値が不明なので変更しない
+};
+
+// ... INSERT処理 ...
+
+// busy_timeoutを元の値に復元（変更した場合のみ）
+if should_restore {
+    if let Some(timeout) = original_timeout {
+        let _ = set_busy_timeout(&mut conn, timeout).await;
+    }
+}
+```
+
+**今後の対策**:
+- フォールバックパスでもリトライパスと同じ復元ロジックを適用
+- `original_timeout`がNoneの場合は変更しない（復元不能なため）
+- `should_restore`フラグで変更の有無を追跡
+
+### 27. 総予算によるデータスキップの設計判断（高リスク指摘 → 将来対応）
+
+**指摘内容**:
+- 2秒の総予算でSQLITE_BUSYなしでもメッセージをスキップする可能性
+- 従来の「全て書き込む」動作からの行動回帰
+- データ損失リスク
+
+**対応**:
+- `docs/900_tasks.md`に将来タスクとして追記
+- 現状はリアルタイム性を優先し、2秒以内の完了を保証
+- 対応案:
+  - 予算をチャンクごとにスコープ
+  - スキップ数をログ/メトリクスで報告
+  - 上流でリキュー可能に
+
+**今後の対策**:
+- タイムアウト導入時はデータ損失リスクを検討
+- スキップ発生時のログ/メトリクスを確保
+- 本番運用後にフィードバックを収集して判断
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

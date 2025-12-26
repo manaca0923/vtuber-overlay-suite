@@ -461,6 +461,10 @@ async fn save_chunk_with_transaction_on_conn(
 /// 単一接続を取得して再利用し、行ごとのpool checkout回避でパフォーマンス向上。
 /// 残り予算を受け取り、予算内でのみ処理を実行する。
 /// pool.acquire()も短いbusy_timeoutも残り予算で制限される。
+///
+/// ## busy_timeout復元
+/// リトライパスと同様に、元のbusy_timeoutを取得・復元する。
+/// 取得失敗時はbusy_timeoutを変更せずにデフォルト値で続行する。
 async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], remaining: Duration) {
     let mut success_count = 0;
     let mut error_count = 0;
@@ -495,12 +499,36 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         }
     };
 
+    // 元のbusy_timeoutを取得（復元用）
+    // 取得失敗時はbusy_timeoutを変更せず、デフォルト値で続行（接続劣化を回避）
+    let original_timeout = get_busy_timeout(&mut conn).await;
+
     // busy_timeoutを残り予算で制限（最大500ms）
-    let busy_timeout_ms = ((remaining - start_time.elapsed()).as_millis() as u64).min(500);
-    if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
-        log::warn!("Failed to set busy_timeout for fallback: {:?}", e);
-        // 設定失敗時もデフォルトのbusy_timeoutで続行
+    // saturating_subでアンダーフローを防止（スケジューラ遅延等でelapsedがremainingを超える可能性）
+    let remaining_after_acquire = remaining.saturating_sub(start_time.elapsed());
+    if remaining_after_acquire.as_millis() < 50 {
+        log::debug!(
+            "Skipping individual insert fallback: remaining time after acquire ({}ms) too short",
+            remaining_after_acquire.as_millis()
+        );
+        return;
     }
+
+    let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64).min(500);
+
+    // original_timeoutがSomeの場合のみbusy_timeoutを変更
+    // Noneの場合は復元できないため、変更せずにデフォルト値で続行
+    let should_restore = if let Some(_) = original_timeout {
+        if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+            log::debug!("Failed to set busy_timeout for fallback: {:?}", e);
+            false // 設定失敗時は復元不要
+        } else {
+            true // 設定成功時は後で復元
+        }
+    } else {
+        log::debug!("Skipping busy_timeout change for fallback: original value unknown");
+        false // 元の値が不明なので変更しない
+    };
 
     for msg in messages {
         // 予算チェック
@@ -518,6 +546,19 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
             Err(e) => {
                 error_count += 1;
                 log::debug!("Failed to insert comment individually: {:?}", e);
+            }
+        }
+    }
+
+    // busy_timeoutを元の値に復元（変更した場合のみ）
+    if should_restore {
+        if let Some(timeout) = original_timeout {
+            if let Err(e) = set_busy_timeout(&mut conn, timeout).await {
+                log::warn!(
+                    "Failed to restore busy_timeout in fallback to original ({}ms): {:?}",
+                    timeout,
+                    e
+                );
             }
         }
     }

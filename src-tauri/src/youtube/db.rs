@@ -150,7 +150,7 @@ async fn save_chunk_with_retry(
         if elapsed >= total_timeout {
             log::warn!(
                 "SQLITE_BUSY: Total timeout ({}ms) exceeded before attempt {}, giving up",
-                RETRY_TOTAL_TIMEOUT_MS,
+                total_timeout.as_millis(),
                 attempt + 1
             );
             return false;
@@ -196,7 +196,7 @@ async fn save_chunk_with_retry(
                 if elapsed >= total_timeout {
                     log::warn!(
                         "SQLITE_BUSY: Total timeout ({}ms) exceeded after {} attempts, giving up",
-                        RETRY_TOTAL_TIMEOUT_MS,
+                        total_timeout.as_millis(),
                         attempt
                     );
                     return false;

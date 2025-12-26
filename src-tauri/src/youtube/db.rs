@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use sqlx::SqlitePool;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 use super::types::{ChatMessage, MessageType};
 
@@ -71,34 +71,63 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 ///
 /// SQLITE_BUSYエラーが発生した場合、以下の制約内でリトライする:
 /// - 最大試行回数: MAX_ATTEMPTS回
-/// - 総タイムアウト: RETRY_TOTAL_TIMEOUT_MS（busy_timeout×リトライで長時間ブロックを防止）
+/// - 総タイムアウト: RETRY_TOTAL_TIMEOUT_MS（各試行をtokio::time::timeoutでラップ）
 ///
 /// 試行間隔はexponential backoffで増加（100ms → 200ms...最大1000ms）。
 ///
+/// ## タイムアウトの強制
+/// 各試行を`tokio::time::timeout(remaining, ...)`でラップし、プールの`busy_timeout`(5秒)に
+/// 関係なく総タイムアウトを強制する。タイムアウト発生時はBusyとして扱い、
+/// 残り時間がなければフォールバックに移行する。
+///
 /// 例: MAX_ATTEMPTS=3、RETRY_TOTAL_TIMEOUT_MS=2000msの場合
-///   1回目: 即時試行
-///   2回目: 100ms後にリトライ（総経過時間が2秒以内なら）
-///   3回目: 200ms後にリトライ（総経過時間が2秒以内なら）
+///   1回目: 即時試行（残り2000ms以内でタイムアウト）
+///   2回目: 100ms後にリトライ（残り時間以内でタイムアウト）
+///   3回目: 200ms後にリトライ（残り時間以内でタイムアウト）
 ///   → タイムアウトまたは試行回数超過でフォールバック（個別INSERT）
 async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
     let start_time = Instant::now();
-    let timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
     let mut attempt = 0;
     let mut backoff_ms = INITIAL_BACKOFF_MS;
 
     loop {
-        match save_chunk_with_transaction(pool, messages).await {
-            TransactionResult::Success => return true,
-            TransactionResult::OtherError => {
+        // 残り時間を計算
+        let elapsed = start_time.elapsed();
+        if elapsed >= total_timeout {
+            log::warn!(
+                "SQLITE_BUSY: Total timeout ({}ms) exceeded before attempt {}, giving up",
+                RETRY_TOTAL_TIMEOUT_MS,
+                attempt + 1
+            );
+            return false;
+        }
+        let remaining = total_timeout - elapsed;
+
+        // 各試行をtokio::time::timeoutでラップしてbusy_timeoutによるブロックを制限
+        let result = timeout(remaining, save_chunk_with_transaction(pool, messages)).await;
+
+        match result {
+            Ok(TransactionResult::Success) => return true,
+            Ok(TransactionResult::OtherError) => {
                 // 非SQLITE_BUSYエラー（テーブル不存在など）はリトライしない
                 return false;
             }
-            TransactionResult::Busy => {
+            Ok(TransactionResult::Busy) | Err(_) => {
+                // Busyまたはタイムアウト → リトライ可能
                 attempt += 1;
 
-                // 総タイムアウトチェック
+                if result.is_err() {
+                    log::debug!(
+                        "SQLITE_BUSY: Attempt {} timed out after {}ms",
+                        attempt,
+                        remaining.as_millis()
+                    );
+                }
+
+                // 総タイムアウトチェック（再計算）
                 let elapsed = start_time.elapsed();
-                if elapsed >= timeout {
+                if elapsed >= total_timeout {
                     log::warn!(
                         "SQLITE_BUSY: Total timeout ({}ms) exceeded after {} attempts, giving up",
                         RETRY_TOTAL_TIMEOUT_MS,
@@ -140,6 +169,10 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
 /// 拡張エラーコードは (extended_code % 256) で基本コードを取得できる。
 /// 例: 517 % 256 = 5 (SQLITE_BUSY), 261 % 256 = 5 (SQLITE_BUSY)
 ///
+/// ## メッセージフォールバック
+/// エラーコードがNoneの場合のみ、SQLite固有のフレーズでメッセージ判定を行う。
+/// エラーコードがある場合はメッセージ判定をスキップし、非一時的エラーの誤検出を防ぐ。
+///
 /// 参考: https://www.sqlite.org/rescode.html
 fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
     if let sqlx::Error::Database(db_err) = e {
@@ -161,11 +194,16 @@ fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
             if code_upper.starts_with("SQLITE_BUSY") || code_upper.starts_with("SQLITE_LOCKED") {
                 return true;
             }
+
+            // エラーコードがあるが上記に該当しない場合 → 非一時的エラー
+            // メッセージフォールバックをスキップして誤検出を防ぐ
+            return false;
         }
-        // エラーメッセージでも判定（フォールバック）
-        // コードが取得できない場合やコードが未知の場合に対応
+
+        // エラーコードがNoneの場合のみメッセージで判定（フォールバック）
+        // SQLite固有のフレーズに絞り込み、非一時的エラーの誤検出を防ぐ
         let msg = db_err.message().to_lowercase();
-        if msg.contains("database is locked") || msg.contains("busy") || msg.contains("locked") {
+        if msg.contains("database is locked") || msg.contains("database is busy") {
             return true;
         }
     }
@@ -701,15 +739,52 @@ mod tests {
 
     #[test]
     fn test_is_sqlite_busy_error_message_fallback() {
-        // コードがない場合、メッセージで判定
+        // コードがNoneの場合のみメッセージで判定
+        // SQLite固有のフレーズに絞り込み
+
+        // "database is locked" → busy
         let err = create_mock_db_error(None, "database is locked");
-        assert!(is_sqlite_busy_error(&err), "Should detect 'database is locked' message as busy");
+        assert!(
+            is_sqlite_busy_error(&err),
+            "Should detect 'database is locked' message as busy"
+        );
 
-        let err = create_mock_db_error(None, "The database is busy");
-        assert!(is_sqlite_busy_error(&err), "Should detect 'busy' message as busy");
+        // "database is busy" → busy
+        let err = create_mock_db_error(None, "database is busy");
+        assert!(
+            is_sqlite_busy_error(&err),
+            "Should detect 'database is busy' message as busy"
+        );
 
+        // 単に"busy"や"locked"を含むだけでは検出しない（誤検出防止）
         let err = create_mock_db_error(None, "table is locked by another connection");
-        assert!(is_sqlite_busy_error(&err), "Should detect 'locked' message as busy");
+        assert!(
+            !is_sqlite_busy_error(&err),
+            "Should not detect generic 'locked' message as busy"
+        );
+
+        let err = create_mock_db_error(None, "The system is busy");
+        assert!(
+            !is_sqlite_busy_error(&err),
+            "Should not detect generic 'busy' message as busy"
+        );
+    }
+
+    #[test]
+    fn test_is_sqlite_busy_error_code_overrides_message() {
+        // エラーコードがある場合、メッセージフォールバックはスキップ
+        // 非busy/lockedコードがあれば、メッセージに"locked"があってもfalse
+        let err = create_mock_db_error(Some("1"), "database is locked");
+        assert!(
+            !is_sqlite_busy_error(&err),
+            "Should not retry non-busy error even if message contains 'locked'"
+        );
+
+        let err = create_mock_db_error(Some("19"), "database is busy");
+        assert!(
+            !is_sqlite_busy_error(&err),
+            "Should not retry constraint error even if message contains 'busy'"
+        );
     }
 
     #[test]

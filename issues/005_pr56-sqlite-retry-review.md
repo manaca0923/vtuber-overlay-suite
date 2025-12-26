@@ -385,6 +385,127 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
 - `busy_timeout`とリトライの組み合わせで最悪ケースを計算
 - チャットのようなリアルタイム処理では短いタイムアウト（2秒程度）を使用
 
+### 10. tokio::time::timeoutで各試行をラップ（追加指摘）
+
+**指摘内容**:
+- `RETRY_TOTAL_TIMEOUT_MS`が実際には強制されていない
+- 各`save_chunk_with_transaction`がプールの`busy_timeout`(5秒)でブロックする
+- 最悪ケース: 5秒×3回 = 15秒のブロック
+
+**対応**:
+```rust
+use tokio::time::timeout;
+
+async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
+    let start_time = Instant::now();
+    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+
+    loop {
+        // 残り時間を計算
+        let elapsed = start_time.elapsed();
+        if elapsed >= total_timeout {
+            return false;
+        }
+        let remaining = total_timeout - elapsed;
+
+        // 各試行をtokio::time::timeoutでラップ
+        let result = timeout(remaining, save_chunk_with_transaction(pool, messages)).await;
+
+        match result {
+            Ok(TransactionResult::Success) => return true,
+            Ok(TransactionResult::OtherError) => return false,
+            Ok(TransactionResult::Busy) | Err(_) => {
+                // Busyまたはタイムアウト → リトライ可能
+                // ...
+            }
+        }
+    }
+}
+```
+
+**今後の対策**:
+- リトライ処理には`tokio::time::timeout(remaining, ...)`で各試行をラップ
+- タイムアウトはBusyと同様に扱い、リトライ可能とする
+- 残り時間を毎回計算して、総タイムアウトを超えないようにする
+
+### 11. bfcache対応（pageshow）（追加指摘）
+
+**指摘内容**:
+- `pagehide`でcleanupするとbfcacheから復元時に切断されたまま
+- 通常ブラウザで戻る/進むした場合にオーバーレイが動作しない
+
+**対応**:
+```javascript
+window.addEventListener('pagehide', (event) => {
+  // bfcacheに保存される場合はcleanupを呼ばない
+  if (!event.persisted) {
+    cleanup();
+  }
+});
+
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    // bfcacheから復元された場合
+    console.log('Page restored from bfcache, reconnecting...');
+    isShuttingDown = false;
+    reconnectDelay = 1000;
+    if (!ws || ws.readyState === WebSocket.CLOSED) {
+      connectWebSocket();
+    }
+  }
+});
+```
+
+**今後の対策**:
+- `pagehide`では`event.persisted`をチェックしてbfcache保存時はcleanupしない
+- `pageshow`で`event.persisted`がtrueならbfcache復元なので再接続
+- OBSブラウザソースではbfcacheは使われないが、通常ブラウザでのテストに対応
+
+### 12. メッセージフォールバックの絞り込み（追加指摘）
+
+**指摘内容**:
+- `is_sqlite_busy_error`のメッセージフォールバックが広すぎる
+- "locked"や"busy"を含む非一時的エラーを誤検出する可能性
+- 例: "FOREIGN KEY constraint failed: parent table is locked"
+
+**対応**:
+```rust
+fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
+    if let sqlx::Error::Database(db_err) = e {
+        if let Some(code) = db_err.code() {
+            // ... コード判定 ...
+
+            // エラーコードがあるが上記に該当しない場合 → 非一時的エラー
+            // メッセージフォールバックをスキップして誤検出を防ぐ
+            return false;
+        }
+
+        // エラーコードがNoneの場合のみメッセージで判定
+        // SQLite固有のフレーズに絞り込み
+        let msg = db_err.message().to_lowercase();
+        if msg.contains("database is locked") || msg.contains("database is busy") {
+            return true;
+        }
+    }
+    false
+}
+```
+
+**テスト追加**:
+```rust
+#[test]
+fn test_is_sqlite_busy_error_code_overrides_message() {
+    // 非busy/lockedコードがあれば、メッセージに"locked"があってもfalse
+    let err = create_mock_db_error(Some("1"), "database is locked");
+    assert!(!is_sqlite_busy_error(&err));
+}
+```
+
+**今後の対策**:
+- メッセージフォールバックは`code()`がNoneの場合のみ使用
+- フレーズはSQLite固有のものに絞り込む（"database is locked"、"database is busy"）
+- 単に"busy"や"locked"を含むだけでは検出しない
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト
@@ -395,6 +516,10 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
 ### 2. cleanup()が再接続をスケジュールしないことのテスト
 - JSテストハーネスを追加した場合に検証
 - 現状は手動QAで対応
+
+### 3. pagehide/pageshowのbfcache動作テスト
+- 通常ブラウザで戻る/進むした場合の動作を手動QAで確認
+- OBSブラウザソースではbfcacheは使われない
 
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56

@@ -544,8 +544,30 @@
       }
     }
 
-    window.addEventListener('pagehide', cleanup);
+    window.addEventListener('pagehide', (event) => {
+      // bfcacheに保存される場合はcleanupを呼ばない（後でpageshowで復元するため）
+      // ただしOBSブラウザソースではbfcacheは使われないため、常にcleanup
+      if (!event.persisted) {
+        cleanup();
+      }
+    });
     window.addEventListener('beforeunload', cleanup);
+
+    // bfcache復元時の再接続
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        // bfcacheから復元された場合、isShuttingDownをリセットして再接続
+        console.log('Page restored from bfcache, reconnecting...');
+        isShuttingDown = false;
+        reconnectDelay = 1000;
+
+        // マネージャーを再作成（destroyされている可能性があるため）
+        // 注: OBSブラウザソースではbfcacheは使われないため、通常このコードは実行されない
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          connectWebSocket();
+        }
+      }
+    });
 
     // ===== 初期化 =====
     applyUrlSettings();

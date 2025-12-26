@@ -1639,6 +1639,99 @@ if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
 - 非BUSYエラー（IO障害等）は接続が汚染されている可能性があるため`conn.detach()`
 - 「一時的エラー」と「永続的エラー」を区別し、適切に対応する
 
+### 39. 内部フィールドへの直接参照を避けてpublicメソッドを使用（コード品質）
+
+**指摘内容**:
+- `combined-v2.html`で`densityManager._cleanupTimerId === null`と内部フィールドを直接参照していた
+- 内部実装への結合が強くなり、将来の変更に弱くなる
+
+**対応**:
+```javascript
+// Before（問題あり）:
+if (!densityManager || densityManager._cleanupTimerId === null) {
+  densityManager = new DensityManager();
+}
+
+// After（修正済み）:
+// density-manager.jsにpublicメソッドを追加
+isDestroyed() {
+  return this._cleanupTimerId === null;
+}
+
+// combined-v2.html
+if (!densityManager || densityManager.isDestroyed()) {
+  densityManager = new DensityManager();
+}
+```
+
+**今後の対策**:
+- `_`プレフィックスのフィールドは内部実装として扱い、外部から直接参照しない
+- 状態チェックが必要な場合はpublicメソッド（`isDestroyed()`等）を追加
+- 内部実装の変更が外部に影響しないようカプセル化を維持
+
+### 40. テストでの接続復元検証は単一接続プールを使用（テスト品質）
+
+**指摘内容**:
+- `test_fallback_restores_busy_timeout`で2接続プールを使用していた
+- 2接続プールでは、検証時に取得した接続が`save_chunk_individually`で使用した接続と同一かどうかが不明確
+- 復元検証が確実ではない
+
+**対応**:
+```rust
+// 単一接続バリアントを追加: test_fallback_restores_busy_timeout_single_connection
+let pool = SqlitePoolOptions::new()
+    .max_connections(1) // 単一接続: 同じコネクションが再利用される
+    .acquire_timeout(std::time::Duration::from_secs(5))
+    .connect_with(connect_options)
+    .await
+    .unwrap();
+
+// ... save_chunk_individually呼び出し ...
+
+// 同じ接続を取得してbusy_timeoutを確認（単一接続なので必ず同一接続）
+let mut conn = pool.acquire().await.unwrap();
+let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+
+assert_eq!(timeout.0, 2500, "..."); // 確実に復元を検証
+```
+
+**今後の対策**:
+- 接続状態の復元テストは単一接続プールを使用して確実に検証
+- 複数接続プールでの汎用的なテストも併用し、実運用シナリオもカバー
+- 「同一接続であること」が重要な場合は、テスト設計段階で意識する
+
+### 41. original_timeout==0のクランプロジックをテスト（テスト品質）
+
+**指摘内容**:
+- `original_timeout == 0`（SQLiteデフォルト: 制限なし）の場合のクランプロジックがテストされていなかった
+- 0がu64::MAXとして扱われ、適切にクランプされることを検証する必要がある
+
+**対応**:
+```rust
+// test_original_timeout_zero_is_clamped を追加
+// busy_timeoutを0に設定（SQLiteデフォルト: 制限なし）
+sqlx::query("PRAGMA busy_timeout = 0")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+// 500msの予算で呼び出し
+// original_timeout=0がu64::MAXとして扱われ、MIN(u64::MAX, 500, remaining)=500ms以内で完了すること
+let budget = Duration::from_millis(500);
+let result = save_chunk_with_retry(&pool, &messages, budget).await;
+
+// 600ms以内に完了すること（無限ブロックしていない）
+assert!(elapsed < Duration::from_millis(600), "...");
+```
+
+**今後の対策**:
+- タイムアウト値の特殊ケース（0、最大値、負数など）は明示的にテスト
+- SQLiteでは0が「制限なし」を意味するため、この特殊な意味をドキュメントとテストで明確化
+- MIN/MAX関数でクランプする際は、エッジケースを考慮
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

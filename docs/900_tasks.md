@@ -977,6 +977,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（PRAGMA busy_timeoutは通常BUSYにならない）
 
+- [ ] **beforeunloadイベントのbfcache影響検討** (PR#56)
+  - 現在: `beforeunload`を登録しているとブラウザがbfcacheを無効にする可能性がある
+  - 問題: 通常ブラウザでの戻る/進む時にキャッシュから復元されない
+  - 対応案:
+    - OBSブラウザソース専用チェックを追加し、OBS以外では`beforeunload`を登録しない
+    - または`pagehide`のみを使用し、`event.persisted`チェックでcleanupを制御
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+  - 優先度: 低（OBSブラウザソースではbfcacheは使われない）
+
 ### ドキュメント
 
 - [x] **README更新** (2025-12-22対応済み)

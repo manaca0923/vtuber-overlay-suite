@@ -1695,4 +1695,129 @@ mod tests {
             .unwrap();
         assert_eq!(count.0, 0, "No messages should be saved with tiny budget");
     }
+
+    #[tokio::test]
+    async fn test_fallback_restores_busy_timeout_single_connection() {
+        // 単一接続プールでフォールバックパスのbusy_timeout復元を厳密に検証
+        // 2接続プールでは同じ接続かどうかが不明確なため、このテストで確実に同一接続を検証
+
+        use sqlx::sqlite::SqliteConnectOptions;
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!(
+            "fallback_restore_single_test_{}.db",
+            std::process::id()
+        ));
+
+        // プールのデフォルトbusy_timeoutを2500msに設定（3000msと異なる値で区別）
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .busy_timeout(std::time::Duration::from_millis(2500));
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1) // 単一接続: 同じコネクションが再利用される
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        let messages = vec![create_test_message("fallback_single1", "Message 1")];
+
+        // フォールバックを呼び出し（500ms予算で一時的に短いbusy_timeoutを設定）
+        save_chunk_individually(&pool, &messages, Duration::from_millis(500)).await;
+
+        // 同じ接続を取得してbusy_timeoutを確認（単一接続なので必ず同一接続）
+        let mut conn = pool.acquire().await.unwrap();
+        let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+
+        // 元の値（2500ms）に復元されていること
+        assert_eq!(
+            timeout.0, 2500,
+            "busy_timeout should be restored to original 2500ms, got {}ms",
+            timeout.0
+        );
+
+        // データが保存されていること（同じ接続を使用）
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 1, "Message should be saved via fallback");
+
+        // クリーンアップ
+        drop(conn);
+        drop(pool);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn test_original_timeout_zero_is_clamped() {
+        // original_timeout == 0（SQLiteデフォルト: 制限なし）の場合に
+        // 無限ブロックせず、MAX_BUSY_TIMEOUT_PER_ATTEMPT_MSでクランプされることを確認
+
+        use sqlx::sqlite::SqliteConnectOptions;
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!("zero_timeout_test_{}.db", std::process::id()));
+
+        // busy_timeoutを0msに設定（SQLiteデフォルト: 制限なし）
+        // SqliteConnectOptionsでbusy_timeout(0)を設定するのは難しいため、
+        // PRAGMAで直接設定
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true);
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        // busy_timeoutを0に設定
+        sqlx::query("PRAGMA busy_timeout = 0")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        let messages = vec![create_test_message("zero_timeout1", "Message 1")];
+
+        let start = Instant::now();
+
+        // 500msの予算で呼び出し
+        // original_timeout=0がu64::MAXとして扱われ、MIN(u64::MAX, 500, remaining)=500ms以内で完了すること
+        let budget = Duration::from_millis(500);
+        let result = save_chunk_with_retry(&pool, &messages, budget).await;
+
+        let elapsed = start.elapsed();
+
+        // 成功すること
+        assert!(result, "Should succeed with zero original timeout");
+
+        // 600ms以内に完了すること（無限ブロックしていない）
+        assert!(
+            elapsed < Duration::from_millis(600),
+            "Should complete within budget even with original_timeout=0, took {}ms",
+            elapsed.as_millis()
+        );
+
+        // データが保存されていること
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 1, "Message should be saved");
+
+        // クリーンアップ
+        drop(pool);
+        let _ = std::fs::remove_file(&db_path);
+    }
 }

@@ -579,7 +579,7 @@
         // マネージャーを再作成（destroyされている可能性があるため）
         // 注: OBSブラウザソースではbfcacheは使われないため、通常このコードは実行されない
         // DensityManagerのタイマーが停止している場合は再作成
-        if (!densityManager || densityManager._cleanupTimerId === null) {
+        if (!densityManager || densityManager.isDestroyed()) {
           densityManager = new DensityManager();
           console.log('DensityManager reinitialized after bfcache restore');
         }

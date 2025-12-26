@@ -191,6 +191,14 @@
     }
 
     /**
+     * DensityManagerが破棄されたかどうかを返す
+     * @returns {boolean} 破棄済みならtrue
+     */
+    isDestroyed() {
+      return this._cleanupTimerId === null;
+    }
+
+    /**
      * 縮退設定を更新
      * @param {object} settings - 新しい縮退設定
      */

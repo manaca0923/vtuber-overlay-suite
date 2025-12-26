@@ -684,6 +684,118 @@ if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
 - その他のエラーなら即座にフォールバックへ移行
 - 未知のタイムアウトで続行するとタイムアウト保証が崩れるため避ける
 
+### 17. busy_timeout復元時に定数ではなく元の値を使用する（高リスク指摘）
+
+**指摘内容**:
+- `DEFAULT_POOL_BUSY_TIMEOUT_MS`(5000ms)をハードコードして復元していた
+- プール設定が異なるbusy_timeout（例: 50ms、150ms）を持つ場合、5000msで上書きしてしまう
+- テストで50msのプールを作成しているのに、5000msに変更される
+
+**対応**:
+```rust
+/// busy_timeout取得失敗時のフォールバック値（ミリ秒）
+const FALLBACK_BUSY_TIMEOUT_MS: u64 = 5000;
+
+/// コネクションの現在のbusy_timeoutを取得
+async fn get_busy_timeout(conn: &mut SqliteConnection) -> u64 {
+    match sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
+        .fetch_one(&mut *conn)
+        .await
+    {
+        Ok(timeout) => timeout as u64,
+        Err(e) => {
+            log::debug!("Failed to get busy_timeout, using fallback: {:?}", e);
+            FALLBACK_BUSY_TIMEOUT_MS
+        }
+    }
+}
+
+async fn save_chunk_with_transaction_and_timeout(...) -> TransactionResult {
+    let mut conn = pool.acquire().await?;
+
+    // ★ 元のbusy_timeoutを取得（復元用）
+    let original_timeout = get_busy_timeout(&mut conn).await;
+
+    set_busy_timeout(&mut conn, busy_timeout_ms).await?;
+    let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
+
+    // ★ 元の値に復元（定数ではなく）
+    let _ = set_busy_timeout(&mut conn, original_timeout).await;
+    result
+}
+```
+
+**テスト追加**:
+```rust
+#[tokio::test]
+async fn test_non_default_pool_timeout_restoration() {
+    // 非デフォルトbusy_timeout（150ms）でプールを作成
+    let connect_options = SqliteConnectOptions::new()
+        .filename(&db_path)
+        .create_if_missing(true)
+        .busy_timeout(std::time::Duration::from_millis(150));
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(connect_options)
+        .await
+        .unwrap();
+
+    save_chunk_with_retry(&pool, &messages).await;
+
+    // 元の値（150ms）に復元されていること（5000msではない）
+    let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(timeout.0, 150);
+}
+```
+
+**今後の対策**:
+- PRAGMA設定を変更する場合、定数ではなく元の値を取得して復元
+- 元の値取得に失敗した場合のフォールバック値を用意
+- 単一接続プールで復元が正しく行われることをテスト
+
+### 18. backoff sleepを残り予算で制限する（高リスク指摘）
+
+**指摘内容**:
+- backoff sleepが`RETRY_TOTAL_TIMEOUT_MS`の予算に制限されていない
+- pool.acquire()とbackoff sleepの合計で2秒を超える可能性
+- 総タイムアウトがend-to-endで強制されていない
+
+**対応**:
+```rust
+TransactionResult::Busy => {
+    attempt += 1;
+    // ...試行回数チェック...
+
+    // 残り時間を再計算してbackoffを制限
+    let remaining_ms = (total_timeout - elapsed).as_millis() as u64;
+
+    // 残り時間がbackoff + 最小試行時間(50ms)未満なら諦める
+    if remaining_ms < backoff_ms + 50 {
+        log::warn!(
+            "SQLITE_BUSY: Remaining time ({}ms) too short for backoff ({}ms) + retry, giving up",
+            remaining_ms,
+            backoff_ms
+        );
+        return false;
+    }
+
+    // backoffを残り時間で制限（次の試行のための余裕を残す）
+    let clamped_backoff = backoff_ms.min(remaining_ms.saturating_sub(50));
+
+    sleep(Duration::from_millis(clamped_backoff)).await;
+    backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
+}
+```
+
+**今後の対策**:
+- リトライ処理のsleepは残り時間で制限する
+- 残り時間が次の試行に十分でない場合は早めに諦める
+- 総タイムアウトはbusy_timeout + backoff + 試行時間の合計で強制
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

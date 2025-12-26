@@ -32,10 +32,9 @@ const RETRY_TOTAL_TIMEOUT_MS: u64 = 2000;
 /// この値を超えないようにしつつ、残り時間に応じて短縮する
 const MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: u64 = 500;
 
-/// プールのデフォルトbusy_timeout（ミリ秒）
-/// プール作成時に設定される値と一致させる必要がある
-/// リトライ後にこの値に復元することで、プール内の接続が短いタイムアウトを保持しない
-const DEFAULT_POOL_BUSY_TIMEOUT_MS: u64 = 5000;
+/// busy_timeout取得失敗時のフォールバック値（ミリ秒）
+/// プール設定に依存しない安全なデフォルト値
+const FALLBACK_BUSY_TIMEOUT_MS: u64 = 5000;
 
 /// トランザクション処理の結果
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -165,15 +164,31 @@ async fn save_chunk_with_retry(pool: &SqlitePool, messages: &[ChatMessage]) -> b
                     return false;
                 }
 
+                // 残り時間を再計算してbackoffを制限
+                let remaining_ms = (total_timeout - elapsed).as_millis() as u64;
+
+                // 残り時間がbackoff + 最小試行時間(50ms)未満なら諦める
+                if remaining_ms < backoff_ms + 50 {
+                    log::warn!(
+                        "SQLITE_BUSY: Remaining time ({}ms) too short for backoff ({}ms) + retry, giving up",
+                        remaining_ms,
+                        backoff_ms
+                    );
+                    return false;
+                }
+
+                // backoffを残り時間で制限（次の試行のための余裕を残す）
+                let clamped_backoff = backoff_ms.min(remaining_ms.saturating_sub(50));
+
                 log::debug!(
                     "SQLITE_BUSY: Attempt {}/{} failed (busy_timeout={}ms), retrying after {}ms (elapsed: {}ms)",
                     attempt,
                     MAX_ATTEMPTS,
                     busy_timeout_ms,
-                    backoff_ms,
+                    clamped_backoff,
                     elapsed.as_millis()
                 );
-                sleep(Duration::from_millis(backoff_ms)).await;
+                sleep(Duration::from_millis(clamped_backoff)).await;
                 backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
             }
         }
@@ -195,14 +210,32 @@ async fn set_busy_timeout(conn: &mut SqliteConnection, timeout_ms: u64) -> Resul
     Ok(())
 }
 
+/// コネクションの現在のbusy_timeoutを取得
+///
+/// プール設定に依存せず、接続の実際の値を取得する。
+/// 取得失敗時はフォールバック値を返す。
+async fn get_busy_timeout(conn: &mut SqliteConnection) -> u64 {
+    match sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
+        .fetch_one(&mut *conn)
+        .await
+    {
+        Ok(timeout) => timeout as u64,
+        Err(e) => {
+            log::debug!("Failed to get busy_timeout, using fallback: {:?}", e);
+            FALLBACK_BUSY_TIMEOUT_MS
+        }
+    }
+}
+
 /// busy_timeoutを指定してトランザクション処理を実行
 ///
 /// コネクションを取得し、busy_timeoutを設定してからトランザクションを開始する。
 /// これにより、各試行のブロック時間を確実に制限できる。
 ///
 /// ## busy_timeout復元
-/// トランザクション完了後（成功/失敗問わず）、busy_timeoutをプールのデフォルト値に
-/// 復元する。これにより、プール内の接続が短いタイムアウトを保持しない。
+/// トランザクション完了後（成功/失敗問わず）、busy_timeoutを元の値に復元する。
+/// 元の値は接続から直接取得するため、プール設定に依存しない。
+/// これにより、プール内の接続が短いタイムアウトを保持しない。
 ///
 /// ## エラーハンドリング
 /// - PRAGMA busy_timeout設定がBUSYで失敗 → `TransactionResult::Busy`を返す
@@ -225,6 +258,9 @@ async fn save_chunk_with_transaction_and_timeout(
         }
     };
 
+    // 元のbusy_timeoutを取得（復元用）
+    let original_timeout = get_busy_timeout(&mut conn).await;
+
     // busy_timeoutを設定（エラー時は適切に処理）
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
         if is_sqlite_busy_error(&e) {
@@ -239,12 +275,12 @@ async fn save_chunk_with_transaction_and_timeout(
     // トランザクションを実行
     let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
 
-    // busy_timeoutをデフォルトに復元（プール内接続への影響を防ぐ）
+    // busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
     // 復元失敗はログ出力のみ（トランザクション結果は変えない）
-    if let Err(e) = set_busy_timeout(&mut conn, DEFAULT_POOL_BUSY_TIMEOUT_MS).await {
+    if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
         log::warn!(
-            "Failed to restore busy_timeout to default ({}ms): {:?}",
-            DEFAULT_POOL_BUSY_TIMEOUT_MS,
+            "Failed to restore busy_timeout to original ({}ms): {:?}",
+            original_timeout,
             e
         );
     }
@@ -1126,7 +1162,7 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let db_path = temp_dir.join(format!("single_conn_test_{}.db", std::process::id()));
 
-        // プールのデフォルトbusy_timeoutを5000msに設定（DEFAULT_POOL_BUSY_TIMEOUT_MSと一致）
+        // プールのデフォルトbusy_timeoutを5000msに設定
         let connect_options = SqliteConnectOptions::new()
             .filename(&db_path)
             .create_if_missing(true)
@@ -1153,10 +1189,61 @@ mod tests {
             .await
             .unwrap();
 
-        // DEFAULT_POOL_BUSY_TIMEOUT_MS（5000ms）に復元されていること
+        // 元の値（5000ms）に復元されていること
         assert_eq!(
             timeout.0, 5000,
-            "busy_timeout should be restored to default (5000ms) after retry, got {}ms",
+            "busy_timeout should be restored to original (5000ms) after retry, got {}ms",
+            timeout.0
+        );
+
+        // クリーンアップ
+        drop(conn);
+        drop(pool);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn test_non_default_pool_timeout_restoration() {
+        // 非デフォルトbusy_timeout（150ms）でプールを作成し、
+        // save_chunk_with_retry後に元の値（150ms）に復元されることを確認
+        // 定数5000msではなく、プール設定に依存しない復元を検証
+
+        use sqlx::sqlite::SqliteConnectOptions;
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!("non_default_timeout_{}.db", std::process::id()));
+
+        // 非デフォルトbusy_timeout（150ms）でプールを作成
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .busy_timeout(std::time::Duration::from_millis(150));
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1) // 単一接続で強制的に同じコネクションを再利用
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        let messages = vec![create_test_message("nondefault1", "Message 1")];
+
+        // save_chunk_with_retryを実行
+        let result = save_chunk_with_retry(&pool, &messages).await;
+        assert!(result, "Should succeed");
+
+        // 同じコネクションを再取得
+        let mut conn = pool.acquire().await.unwrap();
+        let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+
+        // 元の値（150ms）に復元されていること（5000msではない）
+        assert_eq!(
+            timeout.0, 150,
+            "busy_timeout should be restored to original (150ms), not 5000ms, got {}ms",
             timeout.0
         );
 

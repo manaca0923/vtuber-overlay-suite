@@ -176,12 +176,84 @@ function clamp(value: number, min: number, max: number): number {
 - 詳細なデバッグ情報は`log::debug!`
 - 既存コードは適切に設定済み
 
+### 5. テスト用DBファイル名のユニーク化（db/mod.rs）
+
+**指摘内容**:
+- テストで固定のDBファイル名を使用すると、並行テスト実行時にプロセス間で衝突する可能性
+
+**対応**:
+```rust
+/// ユニークなテスト用DBパスを生成
+/// プロセスIDとタイムスタンプを組み合わせて衝突を回避
+fn unique_test_db_path(prefix: &str) -> std::path::PathBuf {
+    let temp_dir = env::temp_dir();
+    let pid = std::process::id();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    temp_dir.join(format!("{}_{}_{}_{}.db", prefix, pid, timestamp, rand_suffix()))
+}
+```
+
+**今後の対策**:
+- テスト用の一時ファイルには必ずプロセスID+タイムスタンプ+ランダムサフィックスを含める
+- 共有リソースへのアクセスは衝突を考慮した設計にする
+
+### 6. PRAGMA busy_timeout検証テスト追加（db/mod.rs）
+
+**指摘内容**:
+- busy_timeout設定が実際にSQLiteセッションに反映されているか検証するテストがない
+
+**対応**:
+```rust
+#[tokio::test]
+async fn test_busy_timeout_pragma_is_set() {
+    let db_path = unique_test_db_path("test_pragma_busy_timeout");
+    let pool = create_pool(db_path_str).await.expect("...");
+
+    // PRAGMA busy_timeoutの値を確認
+    let row: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+        .fetch_one(&pool)
+        .await
+        .expect("PRAGMA query should succeed");
+
+    assert_eq!(row.0 as u64, SQLITE_BUSY_TIMEOUT_MS);
+}
+```
+
+**今後の対策**:
+- 接続オプションで設定した値はPRAGMAで検証できることを覚えておく
+- 重要な設定は「設定したつもり」ではなく「設定されている」ことをテストで確認
+
+### 7. peek()によるFIFO-like evictionテスト追加（parser.rs）
+
+**指摘内容**:
+- peek()を使用しているため真のLRU動作ではなくFIFO-likeなevictionになる
+- この動作を明確にするテストとドキュメントが必要
+
+**対応**:
+```rust
+/// peek()によるFIFO-like eviction動作のテスト
+#[test]
+fn test_peek_does_not_prevent_eviction() {
+    // ホットエントリを最初に登録し、100回アクセス
+    // その後キャッシュを埋めると、ホットエントリもevictされる
+    // → peek()はLRU順序を更新しないため
+}
+```
+
+**今後の対策**:
+- キャッシュ実装の選択（get vs peek）は性能とセマンティクスのトレードオフ
+- 選択した動作はテストとコメントで明文化する
+- 「意図的な設計判断」はドキュメントとテストで証明する
+
 ## 未対応（将来対応）
 
 ### 1. SQLITE_BUSY時の並行書き込みテスト
 - 2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証するテスト
 - 現状はbusy_timeout設定とスモークテストで対応済みのため、優先度低
-- 必要になったら`docs/900_tasks.md`に追加
+- `docs/900_tasks.md`に追加済み
 
 ### 2. parking_lot::Mutex検討
 - 高並行性が必要になった場合の検討事項
@@ -191,6 +263,7 @@ function clamp(value: number, min: number, max: number): number {
 - トランザクション開始/コミット時にSQLITE_BUSYが発生した場合のリトライロジック
 - 現状はbusy_timeoutで軽減、フォールバック処理（個別INSERT）で対応
 - 高負荷環境で問題が発生したら検討
+- `docs/900_tasks.md`に追加済み
 
 ## 参照
 - PR #55: https://github.com/manaca0923/vtuber-overlay-suite/pull/55

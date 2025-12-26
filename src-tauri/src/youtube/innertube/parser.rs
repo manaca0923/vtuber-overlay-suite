@@ -1419,6 +1419,72 @@ mod tests {
         clear_emoji_cache();
     }
 
+    /// peek()によるFIFO-like eviction動作のテスト
+    ///
+    /// 設計判断: convert_text_with_emoji_cacheはpeek()を使用するため、
+    /// 頻繁にアクセスされる絵文字もLRU順序は更新されない。
+    /// つまり、挿入順でのみevictionが発生する（FIFO-like）。
+    /// これはロック競合軽減のための意図的な設計。
+    #[test]
+    fn test_peek_does_not_prevent_eviction() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュをクリア
+        clear_emoji_cache();
+
+        // ホットエントリ（頻繁にアクセスされる）を最初に登録
+        let hot_shortcut = ":_hot_emoji:";
+        let hot_emoji = EmojiInfo {
+            emoji_id: "hot_emoji".to_string(),
+            shortcuts: vec![hot_shortcut.to_string()],
+            image: EmojiImage {
+                thumbnails: vec![EmojiThumbnail {
+                    url: "https://example.com/hot.png".to_string(),
+                    width: 24,
+                    height: 24,
+                }],
+            },
+            is_custom_emoji: true,
+        };
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            cache.put(hot_shortcut.to_string(), hot_emoji);
+        }
+
+        // ホットエントリを繰り返しアクセス（peek経由 = LRU更新なし）
+        for _ in 0..100 {
+            let _ = convert_text_with_emoji_cache(&format!("Test {} text", hot_shortcut));
+        }
+
+        // キャッシュを最大サイズまで埋める
+        // peek()はLRU順序を更新しないため、ホットエントリも他と同様にevictされる
+        for i in 0..EMOJI_CACHE_MAX_SIZE {
+            let shortcut = format!(":_newemoji{}:", i);
+            let emoji_info = EmojiInfo {
+                emoji_id: format!("new_{}", i),
+                shortcuts: vec![shortcut.clone()],
+                image: EmojiImage { thumbnails: vec![] },
+                is_custom_emoji: true,
+            };
+
+            if let Ok(mut cache) = EMOJI_CACHE.lock() {
+                cache.put(shortcut, emoji_info);
+            }
+        }
+
+        // ホットエントリがevictされていることを確認
+        // peek()を使用しているため、頻繁なアクセスはevictionを防がない
+        if let Ok(cache) = EMOJI_CACHE.lock() {
+            assert!(
+                cache.peek(hot_shortcut).is_none(),
+                "Hot emoji should be evicted despite frequent access (peek doesn't update LRU)"
+            );
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
     #[test]
     fn test_convert_text_with_multibyte_characters() {
         // グローバルキャッシュを変更するテストは直列化

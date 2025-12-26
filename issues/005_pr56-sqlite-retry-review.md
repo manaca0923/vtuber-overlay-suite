@@ -1263,6 +1263,81 @@ if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
 - rollback/復元失敗時は`conn.detach()`でプールから排除
 - `TransactionResult::Poisoned`で汚染状態を明示的に表現
 
+### 31. フォールバックパスでもbusy_timeout復元失敗時にconn.detach()（高リスク指摘）
+
+**指摘内容**:
+- `save_chunk_individually`でbusy_timeout復元失敗時に`conn.detach()`を呼んでいない
+- 短いbusy_timeoutの接続がプールに戻り、他の呼び出し元でSQLITE_BUSYが増加
+- リトライパスでは`conn.detach()`を呼んでいるのにフォールバックパスでは未対応
+
+**対応**:
+```rust
+// Before（問題あり）:
+if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+    log::warn!(
+        "Failed to restore busy_timeout in fallback to original ({}ms): {:?}",
+        original_timeout,
+        e
+    );
+    // ← conn.detach()がない
+}
+
+// After（修正済み）:
+if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+    log::warn!(
+        "Failed to restore busy_timeout in fallback to original ({}ms), detaching connection: {:?}",
+        original_timeout,
+        e
+    );
+    conn.detach(); // プールから切り離し
+}
+```
+
+**今後の対策**:
+- 同じエラー処理はリトライパスとフォールバックパスで一貫させる
+- busy_timeout復元失敗時は常に`conn.detach()`でプールから排除
+- コードレビュー時に「同様の処理が他にないか」を網羅的に確認
+
+### 32. bfcache復元時のマネージャー再初期化（高リスク指摘）
+
+**指摘内容**:
+- `cleanup()`で`densityManager.destroy()`と`updateBatcher.destroy()`を呼び出し
+- bfcache復元時（`pageshow`で`event.persisted`がtrue）にマネージャーが使用不能
+- バッチ処理と過密検出が無効になり、パフォーマンス低下の可能性
+- OBSブラウザソースではbfcacheは使われないが、通常ブラウザでのテストに影響
+
+**対応**:
+```javascript
+// 1. const → let に変更（再代入を許可）
+let updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+let densityManager = new DensityManager();
+
+// 2. pageshowハンドラでマネージャーを再初期化
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    // ... 既存の再接続処理 ...
+
+    // DensityManagerのタイマーが停止している場合は再作成
+    if (!densityManager || densityManager._cleanupTimerId === null) {
+      densityManager = new DensityManager();
+      console.log('DensityManager reinitialized after bfcache restore');
+    }
+    // UpdateBatcherも再作成
+    if (!updateBatcher) {
+      updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+      console.log('UpdateBatcher reinitialized after bfcache restore');
+    }
+    // ...
+  }
+});
+```
+
+**今後の対策**:
+- `destroy()`で停止したリソースは`pageshow`で再初期化
+- bfcache対応が必要な変数は`const`ではなく`let`で宣言
+- タイマーIDの存在チェックでdestroy済みかを判定
+- OBSブラウザソース以外でのテストも考慮した設計
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

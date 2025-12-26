@@ -152,8 +152,9 @@
     let isShuttingDown = false;
 
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
-    const updateBatcher = new UpdateBatcher({ batchInterval: 150 });
-    const densityManager = new DensityManager();
+    // letを使用: bfcache復元時に再初期化するため
+    let updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+    let densityManager = new DensityManager();
 
     // ===== URL/API設定適用 =====
     function applyUrlSettings() {
@@ -577,6 +578,16 @@
 
         // マネージャーを再作成（destroyされている可能性があるため）
         // 注: OBSブラウザソースではbfcacheは使われないため、通常このコードは実行されない
+        // DensityManagerのタイマーが停止している場合は再作成
+        if (!densityManager || densityManager._cleanupTimerId === null) {
+          densityManager = new DensityManager();
+          console.log('DensityManager reinitialized after bfcache restore');
+        }
+        // UpdateBatcherも再作成（destroyでpendingUpdatesがクリアされている可能性）
+        if (!updateBatcher) {
+          updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+          console.log('UpdateBatcher reinitialized after bfcache restore');
+        }
 
         // 二重接続を防止: CONNECTING/OPEN状態では再接続しない
         if (!ws || (ws.readyState !== WebSocket.CONNECTING && ws.readyState !== WebSocket.OPEN)) {

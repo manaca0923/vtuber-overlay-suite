@@ -622,12 +622,14 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     }
 
     // busy_timeoutを元の値に復元
+    // 復元失敗時は接続を切り離してプールへの影響を防ぐ（リトライパスと同様）
     if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
         log::warn!(
-            "Failed to restore busy_timeout in fallback to original ({}ms): {:?}",
+            "Failed to restore busy_timeout in fallback to original ({}ms), detaching connection: {:?}",
             original_timeout,
             e
         );
+        conn.detach();
     }
 
     if error_count > 0 || success_count + error_count < messages.len() {

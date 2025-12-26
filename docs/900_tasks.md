@@ -884,6 +884,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
 
+- [ ] **SQLITE_BUSYリトライ/backoff** (PR#55)
+  - 現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応
+  - 問題: 高負荷時にトランザクション開始/コミットが失敗する可能性
+  - 対応: リトライロジックとexponential backoffの実装を検討
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現状のbusy_timeout+フォールバックで問題なし）
+
 ### テスト
 
 - [ ] **手動テスト項目の実施**
@@ -910,6 +917,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 復元動作（density:normalで設定が戻るか）
   - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
   - 優先度: 低
+
+- [ ] **SQLITE_BUSY並行書き込みテスト** (PR#55)
+  - 2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証
+  - テスト対象:
+    - ロック競合時にbusy_timeoutで待機されるか
+    - フォールバック処理（個別INSERT）が正しく動作するか
+  - 対象ファイル: `src-tauri/src/db/mod.rs`, `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現状のスモークテストで基本動作は検証済み）
 
 ### ドキュメント
 

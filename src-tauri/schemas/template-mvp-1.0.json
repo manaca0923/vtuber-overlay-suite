@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/schema/template-mvp-1.0.json",
+  "$id": "./template-mvp-1.0.json",
   "title": "VTuber Overlay Template Schema (MVP)",
   "description": "3カラムオーバーレイテンプレートのJSON Schema（MVP版）",
   "type": "object",
@@ -116,7 +116,7 @@
             "type": "object",
             "properties": {
               "maxLines": { "type": "integer", "minimum": 4, "maximum": 14, "default": 10 },
-              "maxItems": { "type": "integer", "minimum": 6, "maximum": 20, "default": 14 },
+              "maxItems": { "type": "integer", "minimum": 3, "maximum": 20, "default": 14 },
               "cycleSec": { "type": "integer", "minimum": 10, "maximum": 120, "default": 30 },
               "showSec": { "type": "integer", "minimum": 3, "maximum": 15, "default": 6 }
             },

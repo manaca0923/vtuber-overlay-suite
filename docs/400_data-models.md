@@ -569,7 +569,7 @@ export interface ComponentConfig {
 // コンポーネントルール
 export interface ComponentRules {
   maxLines?: number;    // 4-14
-  maxItems?: number;    // 6-20
+  maxItems?: number;    // 3-20 (SetList推奨:14, QueueList推奨:6)
   cycleSec?: number;    // 10-120
   showSec?: number;     // 3-15
   overflow?: 'ellipsis' | 'fade' | 'scroll';
@@ -702,7 +702,7 @@ pub struct TemplateConfig {
 | `offsetX` | -40 | 40 | px相当 |
 | `offsetY` | -40 | 40 | px相当 |
 | `maxLines` | 4 | 14 | ChatLog用 |
-| `maxItems` | 6 | 20 | SetList/QueueList用 |
+| `maxItems` | 3 | 20 | SetList(推奨14)/QueueList(推奨6)用 |
 | `cycleSec` | 10 | 120 | PromoPanel用 |
 | `showSec` | 3 | 15 | PromoPanel用 |
 | `leftPct` | 0.18 | 0.28 | レイアウト比率 |

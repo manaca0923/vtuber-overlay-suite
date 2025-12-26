@@ -127,7 +127,7 @@ export const CLAMP_RANGES = {
   offsetY: { min: -40, max: 40, default: 0 },
   // rules
   maxLines: { min: 4, max: 14, default: 10 },
-  maxItems: { min: 6, max: 20, default: 14 },
+  maxItems: { min: 3, max: 20, default: 14 }, // SetList推奨:14, QueueList推奨:6
   cycleSec: { min: 10, max: 120, default: 30 },
   showSec: { min: 3, max: 15, default: 6 },
   // layout

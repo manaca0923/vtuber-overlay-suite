@@ -1,19 +1,27 @@
 //! InnerTube レスポンスパーサー
 
 use chrono::{TimeZone, Utc};
-use std::collections::HashMap;
-use std::sync::RwLock;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
+use lru::LruCache;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
 use super::types::*;
 use crate::youtube::types::{ChatMessage, EmojiImage, EmojiInfo, EmojiThumbnail, MessageRun, MessageType};
 
-/// 絵文字キャッシュ: ショートカット -> EmojiInfo
+/// 絵文字キャッシュの最大エントリ数
+/// チャンネル固有のカスタム絵文字は通常数十〜数百程度なので、2000で十分な余裕がある
+const EMOJI_CACHE_MAX_SIZE: usize = 2000;
+
+/// 絵文字キャッシュ: ショートカット -> EmojiInfo (LRU方式)
 /// InnerTubeレスポンスで取得した絵文字情報をキャッシュし、
 /// テキストトークンで送られてきた絵文字ショートカットを画像に変換するために使用
-static EMOJI_CACHE: Lazy<RwLock<HashMap<String, EmojiInfo>>> = Lazy::new(|| {
-    RwLock::new(HashMap::new())
+/// 長時間運用時のメモリ増加を防ぐためLRUキャッシュを使用
+static EMOJI_CACHE: Lazy<Mutex<LruCache<String, EmojiInfo>>> = Lazy::new(|| {
+    Mutex::new(LruCache::new(
+        NonZeroUsize::new(EMOJI_CACHE_MAX_SIZE).expect("Cache size must be non-zero")
+    ))
 });
 
 /// 絵文字ショートカットパターン（:_xxx:形式）
@@ -24,7 +32,7 @@ static EMOJI_SHORTCUT_REGEX: Lazy<Regex> = Lazy::new(|| {
 /// 絵文字キャッシュをクリア（テスト用・デバッグ用）
 #[allow(dead_code)]
 pub fn clear_emoji_cache() {
-    if let Ok(mut cache) = EMOJI_CACHE.write() {
+    if let Ok(mut cache) = EMOJI_CACHE.lock() {
         cache.clear();
     }
 }
@@ -32,7 +40,7 @@ pub fn clear_emoji_cache() {
 /// 絵文字キャッシュのサイズを取得（デバッグ用）
 #[allow(dead_code)]
 pub fn get_emoji_cache_size() -> usize {
-    EMOJI_CACHE.read().map(|c| c.len()).unwrap_or(0)
+    EMOJI_CACHE.lock().map(|c| c.len()).unwrap_or(0)
 }
 
 /// InnerTubeレスポンスをChatMessageリストに変換
@@ -329,9 +337,10 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
             };
 
             // キャッシュに追加/更新（ショートカットごとに登録、常に最新を反映）
-            if let Ok(mut cache) = EMOJI_CACHE.write() {
+            // LRUキャッシュのため、上限を超えると古いエントリが自動削除される
+            if let Ok(mut cache) = EMOJI_CACHE.lock() {
                 for shortcut in &emoji_info.shortcuts {
-                    cache.insert(shortcut.clone(), emoji_info.clone());
+                    cache.put(shortcut.clone(), emoji_info.clone());
                 }
             }
 
@@ -351,10 +360,10 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
 }
 
 /// テキスト内の:_xxx:パターンを絵文字キャッシュから画像に変換
-/// 
+///
 /// 例: "こんにちは:_草lol:です" → [Text("こんにちは"), Emoji(...), Text("です")]
 fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
-    let cache = match EMOJI_CACHE.read() {
+    let mut cache = match EMOJI_CACHE.lock() {
         Ok(c) => c,
         Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
     };
@@ -379,6 +388,7 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
         }
 
         // キャッシュに絵文字があれば画像に変換、なければテキストのまま
+        // get()を使用してLRUの最近使用順を更新（よく使う絵文字が削除されにくくなる）
         if let Some(emoji_info) = cache.get(shortcut) {
             result.push(MessageRun::Emoji { emoji: emoji_info.clone() });
             log::debug!("Converted text emoji from cache: {}", shortcut);

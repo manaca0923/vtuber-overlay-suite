@@ -312,6 +312,33 @@ it('非数値文字列は最小値にクランプされる', () => {
 - 現状のキャッシュサイズ2000・通常のチャット速度では問題なし
 - `docs/900_tasks.md`に追加済み
 
+### 5. comment_logsへの並行書き込みパスの分析
+
+**レビュアーからの質問**:
+> "Are there other write paths hitting `comment_logs` in parallel?"
+
+**分析結果**:
+`save_comments_to_db`の呼び出し元を調査した結果、以下の書き込みパスが存在:
+
+| 呼び出し元 | ファイル | 行 |
+|---|---|---|
+| Public API polling | commands/youtube.rs | 208 |
+| InnerTube polling | commands/youtube.rs | 877 |
+| gRPC poller | grpc/poller.rs | 259 |
+| Unified poller (InnerTube) | unified_poller.rs | 160 |
+| Unified poller (Public API) | unified_poller.rs | 401 |
+
+**結論**:
+- 通常の使用では、1つのセッションで1つのポーラーのみが動作
+- 複数ウィンドウやレースコンディションで並行書き込みが発生する可能性はある
+- 現在の`busy_timeout`(5秒)とフォールバック処理で対応可能
+- 将来的にretry/backoffを実装すればより堅牢になる
+
+### 6. 絵文字キャッシュのストレステスト/ベンチマーク
+- 高スループット時のロック競合によるレイテンシ悪化を検出するテスト
+- `convert_text_with_emoji_cache`の並行呼び出しを検証
+- `docs/900_tasks.md`に追加済み
+
 ## 参照
 - PR #55: https://github.com/manaca0923/vtuber-overlay-suite/pull/55
 - SQLite busy handling: https://www.sqlite.org/c3ref/busy_timeout.html

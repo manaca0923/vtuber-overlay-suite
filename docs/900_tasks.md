@@ -935,6 +935,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/db/mod.rs`, `src-tauri/src/youtube/db.rs`
   - 優先度: 低（現状のスモークテストで基本動作は検証済み）
 
+- [ ] **絵文字キャッシュのストレステスト/ベンチマーク** (PR#55)
+  - 高スループット時のロック競合によるレイテンシ悪化を検出
+  - テスト対象:
+    - `convert_text_with_emoji_cache`の並行呼び出し
+    - 多数の絵文字マッチ時のレイテンシ測定
+  - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
+  - 優先度: 低（現状のチャット速度では問題なし）
+
 ### ドキュメント
 
 - [x] **README更新** (2025-12-22対応済み)

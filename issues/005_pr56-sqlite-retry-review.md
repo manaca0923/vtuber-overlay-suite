@@ -1455,6 +1455,90 @@ let busy_timeout_ms = effective_original
 - 将来的に`Result<u64, sqlx::Error>`に変更し、BUSYならリトライ可能にすることを検討
 - `docs/900_tasks.md`に将来タスクとして記載
 
+### 36. get_busy_timeout/set_busy_timeout失敗時にconn.detach()（高リスク指摘）
+
+**指摘内容**:
+- `get_busy_timeout`や`set_busy_timeout`が失敗した場合に接続を`detach`せずプールに戻していた
+- PRAGMA失敗はIO障害等の深刻な問題の可能性があり、接続が汚染されているかもしれない
+- 汚染された接続がプール内に残り、後続の書き込みで問題が発生する可能性
+
+**対応箇所**:
+1. `save_chunk_with_transaction_and_timeout`内の`get_busy_timeout`失敗時:
+```rust
+// Before（問題あり）:
+let original_timeout = match get_busy_timeout(&mut conn).await {
+    Some(timeout) => timeout,
+    None => {
+        log::warn!("Cannot proceed: failed to get original busy_timeout");
+        return TransactionResult::OtherError;
+        // ← conn.detach()がない
+    }
+};
+
+// After（修正済み）:
+let original_timeout = match get_busy_timeout(&mut conn).await {
+    Some(timeout) => timeout,
+    None => {
+        log::warn!("Cannot proceed: failed to get original busy_timeout, detaching connection");
+        conn.detach();  // プールから切り離し
+        return TransactionResult::OtherError;
+    }
+};
+```
+
+2. `save_chunk_with_transaction_and_timeout`内の`set_busy_timeout`失敗時:
+```rust
+// Before（問題あり）:
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    if is_sqlite_busy_error(&e) {
+        return TransactionResult::Busy;
+    }
+    return TransactionResult::OtherError;
+    // ← conn.detach()がない
+}
+
+// After（修正済み）:
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    if is_sqlite_busy_error(&e) {
+        log::debug!("SQLITE_BUSY on set busy_timeout, detaching connection: {:?}", e);
+        conn.detach();
+        return TransactionResult::Busy;
+    }
+    log::warn!("Failed to set busy_timeout, detaching connection: {:?}", e);
+    conn.detach();
+    return TransactionResult::OtherError;
+}
+```
+
+3. `save_chunk_individually`内の`get_busy_timeout`失敗時:
+```rust
+// After（修正済み）:
+let original_timeout = match get_busy_timeout(&mut conn).await {
+    Some(timeout) => timeout,
+    None => {
+        log::debug!("Skipping individual insert fallback: failed to get original busy_timeout, detaching connection");
+        conn.detach();
+        return;
+    }
+};
+```
+
+4. `save_chunk_individually`内の`set_busy_timeout`失敗時:
+```rust
+// After（修正済み）:
+if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
+    log::debug!("Skipping individual insert fallback: failed to set busy_timeout, detaching connection: {:?}");
+    conn.detach();
+    return;
+}
+```
+
+**今後の対策**:
+- PRAGMA操作の失敗はIO障害等の深刻な問題の可能性がある
+- 失敗時は接続を`detach()`でプールから切り離し、汚染を防止
+- 「エラー時は接続を使い捨てる」というセーフティネット思想
+- リトライパスとフォールバックパスで一貫した対応を行う
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

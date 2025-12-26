@@ -349,12 +349,14 @@ async fn save_chunk_with_transaction_and_timeout(
     }
 
     // 元のbusy_timeoutを取得（復元用）
-    // 取得失敗時は復元不能なため、OtherErrorを返して続行しない
+    // 取得失敗時は復元不能なため、接続をdetachしてOtherErrorを返す
     // → 短いbusy_timeoutを設定後に復元できず、接続が劣化するリスクを回避
+    // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
     let original_timeout = match get_busy_timeout(&mut conn).await {
         Some(timeout) => timeout,
         None => {
-            log::warn!("Cannot proceed: failed to get original busy_timeout for restoration");
+            log::warn!("Cannot proceed: failed to get original busy_timeout for restoration, detaching connection");
+            conn.detach();
             return TransactionResult::OtherError;
         }
     };
@@ -377,13 +379,15 @@ async fn save_chunk_with_transaction_and_timeout(
         .min(remaining_after_acquire.as_millis() as u64);
 
     // busy_timeoutを設定（エラー時は適切に処理）
+    // PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
         if is_sqlite_busy_error(&e) {
-            log::debug!("SQLITE_BUSY on set busy_timeout: {:?}", e);
+            log::debug!("SQLITE_BUSY on set busy_timeout, detaching connection: {:?}", e);
+            conn.detach();
             return TransactionResult::Busy;
         }
-        log::warn!("Failed to set busy_timeout: {:?}", e);
-        // PRAGMA失敗時は未知のタイムアウトで続行するのは危険なのでエラー
+        log::warn!("Failed to set busy_timeout, detaching connection: {:?}", e);
+        conn.detach();
         return TransactionResult::OtherError;
     }
 
@@ -584,12 +588,14 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     // 元のbusy_timeoutを取得（復元用）
     // 取得失敗時は予算を強制できないため即座に終了
     // → 接続の以前のbusy_timeout（5秒など）で長時間ブロックするリスクを排除
+    // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
     let original_timeout = match get_busy_timeout(&mut conn).await {
         Some(timeout) => timeout,
         None => {
             log::debug!(
-                "Skipping individual insert fallback: failed to get original busy_timeout"
+                "Skipping individual insert fallback: failed to get original busy_timeout, detaching connection"
             );
+            conn.detach();
             return;
         }
     };
@@ -623,11 +629,13 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
 
     // busy_timeoutを設定
     // 設定失敗時は予算を強制できないため即座に終了
+    // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
         log::debug!(
-            "Skipping individual insert fallback: failed to set busy_timeout: {:?}",
+            "Skipping individual insert fallback: failed to set busy_timeout, detaching connection: {:?}",
             e
         );
+        conn.detach();
         return;
     }
 

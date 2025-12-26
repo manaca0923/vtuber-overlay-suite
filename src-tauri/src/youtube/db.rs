@@ -41,7 +41,7 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 ///
 /// INSERT OR IGNOREを使用しているため、重複エラーは発生しない。
 /// しかし、テーブル不存在やディスクフル等の致命的エラーが発生した場合は
-/// フォールバック処理を行うためfalseを返す。
+/// 最初のエラーで即座にロールバックし、フォールバック処理に移行する。
 async fn save_chunk_with_transaction(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
     // トランザクションを開始
     let mut tx = match pool.begin().await {
@@ -52,27 +52,18 @@ async fn save_chunk_with_transaction(pool: &SqlitePool, messages: &[ChatMessage]
         }
     };
 
-    let mut error_count = 0;
     for msg in messages {
         if let Err(e) = insert_comment(&mut *tx, msg).await {
-            error_count += 1;
             // INSERT OR IGNOREなので重複エラーは発生しないはず
             // エラーが発生した場合は致命的な問題（テーブル不存在等）
-            log::warn!("Failed to insert comment in transaction: {:?}", e);
+            // 最初のエラーで即座にロールバック（warn spam回避）
+            log::warn!("Insert failed in transaction, rolling back: {:?}", e);
+            // ロールバック（dropで自動的に行われるが明示的に）
+            if let Err(rb_err) = tx.rollback().await {
+                log::debug!("Rollback failed (may already be rolled back): {:?}", rb_err);
+            }
+            return false;
         }
-    }
-
-    // 致命的エラーが発生した場合はロールバックしてフォールバック
-    if error_count > 0 {
-        log::warn!(
-            "Transaction had {} errors, rolling back for fallback",
-            error_count
-        );
-        // ロールバック（dropで自動的に行われるが明示的に）
-        if let Err(e) = tx.rollback().await {
-            log::debug!("Rollback failed (may already be rolled back): {:?}", e);
-        }
-        return false;
     }
 
     // コミット
@@ -299,5 +290,73 @@ mod tests {
 
         // パニックしないことを確認（エラーはログに出力される）
         save_comments_to_db(&pool, &messages).await;
+    }
+
+    /// CHECK制約付きテーブルを作成（テスト用）
+    async fn create_test_table_with_check(pool: &SqlitePool) {
+        sqlx::query(
+            r#"CREATE TABLE comment_logs (
+                id TEXT PRIMARY KEY,
+                youtube_id TEXT UNIQUE NOT NULL,
+                message TEXT NOT NULL CHECK(length(message) <= 10),
+                author_name TEXT NOT NULL,
+                author_channel_id TEXT NOT NULL,
+                author_image_url TEXT,
+                is_owner BOOLEAN NOT NULL DEFAULT 0,
+                is_moderator BOOLEAN NOT NULL DEFAULT 0,
+                is_member BOOLEAN NOT NULL DEFAULT 0,
+                message_type TEXT NOT NULL,
+                message_data TEXT,
+                published_at TEXT NOT NULL
+            )"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_with_check_constraint_violation() {
+        // CHECK制約違反があっても、INSERT OR IGNOREにより無視される
+        // 有効な行のみ保存されることを確認
+        let pool = create_test_pool().await;
+        create_test_table_with_check(&pool).await;
+
+        let messages = vec![
+            create_test_message("msg1", "Short"),                   // OK: 5文字
+            create_test_message("msg2", "This is way too long"),    // NG: 21文字 > 10
+            create_test_message("msg3", "Valid"),                   // OK: 5文字
+        ];
+
+        save_comments_to_db(&pool, &messages).await;
+
+        // INSERT OR IGNORE により、CHECK制約違反の行はスキップされる
+        // 有効な2件のみ保存されること
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 2);
+
+        // 有効なメッセージが保存されていること
+        let msg1: (String,) = sqlx::query_as("SELECT message FROM comment_logs WHERE id = 'msg1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(msg1.0, "Short");
+
+        let msg3: (String,) = sqlx::query_as("SELECT message FROM comment_logs WHERE id = 'msg3'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(msg3.0, "Valid");
+
+        // CHECK制約違反のメッセージは保存されていないこと
+        let msg2_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM comment_logs WHERE id = 'msg2'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(msg2_count.0, 0);
     }
 }

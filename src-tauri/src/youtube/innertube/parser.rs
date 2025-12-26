@@ -532,6 +532,16 @@ fn parse_amount(text: &str) -> (String, String) {
 mod tests {
     use super::*;
     use crate::youtube::innertube::types::*;
+    use std::sync::Mutex as StdMutex;
+
+    /// グローバルキャッシュを変更するテストを直列化するためのミューテックス
+    /// 並列テスト実行時のフレーク防止
+    static CACHE_TEST_MUTEX: StdMutex<()> = StdMutex::new(());
+
+    /// ミューテックスをロック（poisoned状態からも回復）
+    fn lock_cache_test_mutex() -> std::sync::MutexGuard<'static, ()> {
+        CACHE_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     #[test]
     fn test_parse_amount() {
@@ -1085,15 +1095,18 @@ mod tests {
     }
 
     // ========================================
-    // LRUキャッシュテスト
+    // LRUキャッシュテスト（直列化）
     // ========================================
 
     #[test]
     fn test_emoji_cache_size_limit() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
         // キャッシュをクリア
         clear_emoji_cache();
 
-        // 最大サイズ + 1 個のエントリを追加
+        // 最大サイズ + 10 個のエントリを追加
         for i in 0..(EMOJI_CACHE_MAX_SIZE + 10) {
             let shortcut = format!(":_test{}:", i);
             let emoji_info = EmojiInfo {
@@ -1133,6 +1146,9 @@ mod tests {
 
     #[test]
     fn test_emoji_cache_lru_update() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
         // キャッシュをクリア
         clear_emoji_cache();
 
@@ -1161,6 +1177,128 @@ mod tests {
             assert!(cache.get(":_lru0:").is_some());
             assert!(cache.get(":_lru1:").is_some());
             assert!(cache.get(":_lru2:").is_some());
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
+    #[test]
+    fn test_convert_text_with_emoji_cache_mixed() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュをクリア
+        clear_emoji_cache();
+
+        // テスト用の絵文字をキャッシュに登録
+        let test_emoji = EmojiInfo {
+            emoji_id: "test_smile".to_string(),
+            shortcuts: vec![":_smile:".to_string()],
+            image: EmojiImage {
+                thumbnails: vec![EmojiThumbnail {
+                    url: "https://example.com/smile.png".to_string(),
+                    width: 24,
+                    height: 24,
+                }],
+            },
+            is_custom_emoji: true,
+        };
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            cache.put(":_smile:".to_string(), test_emoji);
+        }
+
+        // テキスト + 絵文字 + テキストの混合入力
+        let result = convert_text_with_emoji_cache("Hello :_smile: World");
+
+        // 結果の検証: [Text("Hello "), Emoji, Text(" World")]
+        assert_eq!(result.len(), 3, "Should have 3 runs");
+
+        // 1つ目: テキスト "Hello "
+        match &result[0] {
+            MessageRun::Text { text } => assert_eq!(text, "Hello "),
+            _ => panic!("First run should be Text"),
+        }
+
+        // 2つ目: 絵文字
+        match &result[1] {
+            MessageRun::Emoji { emoji } => {
+                assert_eq!(emoji.emoji_id, "test_smile");
+            }
+            _ => panic!("Second run should be Emoji"),
+        }
+
+        // 3つ目: テキスト " World"
+        match &result[2] {
+            MessageRun::Text { text } => assert_eq!(text, " World"),
+            _ => panic!("Third run should be Text"),
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
+    #[test]
+    fn test_convert_text_with_emoji_cache_miss() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュをクリア
+        clear_emoji_cache();
+
+        // ダミーの絵文字を1つ登録（キャッシュが空だと早期リターンするため）
+        let dummy_emoji = EmojiInfo {
+            emoji_id: "dummy".to_string(),
+            shortcuts: vec![":_dummy:".to_string()],
+            image: EmojiImage { thumbnails: vec![] },
+            is_custom_emoji: true,
+        };
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            cache.put(":_dummy:".to_string(), dummy_emoji);
+        }
+
+        // キャッシュにない絵文字ショートカットはテキストのまま
+        let result = convert_text_with_emoji_cache("Hello :_unknown: World");
+
+        // 結果の検証: [Text("Hello "), Text(":_unknown:"), Text(" World")]
+        assert_eq!(result.len(), 3, "Should have 3 runs");
+
+        match &result[0] {
+            MessageRun::Text { text } => assert_eq!(text, "Hello "),
+            _ => panic!("First run should be Text"),
+        }
+
+        match &result[1] {
+            MessageRun::Text { text } => assert_eq!(text, ":_unknown:"),
+            _ => panic!("Second run should be Text (cache miss)"),
+        }
+
+        match &result[2] {
+            MessageRun::Text { text } => assert_eq!(text, " World"),
+            _ => panic!("Third run should be Text"),
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
+    #[test]
+    fn test_convert_text_with_empty_cache() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュを空にする
+        clear_emoji_cache();
+
+        // キャッシュが空の場合、テキストはそのまま返される
+        let result = convert_text_with_emoji_cache("Hello :_emoji: World");
+
+        // 結果の検証: [Text("Hello :_emoji: World")]（キャッシュ空→早期リターン）
+        assert_eq!(result.len(), 1, "Should have 1 run when cache is empty");
+
+        match &result[0] {
+            MessageRun::Text { text } => assert_eq!(text, "Hello :_emoji: World"),
+            _ => panic!("Should be Text"),
         }
 
         // クリーンアップ

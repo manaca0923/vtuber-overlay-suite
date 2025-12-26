@@ -38,27 +38,46 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 }
 
 /// チャンクをトランザクション内で保存（成功時true、失敗時false）
+///
+/// INSERT OR IGNOREを使用しているため、重複エラーは発生しない。
+/// しかし、テーブル不存在やディスクフル等の致命的エラーが発生した場合は
+/// フォールバック処理を行うためfalseを返す。
 async fn save_chunk_with_transaction(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
     // トランザクションを開始
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(e) => {
-            log::debug!("Failed to start transaction: {:?}", e);
+            log::warn!("Failed to start transaction: {:?}", e);
             return false;
         }
     };
 
+    let mut error_count = 0;
     for msg in messages {
         if let Err(e) = insert_comment(&mut *tx, msg).await {
-            log::debug!("Failed to insert comment in transaction: {:?}", e);
-            // INSERT OR IGNOREなので重複エラーは発生しないはずだが、
-            // 他のエラー（disk full等）の場合は続行
+            error_count += 1;
+            // INSERT OR IGNOREなので重複エラーは発生しないはず
+            // エラーが発生した場合は致命的な問題（テーブル不存在等）
+            log::warn!("Failed to insert comment in transaction: {:?}", e);
         }
+    }
+
+    // 致命的エラーが発生した場合はロールバックしてフォールバック
+    if error_count > 0 {
+        log::warn!(
+            "Transaction had {} errors, rolling back for fallback",
+            error_count
+        );
+        // ロールバック（dropで自動的に行われるが明示的に）
+        if let Err(e) = tx.rollback().await {
+            log::debug!("Rollback failed (may already be rolled back): {:?}", e);
+        }
+        return false;
     }
 
     // コミット
     if let Err(e) = tx.commit().await {
-        log::debug!("Failed to commit transaction: {:?}", e);
+        log::warn!("Failed to commit transaction: {:?}", e);
         return false;
     }
 
@@ -140,6 +159,7 @@ where
 mod tests {
     use super::*;
     use chrono::Utc;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     fn create_test_message(id: &str, message: &str) -> ChatMessage {
         ChatMessage {
@@ -158,21 +178,17 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_save_empty_batch_is_noop() {
-        // in-memoryデータベースを作成
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-
-        // 空のバッチを保存（エラーなく完了すること）
-        save_comments_to_db(&pool, &[]).await;
+    /// 単一接続のin-memoryプールを作成（DDL/DMLが同一DBで実行されることを保証）
+    async fn create_test_pool() -> SqlitePool {
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap()
     }
 
-    #[tokio::test]
-    async fn test_save_comments_batch() {
-        // in-memoryデータベースを作成
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-
-        // comment_logsテーブルを作成
+    /// テスト用のcomment_logsテーブルを作成
+    async fn create_test_table(pool: &SqlitePool) {
         sqlx::query(
             r#"CREATE TABLE comment_logs (
                 id TEXT PRIMARY KEY,
@@ -189,21 +205,31 @@ mod tests {
                 published_at TEXT NOT NULL
             )"#,
         )
-        .execute(&pool)
+        .execute(pool)
         .await
         .unwrap();
+    }
 
-        // テストメッセージを作成
+    #[tokio::test]
+    async fn test_save_empty_batch_is_noop() {
+        let pool = create_test_pool().await;
+        // テーブルがなくても空バッチは即座にリターン
+        save_comments_to_db(&pool, &[]).await;
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_batch() {
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
+
         let messages = vec![
             create_test_message("msg1", "Hello"),
             create_test_message("msg2", "World"),
             create_test_message("msg3", "Test"),
         ];
 
-        // バッチ保存
         save_comments_to_db(&pool, &messages).await;
 
-        // 保存されたレコード数を確認
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
             .fetch_one(&pool)
             .await
@@ -213,38 +239,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_comments_ignores_duplicates() {
-        // in-memoryデータベースを作成
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
 
-        // comment_logsテーブルを作成
-        sqlx::query(
-            r#"CREATE TABLE comment_logs (
-                id TEXT PRIMARY KEY,
-                youtube_id TEXT UNIQUE NOT NULL,
-                message TEXT NOT NULL,
-                author_name TEXT NOT NULL,
-                author_channel_id TEXT NOT NULL,
-                author_image_url TEXT,
-                is_owner BOOLEAN NOT NULL DEFAULT 0,
-                is_moderator BOOLEAN NOT NULL DEFAULT 0,
-                is_member BOOLEAN NOT NULL DEFAULT 0,
-                message_type TEXT NOT NULL,
-                message_data TEXT,
-                published_at TEXT NOT NULL
-            )"#,
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        // 同じIDのメッセージを含むバッチを作成
         let messages = vec![
             create_test_message("msg1", "First"),
             create_test_message("msg1", "Duplicate"), // 重複ID
             create_test_message("msg2", "Second"),
         ];
 
-        // バッチ保存（重複は無視される）
         save_comments_to_db(&pool, &messages).await;
 
         // 重複が無視されて2件のみ保存されること
@@ -260,5 +263,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(msg.0, "First");
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_chunk_boundary() {
+        // BATCH_CHUNK_SIZE + 1 件のメッセージでチャンク境界をテスト
+        let pool = create_test_pool().await;
+        create_test_table(&pool).await;
+
+        let messages: Vec<ChatMessage> = (0..=BATCH_CHUNK_SIZE)
+            .map(|i| create_test_message(&format!("msg{}", i), &format!("Message {}", i)))
+            .collect();
+
+        save_comments_to_db(&pool, &messages).await;
+
+        // 全件保存されていること
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, (BATCH_CHUNK_SIZE + 1) as i64);
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_fallback_on_missing_table() {
+        // テーブルがない場合、トランザクション失敗→フォールバック→個別も失敗
+        // エラーログは出るが、パニックせず完了すること
+        let pool = create_test_pool().await;
+        // テーブルを作成しない
+
+        let messages = vec![
+            create_test_message("msg1", "Hello"),
+            create_test_message("msg2", "World"),
+        ];
+
+        // パニックしないことを確認（エラーはログに出力される）
+        save_comments_to_db(&pool, &messages).await;
     }
 }

@@ -1353,6 +1353,24 @@ window.addEventListener('pageshow', (event) => {
 - 通常ブラウザで戻る/進むした場合の動作を手動QAで確認
 - OBSブラウザソースではbfcacheは使われない
 
+### 4. save_comments_to_dbの戻り値構造化（設計判断）
+- 現在: `save_comments_to_db`は`()`を返し、呼び出し元に成功/失敗/スキップを通知しない
+- 問題: 2s予算超過でサイレントにメッセージをドロップ（データ損失リスク）
+- 対応案:
+  - `{ saved: usize, failed: usize, skipped: usize }`を返す
+  - 予算を設定可能に（メッセージ数/チャンク数に比例）
+  - スキップ発生時は呼び出し元でリキュー可能に
+- 現状はリアルタイム性を優先し、本番運用後にフィードバックを収集
+
+### 5. busy_timeoutのタイムアウト保証の限界（設計判断）
+- 現在: `busy_timeout`はロック待ち時間のみ制限
+- 問題: 遅いディスクI/Oで2s保証が破れる可能性
+- 対応案:
+  - ドキュメントで「ロック待ちのみ制限」を明記
+  - または`spawn_blocking` + `timeout`でキャンセル可能に
+  - SQLite interrupt/progress handlerの使用を検討
+- 優先度: 低（遅いディスクI/Oは稀なケース）
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

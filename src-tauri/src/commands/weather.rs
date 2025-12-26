@@ -16,12 +16,28 @@ use crate::AppState;
 /// メモリにAPIキーがない場合、keyringから読み込んでメモリにセットする。
 /// これにより、起動時のkeyring復元が失敗した場合でも、
 /// 天気取得時に自動的にリカバリされる。
-async fn ensure_api_key_synced(state: &AppState) {
-    if !state.weather.has_api_key().await {
-        if let Ok(api_key) = keyring::get_weather_api_key() {
+///
+/// # Returns
+/// - `Ok(true)`: keyringにAPIキーが存在する
+/// - `Ok(false)`: keyringにAPIキーが存在しない
+/// - `Err`: keyringアクセスエラー
+///
+/// 呼び出し側でkeyringの結果を再利用することで、二重アクセスを防止する。
+async fn ensure_api_key_synced(state: &AppState) -> Result<bool, keyring::KeyringError> {
+    // メモリにキーがある場合、keyringへのアクセスをスキップ
+    if state.weather.has_api_key().await {
+        return Ok(true);
+    }
+
+    // keyringからAPIキーを取得
+    match keyring::get_weather_api_key() {
+        Ok(api_key) => {
             state.weather.set_api_key(api_key).await;
             log::info!("Weather API key synced from keyring to memory (auto-recovery)");
+            Ok(true)
         }
+        Err(keyring::KeyringError::NotFound) => Ok(false),
+        Err(e) => Err(e),
     }
 }
 
@@ -46,15 +62,11 @@ pub async fn set_weather_api_key(
 /// UIが「設定済み」を表示するタイミングでメモリにもキーがロードされる。
 #[tauri::command]
 pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
-    // keyringから確認し、必要に応じてメモリと同期
-    ensure_api_key_synced(&state).await;
-
-    // keyringに存在するかを返す
-    match keyring::get_weather_api_key() {
-        Ok(_) => Ok(true),
-        Err(keyring::KeyringError::NotFound) => Ok(false),
-        Err(e) => Err(e.to_string()),
-    }
+    // ensure_api_key_syncedがkeyringの結果を返すので再利用
+    // 二重keyringアクセスを防止
+    ensure_api_key_synced(&state)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 都市名を設定
@@ -75,8 +87,10 @@ pub async fn get_weather_city(state: State<'_, AppState>) -> Result<String, Stri
 /// 起動時のkeyring復元失敗に備え、取得前にkeyringからAPIキーを同期する。
 #[tauri::command]
 pub async fn get_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
-    // keyringからの自動復元を試みる
-    ensure_api_key_synced(&state).await;
+    // keyringからの自動復元を試みる（エラーは無視せず伝播）
+    ensure_api_key_synced(&state)
+        .await
+        .map_err(|e| e.to_string())?;
     state.weather.get_weather().await.map_err(|e| e.to_string())
 }
 
@@ -85,8 +99,10 @@ pub async fn get_weather(state: State<'_, AppState>) -> Result<WeatherData, Stri
 /// 起動時のkeyring復元失敗に備え、取得前にkeyringからAPIキーを同期する。
 #[tauri::command]
 pub async fn fetch_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
-    // keyringからの自動復元を試みる
-    ensure_api_key_synced(&state).await;
+    // keyringからの自動復元を試みる（エラーは無視せず伝播）
+    ensure_api_key_synced(&state)
+        .await
+        .map_err(|e| e.to_string())?;
     // キャッシュをクリアしてから取得（get_weatherが新規取得＆キャッシュ保存を行う）
     state.weather.clear_cache().await;
     state.weather.get_weather().await.map_err(|e| e.to_string())
@@ -104,8 +120,10 @@ pub async fn broadcast_weather_update(
     state: State<'_, AppState>,
     force_refresh: Option<bool>,
 ) -> Result<(), String> {
-    // keyringからの自動復元を試みる
-    ensure_api_key_synced(&state).await;
+    // keyringからの自動復元を試みる（エラーは無視せず伝播）
+    ensure_api_key_synced(&state)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let weather_data = if force_refresh.unwrap_or(false) {
         // 強制リフレッシュ: キャッシュをクリアしてから取得

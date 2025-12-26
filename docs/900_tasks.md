@@ -888,6 +888,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
 
+- [ ] **天気API keyringアクセスのspawn_blocking検討** (PR#57)
+  - 現在: `ensure_api_key_synced()`がasyncコンテキストで直接keyringを呼び出し
+  - 問題: OS keyringへのアクセスはブロッキング呼び出しであり、UIスレッドをブロックする可能性
+  - 対応案:
+    - `tauri::async_runtime::spawn_blocking`でラップ
+    - YouTubeのkeyring実装（PR#26）と同様のパターンを適用
+    - `Result<Option<String>, String>`で結果をスレッド間で受け渡し
+  - 対象ファイル: `src-tauri/src/commands/weather.rs`
+  - 優先度: 低（現状の同期呼び出しでも問題は発生していないが、高レイテンシ環境で影響の可能性）
+
 - [x] **SQLITE_BUSYリトライ/backoff** (PR#55, PR#56で対応済み)
   - ~~現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応~~
   - ~~問題: 高負荷時にトランザクション開始/コミットが失敗する可能性~~

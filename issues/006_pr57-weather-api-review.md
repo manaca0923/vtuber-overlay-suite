@@ -490,6 +490,52 @@ async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, Weathe
 
 ---
 
+### 14. keyringの二重アクセス問題（Concrete fix）
+
+**問題**:
+`has_weather_api_key`で`ensure_api_key_synced`を呼び、その後再度`keyring::get_weather_api_key()`を呼んでいた。OS keyringへの二重アクセスが発生し、システムプロンプト（macOSの場合キーチェーンアクセス許可ダイアログ等）が複数回表示される可能性があった。
+
+**解決策**:
+```rust
+// Before: ensure_api_key_syncedで同期し、再度keyringにアクセス
+async fn ensure_api_key_synced(state: &AppState) {
+    if !state.weather.has_api_key().await {
+        if let Ok(api_key) = keyring::get_weather_api_key() { /* ... */ }
+    }
+}
+
+#[tauri::command]
+pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    ensure_api_key_synced(&state).await;  // 1回目のkeyringアクセス
+    match keyring::get_weather_api_key() { /* ... */ }  // 2回目のkeyringアクセス
+}
+
+// After: ensure_api_key_syncedから結果を返し、再利用
+async fn ensure_api_key_synced(state: &AppState) -> Result<bool, keyring::KeyringError> {
+    if state.weather.has_api_key().await {
+        return Ok(true);  // メモリにある場合はkeyringスキップ
+    }
+    match keyring::get_weather_api_key() {
+        Ok(api_key) => { /* sync */ Ok(true) }
+        Err(keyring::KeyringError::NotFound) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    // 結果を再利用、keyringアクセスは1回のみ
+    ensure_api_key_synced(&state).await.map_err(|e| e.to_string())
+}
+```
+
+**教訓**:
+- ヘルパー関数でOSリソースにアクセスする場合、結果を返して呼び出し側で再利用する
+- OS keyringアクセスは高コスト（ダイアログ表示、I/O待ち）なので最小化する
+- メモリキャッシュがある場合は、まずメモリを確認してからOS呼び出しをスキップする
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -506,3 +552,4 @@ async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, Weathe
 12. **ブロードキャスト時の強制リフレッシュ**: 設定変更後に確実に最新データを送信できるオプションを提供
 13. **全エントリポイントでの永続ストレージ同期**: UIを開かなくても呼ばれるコマンドにも同期ロジックを入れる
 14. **RwLockとasync**: ロックガードをawait境界をまたいで保持しない。データをcloneして即座にdrop
+15. **OSリソースアクセスの最小化**: keyring等のOS呼び出しはヘルパー関数から結果を返し、再利用する

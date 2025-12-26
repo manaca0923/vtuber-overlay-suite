@@ -155,8 +155,12 @@ impl WeatherClient {
     /// この関数は都市名を引数として受け取ることで、
     /// 都市の二重読み取りによる競合状態を防止します。
     async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, WeatherError> {
-        let api_key = self.api_key.read().await;
-        let api_key = api_key.as_ref().ok_or(WeatherError::ApiKeyNotConfigured)?;
+        // APIキーをcloneしてロックを即座に解放
+        // ネットワークリクエスト中にset_api_keyがブロックされないようにする
+        let api_key = {
+            let guard = self.api_key.read().await;
+            guard.as_ref().ok_or(WeatherError::ApiKeyNotConfigured)?.clone()
+        };
 
         if city.is_empty() {
             return Err(WeatherError::CityNotConfigured);
@@ -169,7 +173,7 @@ impl WeatherClient {
             .get(OPENWEATHERMAP_API_URL)
             .query(&[
                 ("q", city),
-                ("appid", api_key),
+                ("appid", &api_key),
                 ("units", "metric"), // 摂氏
                 ("lang", "ja"),      // 日本語
             ])

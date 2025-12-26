@@ -457,6 +457,39 @@ pub async fn broadcast_weather_update(...) -> Result<(), String> {
 
 ---
 
+### 13. async await中のRwLockガード保持（Concrete fix）
+
+**問題**:
+`fetch_weather_for_city`で`api_key`のread lockを取得した後、`.send().await`のネットワークリクエスト中もロックを保持していた。これにより、遅いリクエスト中に`set_api_key`がブロックされる。
+
+**解決策**:
+```rust
+// Before: ロックをawait中も保持
+async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, WeatherError> {
+    let api_key = self.api_key.read().await;
+    let api_key = api_key.as_ref().ok_or(WeatherError::ApiKeyNotConfigured)?;
+    // ... await中もロックを保持 ...
+    let response = self.client.get(...).send().await?;
+}
+
+// After: cloneしてロックを即座に解放
+async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, WeatherError> {
+    let api_key = {
+        let guard = self.api_key.read().await;
+        guard.as_ref().ok_or(WeatherError::ApiKeyNotConfigured)?.clone()
+    };
+    // ロックは解放済み、awaitは安全
+    let response = self.client.get(...).send().await?;
+}
+```
+
+**教訓**:
+- RwLockのガードをasync await境界をまたいで保持しない
+- ネットワークI/O前に必要なデータをcloneしてガードをdrop
+- Stringなど小さなデータはcloneのコストより並行性を優先
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -472,3 +505,4 @@ pub async fn broadcast_weather_update(...) -> Result<(), String> {
 11. **TTLとキャッシュヒット条件の一致**: TTL表示はキャッシュヒット条件と同じ条件で判定すること
 12. **ブロードキャスト時の強制リフレッシュ**: 設定変更後に確実に最新データを送信できるオプションを提供
 13. **全エントリポイントでの永続ストレージ同期**: UIを開かなくても呼ばれるコマンドにも同期ロジックを入れる
+14. **RwLockとasync**: ロックガードをawait境界をまたいで保持しない。データをcloneして即座にdrop

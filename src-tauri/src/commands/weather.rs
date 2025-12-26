@@ -6,24 +6,29 @@
 
 use tauri::State;
 
+use crate::keyring;
 use crate::server::types::{WeatherUpdatePayload, WsMessage};
 use crate::weather::WeatherData;
 use crate::AppState;
 
-/// 天気APIキーを設定
+/// 天気APIキーを設定（keyringに保存 + メモリにセット）
 #[tauri::command]
 pub async fn set_weather_api_key(
     state: State<'_, AppState>,
     api_key: String,
 ) -> Result<(), String> {
+    // keyringに保存（永続化）
+    keyring::save_weather_api_key(&api_key).map_err(|e| e.to_string())?;
+
+    // メモリにもセット（即時利用可能に）
     state.weather.set_api_key(api_key).await;
     Ok(())
 }
 
-/// 天気APIキーが設定されているか確認
+/// 天気APIキーが設定されているか確認（keyringから確認）
 #[tauri::command]
-pub async fn has_weather_api_key(state: State<'_, AppState>) -> Result<bool, String> {
-    Ok(state.weather.has_api_key().await)
+pub async fn has_weather_api_key(_state: State<'_, AppState>) -> Result<bool, String> {
+    keyring::has_weather_api_key().map_err(|e| e.to_string())
 }
 
 /// 都市名を設定

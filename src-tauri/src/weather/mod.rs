@@ -119,6 +119,8 @@ impl WeatherClient {
 
     /// 天気情報を取得（キャッシュ優先）
     pub async fn get_weather(&self) -> Result<WeatherData, WeatherError> {
+        // 一度だけ都市を読み取り、同じ値をリクエストとキャッシュキーに使用
+        // これにより都市変更時の競合状態を防止
         let city = self.city.read().await.clone();
 
         // キャッシュをチェック（都市名も検証）
@@ -126,21 +128,32 @@ impl WeatherClient {
             return Ok(cached);
         }
 
-        // APIから取得
-        let data = self.fetch_weather().await?;
+        // APIから取得（同じ都市名を渡す）
+        let data = self.fetch_weather_for_city(&city).await?;
 
-        // キャッシュに保存（都市名も保存）
+        // キャッシュに保存（同じ都市名を使用）
         self.cache.set(data.clone(), city).await;
 
         Ok(data)
     }
 
     /// 天気情報を強制的に取得（キャッシュ無視）
+    ///
+    /// 注意: この関数は現在の都市設定を使用します。
+    /// 競合状態を避けるため、内部では`fetch_weather_for_city`を使用しています。
     pub async fn fetch_weather(&self) -> Result<WeatherData, WeatherError> {
+        let city = self.city.read().await.clone();
+        self.fetch_weather_for_city(&city).await
+    }
+
+    /// 指定された都市の天気情報を取得（内部用）
+    ///
+    /// この関数は都市名を引数として受け取ることで、
+    /// 都市の二重読み取りによる競合状態を防止します。
+    async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, WeatherError> {
         let api_key = self.api_key.read().await;
         let api_key = api_key.as_ref().ok_or(WeatherError::ApiKeyNotConfigured)?;
 
-        let city = self.city.read().await;
         if city.is_empty() {
             return Err(WeatherError::CityNotConfigured);
         }
@@ -151,7 +164,7 @@ impl WeatherClient {
             .client
             .get(OPENWEATHERMAP_API_URL)
             .query(&[
-                ("q", city.as_str()),
+                ("q", city),
                 ("appid", api_key),
                 ("units", "metric"), // 摂氏
                 ("lang", "ja"),      // 日本語

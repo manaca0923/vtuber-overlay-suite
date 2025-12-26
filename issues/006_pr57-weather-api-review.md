@@ -190,6 +190,75 @@ let client = Client::builder()
 
 ---
 
+### 6. 都市の二重読み取り競合（高リスク・追加指摘）
+
+**問題**:
+`get_weather()`で都市を読み取り、`fetch_weather()`で再度都市を読み取っていた。都市変更がこの間に発生すると、フェッチしたデータが古い都市のキャッシュキーで保存され、不整合が発生する。
+
+**解決策**:
+```rust
+// Before: 都市を複数回読み取り（競合の可能性）
+pub async fn get_weather(&self) -> Result<WeatherData, WeatherError> {
+    let city = self.city.read().await.clone();
+    // ... cache check
+    let data = self.fetch_weather().await?;  // fetch_weatherで再度cityを読む
+    self.cache.set(data.clone(), city).await;  // 最初のcityでキャッシュ
+}
+
+// After: 都市を一度だけ読み取り、同じ値を使用
+pub async fn get_weather(&self) -> Result<WeatherData, WeatherError> {
+    let city = self.city.read().await.clone();
+    // ... cache check
+    let data = self.fetch_weather_for_city(&city).await?;  // 同じcityを渡す
+    self.cache.set(data.clone(), city).await;  // 同じcityでキャッシュ
+}
+
+// 内部関数で都市を引数として受け取る
+async fn fetch_weather_for_city(&self, city: &str) -> Result<WeatherData, WeatherError> {
+    // cityを直接使用（再読み取りしない）
+}
+```
+
+**教訓**:
+- 並行処理で複数回の状態読み取りがある場合、競合状態を考慮する
+- 一度読み取った値を後続の処理で一貫して使用することで競合を防止
+- 内部関数に値を渡すパターンで、読み取り回数を最小化する
+
+---
+
+### 7. 天気APIキーのkeyring保存（高リスク・追加指摘）
+
+**問題**:
+天気APIキーがメモリにのみ保存され、アプリ再起動で失われていた。CLAUDE.mdのセキュリティガイドライン（「APIキーはOSセキュアストレージに保存」）に違反。
+
+**解決策**:
+```rust
+// keyring.rsに天気APIキー用の関数を追加
+pub fn save_weather_api_key(api_key: &str) -> Result<(), KeyringError>;
+pub fn get_weather_api_key() -> Result<String, KeyringError>;
+pub fn has_weather_api_key() -> Result<bool, KeyringError>;
+
+// commands/weather.rsでkeyringを使用
+pub async fn set_weather_api_key(...) -> Result<(), String> {
+    keyring::save_weather_api_key(&api_key).map_err(|e| e.to_string())?;
+    state.weather.set_api_key(api_key).await;
+    Ok(())
+}
+
+// lib.rsで起動時にkeyringからAPIキーを復元
+if let Ok(api_key) = keyring::get_weather_api_key() {
+    weather_clone.set_api_key(api_key).await;
+    log::info!("Weather API key restored from keyring");
+}
+```
+
+**教訓**:
+- 新しい外部API連携を追加する際は、既存のセキュリティパターン（keyring使用）に従う
+- APIキーは必ず永続化し、再起動後も利用可能にする
+- セキュリティに関するガイドライン（CLAUDE.md等）を常に参照する
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -198,3 +267,5 @@ let client = Client::builder()
 4. **API連携時**: HTTPステータスコードごとに適切なエラー型を定義し、ログを出力する
 5. **HTTPタイムアウト**: 外部APIへのリクエストには必ずタイムアウトを設定（10秒推奨）
 6. **テスト**: 境界条件（TTL期限切れ、空データ、エッジケース、競合状態）を網羅する
+7. **並行処理の状態読み取り**: 複数回の読み取りは競合を招くため、一度だけ読み取って使い回す
+8. **APIキーのセキュリティ**: 新規API連携時は必ずkeyringパターンに従い永続化する

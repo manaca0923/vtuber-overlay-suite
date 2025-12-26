@@ -98,11 +98,25 @@ pub fn run() {
 
       Ok(())
     })
-    .manage(AppState {
-      poller: Arc::new(Mutex::new(None)),
-      server: server_state_for_manage,
-      db: db_pool,
-      weather: Arc::new(weather::WeatherClient::new()),
+    .manage({
+      // 天気クライアントを作成し、keyringからAPIキーを読み込む
+      let weather_client = Arc::new(weather::WeatherClient::new());
+
+      // 起動時にkeyringから天気APIキーを復元
+      if let Ok(api_key) = keyring::get_weather_api_key() {
+        let weather_clone = Arc::clone(&weather_client);
+        tauri::async_runtime::block_on(async move {
+          weather_clone.set_api_key(api_key).await;
+          log::info!("Weather API key restored from keyring");
+        });
+      }
+
+      AppState {
+        poller: Arc::new(Mutex::new(None)),
+        server: server_state_for_manage,
+        db: db_pool,
+        weather: weather_client,
+      }
     })
     .invoke_handler({
       // デバッグビルドではtest_innertube_connectionを含む

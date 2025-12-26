@@ -1931,6 +1931,68 @@ log::warn!(
 - スキップの原因（タイムアウト、リトライ超過等）と影響（件数）を明確にログ出力
 - ログレベルはwarnを使用し、運用時に検知可能にする
 
+### 48. beforeunloadがbfcacheを無効化する問題（高リスク指摘）
+
+**指摘内容**:
+- `beforeunload`イベントで常に`cleanup()`を呼ぶと、bfcache対応ブラウザでもbfcacheが無効化される
+- `pagehide`で`event.persisted`をチェックしてもbeforeunloadが先に発火するため意味がない
+- bfcacheからの復元後にシャットダウン状態のまま再接続できなくなる
+
+**対応**:
+```javascript
+// Before（問題あり）:
+window.addEventListener('pagehide', (event) => {
+  if (!event.persisted) { cleanup(); }
+});
+window.addEventListener('beforeunload', cleanup); // ← bfcacheを無効化
+
+// After（修正済み）:
+window.addEventListener('pagehide', (event) => {
+  // event.persisted=true: bfcacheに保存される → クリーンアップしない
+  // event.persisted=false: 通常のページ離脱（OBS含む） → クリーンアップ
+  if (!event.persisted) {
+    cleanup();
+  }
+});
+// beforeunloadは登録しない（bfcacheを無効化しないため）
+// OBSブラウザソース等のbfcache非対応環境でもpagehide(persisted=false)で確実にクリーンアップ
+```
+
+**今後の対策**:
+- bfcache対応が必要な場合、`beforeunload`でのリソース解放は避ける
+- `pagehide`イベントの`event.persisted`でbfcache判定し、falseの場合のみクリーンアップ
+- bfcache非対応環境（OBS等）では`pagehide`のpersisted=falseで確実にクリーンアップされる
+
+### 49. destroy()後のインスタンスがinertになる問題（高リスク指摘）
+
+**指摘内容**:
+- `UpdateBatcher.destroy()`後、インスタンスはnullにならないが機能しなくなる（inert状態）
+- `pageshow`で`!updateBatcher`チェックでは検出できず、バッチ処理が再開されない
+- `DensityManager`には`isDestroyed()`があるが、`UpdateBatcher`にはなかった
+
+**対応**:
+```javascript
+// UpdateBatcherにisDestroyed()を追加
+destroy() {
+  this.clear();
+  this._destroyed = true;
+}
+
+isDestroyed() {
+  return this._destroyed === true;
+}
+
+// pageshow復元時のチェック
+if (!updateBatcher || updateBatcher.isDestroyed()) {
+  updateBatcher = new UpdateBatcher({ batchInterval: 150 });
+}
+```
+
+**今後の対策**:
+- `destroy()`メソッドを持つクラスには必ず`isDestroyed()`も実装する
+- 外部からインスタンスの状態を確認できるようにする（カプセル化）
+- 復元処理ではnullチェックだけでなく`isDestroyed()`も確認する
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

@@ -396,7 +396,6 @@
       // OBSリロード時などでisShuttingDownがtrueのまま呼ばれる場合に備えてリセット
       // ※ connectWebSocket()が呼ばれる = 接続を意図しているため、シャットダウン状態を解除
       isShuttingDown = false;
-      cleanupCalled = false;
 
       ws = new WebSocket(WS_URL);
 
@@ -530,15 +529,17 @@
 
     // ===== クリーンアップ =====
     // オーバーレイのアンロード/リロード時にタイマーをクリーンアップ
-    // pagehide: 最新ブラウザで推奨（bfcache対応）
-    // beforeunload: OBSブラウザソース等の古いブラウザ向けフォールバック
-    let cleanupCalled = false; // 二重実行防止フラグ
+    //
+    // イベント発火順序と設計:
+    // 1. beforeunload: ページ離脱前に発火（bfcache対応ブラウザでも発火）
+    // 2. pagehide: ページ非表示時に発火（event.persistedでbfcache判定可能）
+    //
+    // bfcache対応のため:
+    // - beforeunloadではcleanupを呼ばない（bfcacheを無効化しないため）
+    // - pagehideでevent.persisted=falseの場合のみcleanup
+    // - OBSブラウザソース等のbfcache非対応環境ではpagehide(persisted=false)で確実にクリーンアップ
 
     function cleanup() {
-      // 二重実行を防止（beforeunload + pagehideの両方が発火する場合）
-      if (cleanupCalled) return;
-      cleanupCalled = true;
-
       // シャットダウンフラグを立てて再接続を防止
       isShuttingDown = true;
 
@@ -565,15 +566,16 @@
 
     window.addEventListener('pagehide', (event) => {
       // bfcacheに保存される場合はcleanupを呼ばない（後でpageshowで復元するため）
-      // ただしOBSブラウザソースではbfcacheは使われないため、常にcleanup
+      // event.persisted=true: bfcacheに保存される → クリーンアップしない
+      // event.persisted=false: 通常のページ離脱（OBS含む） → クリーンアップ
       if (!event.persisted) {
         cleanup();
       }
     });
 
-    // beforeunload: OBSブラウザソース向けフォールバック
-    // cleanup()内で二重実行を防止しているため、pagehideと両方発火しても安全
-    window.addEventListener('beforeunload', cleanup);
+    // 注: beforeunloadはbfcacheを無効化する可能性があるため、cleanupを呼ばない
+    // OBSブラウザソース等のbfcache非対応環境でも、pagehide(persisted=false)で
+    // 確実にクリーンアップされるため問題なし
 
     // bfcache復元時の再接続
     window.addEventListener('pageshow', (event) => {
@@ -581,7 +583,6 @@
         // bfcacheから復元された場合、フラグをリセットして再接続可能にする
         console.log('Page restored from bfcache, reconnecting...');
         isShuttingDown = false;
-        cleanupCalled = false; // 次回のcleanup()を有効にする
         reconnectDelay = 1000;
 
         // ペンディング中の再接続タイマーをクリア（二重接続防止）
@@ -593,14 +594,14 @@
         }
 
         // マネージャーを再作成（destroyされている可能性があるため）
-        // 注: OBSブラウザソースではbfcacheは使われないため、通常このコードは実行されない
-        // DensityManagerのタイマーが停止している場合は再作成
+        // 注: bfcache復元時はbeforeunload/pagehideでcleanupが呼ばれていないため、
+        //     通常はdestroyされていないが、念のためチェック
         if (!densityManager || densityManager.isDestroyed()) {
           densityManager = new DensityManager();
           console.log('DensityManager reinitialized after bfcache restore');
         }
-        // UpdateBatcherも再作成（destroyでpendingUpdatesがクリアされている可能性）
-        if (!updateBatcher) {
+        // UpdateBatcherも再作成（destroyされている場合）
+        if (!updateBatcher || updateBatcher.isDestroyed()) {
           updateBatcher = new UpdateBatcher({ batchInterval: 150 });
           console.log('UpdateBatcher reinitialized after bfcache restore');
         }

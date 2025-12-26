@@ -123,6 +123,15 @@
      */
     destroy() {
       this.clear();
+      this._destroyed = true;
+    }
+
+    /**
+     * インスタンスが破棄されているかを確認
+     * @returns {boolean}
+     */
+    isDestroyed() {
+      return this._destroyed === true;
     }
   }
 

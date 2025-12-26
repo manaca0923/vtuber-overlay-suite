@@ -1160,6 +1160,109 @@ if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
 - 「続行」よりも「安全に終了」を優先
 - フォールバックパスでもリトライパスと同じ厳密さを維持
 
+### 30. deadline-based予算管理とpoisoned connection対応（高リスク指摘）
+
+**指摘内容**:
+1. **acquire後の予算再計算**:
+   - `busy_timeout_ms`が`pool.acquire()`前に計算されていた
+   - acquire待ちに時間がかかると、acquire+busy_timeoutで予算を超過
+   - 例: 残り500msで、acquire=300ms、busy_timeout=500ms → 800ms消費
+
+2. **rollback失敗時のpoisoned connection**:
+   - rollback失敗時も接続をプールに戻していた
+   - 汚染されたトランザクション状態が他の呼び出し元に影響
+   - SQLITE_BUSYが増幅される可能性
+
+3. **busy_timeout復元失敗時のpool poisoning**:
+   - 復元失敗時も接続をプールに戻していた
+   - 短いbusy_timeoutが他の呼び出し元に影響
+
+**対応**:
+
+1. **deadline-based予算管理**:
+```rust
+// Before（問題あり）:
+async fn save_chunk_with_transaction_and_timeout(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    busy_timeout_ms: u64,  // 事前計算された値
+) -> TransactionResult {
+    let mut conn = pool.acquire().await?;  // acquire時間は考慮されない
+    set_busy_timeout(&mut conn, busy_timeout_ms).await?;
+    // ...
+}
+
+// After（修正済み）:
+async fn save_chunk_with_transaction_and_timeout(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    deadline: Instant,  // 絶対的なデッドライン
+) -> TransactionResult {
+    // デッドラインまでの残り時間を計算
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.as_millis() < 50 {
+        return TransactionResult::Busy;
+    }
+
+    // acquire用のタイムアウト（残り時間の半分、最大500ms）
+    let acquire_timeout = Duration::from_millis(
+        (remaining.as_millis() as u64 / 2).min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)
+    );
+
+    let mut conn = match timeout(acquire_timeout, pool.acquire()).await { ... };
+
+    // ★ acquire後に残り時間を再計算（acquire時間を差し引く）
+    let remaining_after_acquire = deadline.saturating_duration_since(Instant::now());
+    if remaining_after_acquire.as_millis() < 50 {
+        return TransactionResult::Busy;
+    }
+
+    let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64)
+        .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS);
+    // ...
+}
+```
+
+2. **TransactionResult::Poisoned追加**:
+```rust
+enum TransactionResult {
+    Success,
+    Busy,
+    OtherError,
+    /// 接続が汚染された状態（rollback失敗等）
+    /// この場合、接続をプールに戻さずに破棄すべき
+    Poisoned,
+}
+
+// rollback失敗時:
+if let Err(rb_err) = tx.rollback().await {
+    log::warn!("Rollback failed after insert error: {:?}", rb_err);
+    return TransactionResult::Poisoned;
+}
+```
+
+3. **conn.detach()によるpoisoned connection排除**:
+```rust
+// Poisoned状態の場合は接続を切り離す
+if result == TransactionResult::Poisoned {
+    log::warn!("Transaction resulted in poisoned connection, detaching from pool");
+    conn.detach();
+    return TransactionResult::OtherError;
+}
+
+// busy_timeout復元失敗時も切り離し
+if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
+    log::warn!("Failed to restore busy_timeout, detaching connection from pool");
+    conn.detach();
+}
+```
+
+**今後の対策**:
+- タイムアウト計算は事前ではなく、操作直前に行う
+- `deadline: Instant`パターンで絶対的な期限を渡す
+- rollback/復元失敗時は`conn.detach()`でプールから排除
+- `TransactionResult::Poisoned`で汚染状態を明示的に表現
+
 ## 未対応（将来対応）
 
 ### 1. EXCLUSIVEトランザクションを使用したデッドロックテスト

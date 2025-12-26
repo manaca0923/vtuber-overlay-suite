@@ -41,6 +41,9 @@ enum TransactionResult {
     Busy,
     /// その他のエラー（リトライ不可）
     OtherError,
+    /// 接続が汚染された状態（rollback失敗等）
+    /// この場合、接続をプールに戻さずに破棄すべき
+    Poisoned,
 }
 
 /// コメントをDBに保存（バッチ処理最適化版）
@@ -154,13 +157,8 @@ async fn save_chunk_with_retry(
         }
         let remaining = total_timeout - elapsed;
 
-        // 残り時間に応じてbusy_timeoutを計算（最大500ms、残り時間を超えない）
-        let busy_timeout_ms = remaining
-            .as_millis()
-            .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS as u128) as u64;
-
-        // busy_timeoutが極端に短い場合はスキップ（50ms未満は無意味）
-        if busy_timeout_ms < 50 {
+        // 残り時間が少なすぎる場合はスキップ（50ms未満は無意味）
+        if remaining.as_millis() < 50 {
             log::warn!(
                 "SQLITE_BUSY: Remaining time ({}ms) too short for retry, giving up",
                 remaining.as_millis()
@@ -168,13 +166,17 @@ async fn save_chunk_with_retry(
             return false;
         }
 
+        // デッドラインを計算して渡す（acquire後に残り時間を再計算するため）
+        let deadline = start_time + total_timeout;
         let result =
-            save_chunk_with_transaction_and_timeout(pool, messages, busy_timeout_ms).await;
+            save_chunk_with_transaction_and_timeout(pool, messages, deadline).await;
 
         match result {
             TransactionResult::Success => return true,
-            TransactionResult::OtherError => {
+            TransactionResult::OtherError | TransactionResult::Poisoned => {
                 // 非SQLITE_BUSYエラー（テーブル不存在など）はリトライしない
+                // Poisonedはsave_chunk_with_transaction_and_timeout内でOtherErrorに変換されるため
+                // ここには到達しないが、網羅性のために明示的に処理
                 return false;
             }
             TransactionResult::Busy => {
@@ -217,12 +219,12 @@ async fn save_chunk_with_retry(
                 let clamped_backoff = backoff_ms.min(remaining_ms.saturating_sub(50));
 
                 log::debug!(
-                    "SQLITE_BUSY: Attempt {}/{} failed (busy_timeout={}ms), retrying after {}ms (elapsed: {}ms)",
+                    "SQLITE_BUSY: Attempt {}/{} failed, retrying after {}ms (elapsed: {}ms, remaining: {}ms)",
                     attempt,
                     MAX_ATTEMPTS,
-                    busy_timeout_ms,
                     clamped_backoff,
-                    elapsed.as_millis()
+                    elapsed.as_millis(),
+                    remaining_ms
                 );
                 sleep(Duration::from_millis(clamped_backoff)).await;
                 backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
@@ -263,19 +265,28 @@ async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
     }
 }
 
-/// busy_timeoutを指定してトランザクション処理を実行
+/// デッドラインを指定してトランザクション処理を実行
 ///
 /// コネクションを取得し、busy_timeoutを設定してからトランザクションを開始する。
 /// これにより、各試行のブロック時間を確実に制限できる。
 ///
+/// ## デッドラインベースの予算管理
+/// `deadline: Instant`を受け取り、pool.acquire()後に残り時間を再計算する。
+/// これにより、acquire時間が予算から差し引かれ、acquire + busy_timeout で
+/// 予算を超過することを防ぐ。
+///
 /// ## pool.acquire()のタイムアウト
-/// pool.acquire()自体が残り予算を超えてブロックしないよう、
+/// pool.acquire()自体がデッドラインを超えてブロックしないよう、
 /// tokio::time::timeoutでラップする。これにより総タイムアウトがend-to-endで強制される。
 ///
 /// ## busy_timeout復元
 /// トランザクション完了後（成功/失敗問わず）、busy_timeoutを元の値に復元する。
 /// 元の値は接続から直接取得するため、プール設定に依存しない。
 /// これにより、プール内の接続が短いタイムアウトを保持しない。
+///
+/// ## 接続のクローズ（汚染防止）
+/// rollback失敗またはbusy_timeout復元失敗時は、接続を明示的にクローズして
+/// プールに戻さない。これにより、汚染された接続が他の書き込みに影響することを防ぐ。
 ///
 /// ## エラーハンドリング
 /// - pool.acquire()タイムアウト → `TransactionResult::Busy`を返す（リトライ可能）
@@ -285,11 +296,26 @@ async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
 async fn save_chunk_with_transaction_and_timeout(
     pool: &SqlitePool,
     messages: &[ChatMessage],
-    busy_timeout_ms: u64,
+    deadline: Instant,
 ) -> TransactionResult {
-    // コネクションを取得（残り予算でタイムアウト）
-    // pool.acquire()が残り予算を超えてブロックしないよう制限
-    let acquire_timeout = Duration::from_millis(busy_timeout_ms);
+    // デッドラインまでの残り時間を計算
+    let now = Instant::now();
+    let remaining = deadline.saturating_duration_since(now);
+
+    // 残り時間が少なすぎる場合はスキップ
+    if remaining.as_millis() < 50 {
+        log::debug!(
+            "Skipping transaction attempt: remaining time ({}ms) too short",
+            remaining.as_millis()
+        );
+        return TransactionResult::Busy;
+    }
+
+    // acquire用のタイムアウト（残り時間の半分、最大500ms）
+    let acquire_timeout_ms = (remaining.as_millis() as u64 / 2).min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS);
+    let acquire_timeout = Duration::from_millis(acquire_timeout_ms);
+
+    // コネクションを取得（デッドラインを考慮したタイムアウト）
     let mut conn = match timeout(acquire_timeout, pool.acquire()).await {
         Ok(Ok(conn)) => conn,
         Ok(Err(e)) => {
@@ -304,11 +330,24 @@ async fn save_chunk_with_transaction_and_timeout(
             // タイムアウト: プール接続待ちが予算を超過
             log::debug!(
                 "Connection acquire timed out after {}ms",
-                busy_timeout_ms
+                acquire_timeout_ms
             );
             return TransactionResult::Busy;
         }
     };
+
+    // acquire後の残り時間を再計算（acquire時間を差し引く）
+    let remaining_after_acquire = deadline.saturating_duration_since(Instant::now());
+    if remaining_after_acquire.as_millis() < 50 {
+        log::debug!(
+            "Skipping transaction: remaining time after acquire ({}ms) too short",
+            remaining_after_acquire.as_millis()
+        );
+        return TransactionResult::Busy;
+    }
+
+    // busy_timeoutをacquire後の残り時間で計算（最大500ms）
+    let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64).min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS);
 
     // 元のbusy_timeoutを取得（復元用）
     // 取得失敗時は復元不能なため、OtherErrorを返して続行しない
@@ -335,13 +374,23 @@ async fn save_chunk_with_transaction_and_timeout(
     // トランザクションを実行
     let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
 
+    // Poisoned状態の場合は接続を切り離す（rollback失敗等）
+    if result == TransactionResult::Poisoned {
+        log::warn!("Transaction resulted in poisoned connection, detaching from pool");
+        conn.detach();
+        return TransactionResult::OtherError; // 呼び出し元にはOtherErrorとして返す
+    }
+
     // busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
     if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
         log::warn!(
-            "Failed to restore busy_timeout to original ({}ms): {:?}",
+            "Failed to restore busy_timeout to original ({}ms): {:?}, detaching connection from pool",
             original_timeout,
             e
         );
+        // 復元失敗時は接続をプールから切り離す（汚染防止）
+        // detach()で接続をプールから切り離し、dropで実際にクローズ
+        conn.detach();
     }
 
     result
@@ -439,17 +488,19 @@ async fn save_chunk_with_transaction_on_conn(
             if is_sqlite_busy_error(&e) {
                 log::debug!("SQLITE_BUSY during insert: {:?}", e);
                 // ロールバック（dropで自動的に行われるが明示的に）
-                // rollback失敗時は接続が汚染されている可能性があるためOtherErrorとして扱う
+                // rollback失敗時は接続が汚染されているためPoisonedを返す
                 if let Err(rb_err) = tx.rollback().await {
                     log::warn!("Rollback failed after BUSY during insert: {:?}", rb_err);
-                    return TransactionResult::OtherError;
+                    return TransactionResult::Poisoned;
                 }
                 return TransactionResult::Busy;
             }
             log::warn!("Insert failed in transaction, rolling back: {:?}", e);
             // ロールバック（dropで自動的に行われるが明示的に）
+            // rollback失敗時は接続が汚染されているためPoisonedを返す
             if let Err(rb_err) = tx.rollback().await {
-                log::debug!("Rollback failed (may already be rolled back): {:?}", rb_err);
+                log::warn!("Rollback failed after insert error: {:?}", rb_err);
+                return TransactionResult::Poisoned;
             }
             return TransactionResult::OtherError;
         }
@@ -938,7 +989,9 @@ mod tests {
         assert_eq!(TransactionResult::Success, TransactionResult::Success);
         assert_eq!(TransactionResult::Busy, TransactionResult::Busy);
         assert_eq!(TransactionResult::OtherError, TransactionResult::OtherError);
+        assert_eq!(TransactionResult::Poisoned, TransactionResult::Poisoned);
         assert_ne!(TransactionResult::Success, TransactionResult::Busy);
+        assert_ne!(TransactionResult::OtherError, TransactionResult::Poisoned);
     }
 
     /// MockDatabaseErrorでエラー判定のテスト用構造体

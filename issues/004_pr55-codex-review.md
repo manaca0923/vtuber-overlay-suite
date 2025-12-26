@@ -339,6 +339,28 @@ it('非数値文字列は最小値にクランプされる', () => {
 - `convert_text_with_emoji_cache`の並行呼び出しを検証
 - `docs/900_tasks.md`に追加済み
 
+## 確認完了項目
+
+### 1. EMOJI_CACHEテストのMutex直列化（parser.rs）
+
+**指摘内容**:
+> "Ensure all tests that mutate `EMOJI_CACHE` are serialized (use the same `CACHE_TEST_MUTEX`) to prevent cross‑test cache pollution/flakiness."
+
+**確認結果**: ✅ 対応済み
+
+EMOJI_CACHEを変更する全8テストが`lock_cache_test_mutex()`を使用していることを確認：
+
+| テスト名 | 行 | Mutex使用 |
+|----------|-----|----------|
+| test_emoji_cache_size_limit | 1131 | ✅ |
+| test_emoji_cache_lru_update | 1177 | ✅ |
+| test_convert_text_with_emoji_cache_mixed | 1216 | ✅ |
+| test_convert_text_with_emoji_cache_miss | 1271 | ✅ |
+| test_convert_text_with_empty_cache | 1315 | ✅ |
+| test_convert_text_evicted_shortcut_stays_as_text | 1338 | ✅ |
+| test_hot_emoji_survives_with_lru | 1433 | ✅ |
+| test_convert_text_with_multibyte_characters | 1493 | ✅ |
+
 ## 参照
 - PR #55: https://github.com/manaca0923/vtuber-overlay-suite/pull/55
 - SQLite busy handling: https://www.sqlite.org/c3ref/busy_timeout.html

@@ -19,8 +19,9 @@ export interface LiveStreamStats {
 }
 
 // Tauri Commands - 天気API
+// 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
 export const setWeatherApiKey = (apiKey: string) =>
-  invoke<void>('set_weather_api_key', { apiKey });
+  invoke<void>('set_weather_api_key', { api_key: apiKey });
 
 export const hasWeatherApiKey = () =>
   invoke<boolean>('has_weather_api_key');
@@ -38,7 +39,7 @@ export const fetchWeather = () =>
   invoke<WeatherData>('fetch_weather');
 
 export const broadcastWeatherUpdate = (forceRefresh?: boolean) =>
-  invoke<void>('broadcast_weather_update', { forceRefresh });
+  invoke<void>('broadcast_weather_update', { force_refresh: forceRefresh });
 
 export const clearWeatherCache = () =>
   invoke<void>('clear_weather_cache');
@@ -48,7 +49,7 @@ export const getWeatherCacheTtl = () =>
 
 // Tauri Commands - KPI/視聴者数
 export const getLiveStreamStats = (videoId: string, useBundledKey: boolean) =>
-  invoke<LiveStreamStats>('get_live_stream_stats', { videoId, useBundledKey });
+  invoke<LiveStreamStats>('get_live_stream_stats', { video_id: videoId, use_bundled_key: useBundledKey });
 
 export const broadcastKpiUpdate = (
   main: number | null,
@@ -56,4 +57,4 @@ export const broadcastKpiUpdate = (
   sub: number | null,
   subLabel: string | null
 ) =>
-  invoke<void>('broadcast_kpi_update', { main, label, sub, subLabel });
+  invoke<void>('broadcast_kpi_update', { main, label, sub, sub_label: subLabel });

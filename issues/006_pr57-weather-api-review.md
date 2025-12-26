@@ -594,6 +594,48 @@ tauri::async_runtime::block_on(async move {
 
 ---
 
+### 16. TypeScript invoke引数のsnake_case必須（High-risk）
+
+**問題**:
+TypeScriptからRustコマンドを呼び出す際、`invoke('command_name', { camelCaseArg: value })`のようにcamelCase引数名を使用していた。Tauriのserde_jsonはデフォルトでsnake_caseを期待するため、引数がRust側に渡らず、実行時エラーまたは予期しない動作が発生していた。
+
+**影響を受けたファイル**:
+- `src/types/weather.ts` - `apiKey`, `forceRefresh`, `videoId`, `useBundledKey`
+- `src/types/commands.ts` - setlist/song関連の引数
+- `src/App.tsx` - `videoId`
+- `src/components/ApiKeySetup.tsx` - `api_key`, `video_id`, `live_chat_id`
+- `src/components/wizard/Wizard.tsx` - `videoId`, `liveChatId`
+- `src/components/wizard/WizardStep1.tsx` - `api_key`
+- `src/components/wizard/WizardStep2.tsx` - `api_key`, `video_id`
+- `src/components/CommentControlPanel.tsx` - `video_id`, `use_bundled_key`, `user_api_key`, `api_key`, `live_chat_id`
+
+**解決策**:
+```typescript
+// Before: camelCase引数（Rust側で認識されない）
+invoke('set_weather_api_key', { apiKey: value });
+invoke('start_unified_polling', {
+  videoId: videoId,
+  useBundledKey: true,
+  userApiKey: apiKey,
+});
+
+// After: snake_case引数（Rust側のパラメータ名と一致）
+invoke('set_weather_api_key', { api_key: value });
+invoke('start_unified_polling', {
+  video_id: videoId,
+  use_bundled_key: true,
+  user_api_key: apiKey,
+});
+```
+
+**教訓**:
+- Tauriのinvoke引数は**必ずsnake_case**でRust側のパラメータ名と一致させる
+- TypeScriptの変数名はcamelCaseのままでよい。オブジェクトのキー名のみsnake_caseにする
+- 新しいTauriコマンドを追加する際は、TypeScript側のinvoke呼び出しを確認すること
+- レビュー時のチェックポイント: `invoke`の第2引数のキー名がすべてsnake_caseか確認
+
+---
+
 ## 今後の注意点
 
 1. **キャッシュ実装時**: TTL値は一箇所で管理し、すべての判定で同じ値を使用する
@@ -612,3 +654,4 @@ tauri::async_runtime::block_on(async move {
 14. **RwLockとasync**: ロックガードをawait境界をまたいで保持しない。データをcloneして即座にdrop
 15. **OSリソースアクセスの最小化**: keyring等のOS呼び出しはヘルパー関数から結果を返し、再利用する
 16. **ブロッキング呼び出しのspawn_blocking**: OS API（keyring等）への呼び出しはasync内で直接呼ばず、spawn_blockingでラップ
+17. **Tauri invoke引数のsnake_case**: TypeScriptからRustコマンドを呼び出す際、引数オブジェクトのキー名は必ずsnake_caseにする

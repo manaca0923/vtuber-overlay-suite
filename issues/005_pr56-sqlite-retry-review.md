@@ -1455,7 +1455,44 @@ let busy_timeout_ms = effective_original
 - 将来的に`Result<u64, sqlx::Error>`に変更し、BUSYならリトライ可能にすることを検討
 - `docs/900_tasks.md`に将来タスクとして記載
 
-### 36. get_busy_timeout/set_busy_timeout失敗時にconn.detach()（高リスク指摘）
+### 36. フォールバックパスの早期リターン時のログレベル昇格（高リスク指摘）
+
+**指摘内容**:
+- `save_chunk_individually`で予算不足やPRAGMA失敗で早期リターンする箇所が`log::debug!`
+- 本番環境のデフォルトログレベルでは見えず、サイレントデータ損失になる
+- スキップされたメッセージ数を運用者が検出できない
+
+**対応箇所**:
+1. 残り時間が50ms未満でスキップ（L560-567）
+2. 接続取得タイムアウト（L581-587）
+3. `get_busy_timeout`失敗（L596-602）
+4. 残り時間（acquire後）が50ms未満（L609-615）
+5. `set_busy_timeout`失敗（L637-644）
+
+**対応**:
+すべての早期リターン箇所を`log::warn!`に昇格し、スキップされたメッセージ数を出力:
+```rust
+// Before（問題あり）:
+log::debug!(
+    "Skipping individual insert fallback: remaining time ({}ms) too short",
+    remaining.as_millis()
+);
+
+// After（修正済み）:
+log::warn!(
+    "Skipping individual insert fallback: remaining time ({}ms) too short, {} messages not saved",
+    remaining.as_millis(),
+    messages.len()
+);
+```
+
+**今後の対策**:
+- データ損失の可能性がある箇所は`log::warn!`以上を使用
+- スキップ件数を含めて運用者が問題を検出できるようにする
+- 途中経過の`log::debug!`と最終結果の`log::warn!`を区別
+- サマリーログに到達しない早期リターンパスに注意
+
+### 37. get_busy_timeout/set_busy_timeout失敗時にconn.detach()（高リスク指摘）
 
 **指摘内容**:
 - `get_busy_timeout`や`set_busy_timeout`が失敗した場合に接続を`detach`せずプールに戻していた

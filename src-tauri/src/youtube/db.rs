@@ -557,10 +557,12 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     let start_time = Instant::now();
 
     // 残り時間が少なすぎる場合はスキップ
+    // warnで出力（本番環境でスキップを検出可能にする）
     if remaining.as_millis() < 50 {
-        log::debug!(
-            "Skipping individual insert fallback: remaining time ({}ms) too short",
-            remaining.as_millis()
+        log::warn!(
+            "Skipping individual insert fallback: remaining time ({}ms) too short, {} messages not saved",
+            remaining.as_millis(),
+            messages.len()
         );
         return;
     }
@@ -577,9 +579,10 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
             return;
         }
         Err(_) => {
-            log::debug!(
-                "Connection acquire for fallback timed out after {}ms",
-                acquire_timeout_ms
+            log::warn!(
+                "Connection acquire for fallback timed out after {}ms, {} messages not saved",
+                acquire_timeout_ms,
+                messages.len()
             );
             return;
         }
@@ -592,8 +595,9 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     let original_timeout = match get_busy_timeout(&mut conn).await {
         Some(timeout) => timeout,
         None => {
-            log::debug!(
-                "Skipping individual insert fallback: failed to get original busy_timeout, detaching connection"
+            log::warn!(
+                "Skipping individual insert fallback: failed to get original busy_timeout, detaching connection, {} messages not saved",
+                messages.len()
             );
             conn.detach();
             return;
@@ -604,9 +608,10 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     // saturating_subでアンダーフローを防止（スケジューラ遅延等でelapsedがremainingを超える可能性）
     let remaining_after_acquire = remaining.saturating_sub(start_time.elapsed());
     if remaining_after_acquire.as_millis() < 50 {
-        log::debug!(
-            "Skipping individual insert fallback: remaining time after acquire ({}ms) too short",
-            remaining_after_acquire.as_millis()
+        log::warn!(
+            "Skipping individual insert fallback: remaining time after acquire ({}ms) too short, {} messages not saved",
+            remaining_after_acquire.as_millis(),
+            messages.len()
         );
         return;
     }
@@ -631,8 +636,9 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     // 設定失敗時は予算を強制できないため即座に終了
     // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
-        log::debug!(
-            "Skipping individual insert fallback: failed to set busy_timeout, detaching connection: {:?}",
+        log::warn!(
+            "Skipping individual insert fallback: failed to set busy_timeout, detaching connection, {} messages not saved: {:?}",
+            messages.len(),
             e
         );
         conn.detach();

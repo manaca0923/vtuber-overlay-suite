@@ -39,9 +39,14 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
 
 /// チャンクをトランザクション内で保存（成功時true、失敗時false）
 ///
-/// INSERT OR IGNOREを使用しているため、重複エラーは発生しない。
-/// しかし、テーブル不存在やディスクフル等の致命的エラーが発生した場合は
-/// 最初のエラーで即座にロールバックし、フォールバック処理に移行する。
+/// INSERT OR IGNOREを使用しているため、UNIQUE/CHECK等の制約エラーは発生しない。
+/// エラーが発生した場合は以下の致命的な問題のみ:
+/// - テーブル不存在（DDLエラー）
+/// - ディスクフル/I/Oエラー
+/// - RAISE(ABORT, ...)トリガー
+///
+/// これらの致命的エラー発生時は最初のエラーで即座にロールバックし、
+/// フォールバック処理（save_chunk_individually）に移行する。
 async fn save_chunk_with_transaction(pool: &SqlitePool, messages: &[ChatMessage]) -> bool {
     // トランザクションを開始
     let mut tx = match pool.begin().await {
@@ -67,6 +72,8 @@ async fn save_chunk_with_transaction(pool: &SqlitePool, messages: &[ChatMessage]
     }
 
     // コミット
+    // 注: commit()はselfを消費するため、失敗後にrollback()を呼び出すことはできない
+    // sqlxのTransactionはcommit失敗時に自動的にロールバックされる
     if let Err(e) = tx.commit().await {
         log::warn!("Failed to commit transaction: {:?}", e);
         return false;

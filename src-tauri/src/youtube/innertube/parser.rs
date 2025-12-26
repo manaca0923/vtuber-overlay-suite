@@ -425,7 +425,10 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
 
         // キャッシュに絵文字があれば画像に変換、なければテキストのまま
         if let Some(emoji) = emoji_info {
-            log::debug!("Converted text emoji from cache: {}", &text[start..end]);
+            // ホットパスのため、デバッグログ有効時のみフォーマットコストを払う
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!("Converted text emoji from cache: {}", &text[start..end]);
+            }
             result.push(MessageRun::Emoji { emoji });
         } else {
             result.push(MessageRun::Text { text: text[start..end].to_string() });
@@ -1401,6 +1404,87 @@ mod tests {
                 assert_eq!(emoji.emoji_id, format!("fill_{}", EMOJI_CACHE_MAX_SIZE - 1));
             }
             _ => panic!("Second run should be Emoji for surviving shortcut"),
+        }
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
+    #[test]
+    fn test_convert_text_with_multibyte_characters() {
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュをクリア
+        clear_emoji_cache();
+
+        // テスト用の絵文字をキャッシュに登録
+        let test_emoji = EmojiInfo {
+            emoji_id: "smile_emoji".to_string(),
+            shortcuts: vec![":_smile:".to_string()],
+            image: EmojiImage {
+                thumbnails: vec![EmojiThumbnail {
+                    url: "https://example.com/smile.png".to_string(),
+                    width: 24,
+                    height: 24,
+                }],
+            },
+            is_custom_emoji: true,
+        };
+        if let Ok(mut cache) = EMOJI_CACHE.lock() {
+            cache.put(":_smile:".to_string(), test_emoji);
+        }
+
+        // マルチバイト文字（日本語）+ 絵文字ショートカット + マルチバイト文字
+        let result = convert_text_with_emoji_cache("こんにちは:_smile:世界");
+
+        // 結果の検証: [Text("こんにちは"), Emoji, Text("世界")]
+        assert_eq!(result.len(), 3, "Should have 3 runs with multibyte text");
+
+        // 1つ目: 日本語テキスト "こんにちは"
+        match &result[0] {
+            MessageRun::Text { text } => assert_eq!(text, "こんにちは"),
+            _ => panic!("First run should be Text"),
+        }
+
+        // 2つ目: 絵文字
+        match &result[1] {
+            MessageRun::Emoji { emoji } => {
+                assert_eq!(emoji.emoji_id, "smile_emoji");
+            }
+            _ => panic!("Second run should be Emoji"),
+        }
+
+        // 3つ目: 日本語テキスト "世界"
+        match &result[2] {
+            MessageRun::Text { text } => assert_eq!(text, "世界"),
+            _ => panic!("Third run should be Text"),
+        }
+
+        // 絵文字が連続する場合（マルチバイト文字の間）
+        let result2 = convert_text_with_emoji_cache("日本語:_smile::_smile:テスト");
+
+        // :_smile: が2つ連続するが、キャッシュには1つしか登録されていないので両方変換される
+        assert_eq!(result2.len(), 4, "Should have 4 runs with consecutive emojis");
+
+        match &result2[0] {
+            MessageRun::Text { text } => assert_eq!(text, "日本語"),
+            _ => panic!("First run should be Text '日本語'"),
+        }
+
+        match &result2[1] {
+            MessageRun::Emoji { emoji } => assert_eq!(emoji.emoji_id, "smile_emoji"),
+            _ => panic!("Second run should be Emoji"),
+        }
+
+        match &result2[2] {
+            MessageRun::Emoji { emoji } => assert_eq!(emoji.emoji_id, "smile_emoji"),
+            _ => panic!("Third run should be Emoji"),
+        }
+
+        match &result2[3] {
+            MessageRun::Text { text } => assert_eq!(text, "テスト"),
+            _ => panic!("Fourth run should be Text 'テスト'"),
         }
 
         // クリーンアップ

@@ -1038,6 +1038,22 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（現状でも`CREATE TABLE IF NOT EXISTS`で問題回避、テスト終了時に削除処理あり）
 
+- [ ] **busy_timeout=0のfail-fast動作保持検討** (PR#56)
+  - 現在: `original_timeout == 0`は「制限なし」として`u64::MAX`扱い → 500msにクランプ
+  - 問題: SQLiteの`busy_timeout=0`は「即座にBUSYエラーを返す（fail-fast）」という意味
+    - オペレーターが意図的に0を設定した場合、500ms待機するように動作が変わる
+  - 対応案:
+    - Option A: 0は0として扱い、busy_timeout=0で即座にBUSYを返す
+    - Option B: 設定可能な`min_busy_timeout_ms`を追加し、0を上書きするかを制御
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（プール設定でbusy_timeout=0を使うケースは稀）
+  - 備考: 現在の実装は「リトライを優先する」設計判断に基づく
+
+- [ ] **busy_timeout=0のfail-fast動作テスト追加** (PR#56)
+  - `busy_timeout=0`設定時にリトライパスが即座にBUSYを返す（または現在の動作を明示的に検証）
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
+
 ### ドキュメント
 
 - [x] **README更新** (2025-12-22対応済み)

@@ -2093,8 +2093,47 @@ connectWebSocket();
 - 優先度と本番運用での影響を考慮して対応タイミングを判断
 - 本番リリース前チェックリストで優先度を再評価
 
+### 55. busy_timeout=0のfail-fast動作変更（設計判断）
+
+**指摘内容**:
+- SQLiteの`busy_timeout=0`は「即座にBUSYエラーを返す（fail-fast）」という意味
+- 現在の実装では`original_timeout == 0`を「制限なし」として`u64::MAX`扱い → 500msにクランプ
+- オペレーターが意図的に0を設定した場合、動作が変わる（fail-fast → 500ms待機）
+
+**コード**:
+```rust
+// 現在の実装
+let effective_original = if original_timeout == 0 {
+    u64::MAX  // ← 0は「制限なし」として扱い、MAXに変換
+} else {
+    original_timeout
+};
+
+let busy_timeout_ms = effective_original
+    .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)  // 500ms
+    .min(remaining_after_acquire.as_millis() as u64);
+```
+
+**設計判断**:
+- 現在の実装は「リトライを優先する」設計に基づく
+- プール設定で`busy_timeout=0`を使うケースは稀
+- このアプリはリアルタイム性よりデータ保存を優先する設計
+- 将来タスクとして記録し、必要に応じて対応
+
+**対応（将来タスクとして記録）**:
+- `docs/900_tasks.md`に「busy_timeout=0のfail-fast動作保持検討」として記録
+- Option A: 0は0として扱い、busy_timeout=0で即座にBUSYを返す
+- Option B: 設定可能な`min_busy_timeout_ms`を追加し、0を上書きするかを制御
+- 優先度: 低
+
+**今後の対策**:
+- 元の値の意味（semantic）を変更する場合は設計判断として明示する
+- SQLiteのPRAGMA設定値は、その本来の意味を理解した上で扱う
+- 0は「制限なし」か「即座にエラー」かはコンテキスト依存（busy_timeoutでは後者）
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html
 - SQLITE_BUSY (5): https://www.sqlite.org/rescode.html#busy
 - SQLITE_LOCKED (6): https://www.sqlite.org/rescode.html#locked
+- SQLite PRAGMA busy_timeout: https://www.sqlite.org/pragma.html#pragma_busy_timeout

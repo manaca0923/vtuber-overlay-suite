@@ -1371,6 +1371,42 @@ window.addEventListener('pageshow', (event) => {
   - SQLite interrupt/progress handlerの使用を検討
 - 優先度: 低（遅いディスクI/Oは稀なケース）
 
+### 33. per-attempt busy_timeoutがプール設定を超える問題（高リスク指摘）
+
+**指摘内容**:
+- per-attempt `busy_timeout`を`MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS`（500ms）で制限していた
+- プールが意図的に低い値（例: 50ms）に設定されていても、500msまでブロックする可能性
+- オペレータが設定した応答性の制約が無視される
+
+**対応**:
+```rust
+// Before（問題あり）:
+let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64)
+    .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS);
+
+// After（修正済み）:
+// 3つの制約でクランプ:
+// 1. original_timeout: プール設定を超えない（オペレータ意図を尊重）
+// 2. MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: 1回の試行での最大待ち時間
+// 3. remaining_after_acquire: 残り予算を超えない
+let busy_timeout_ms = original_timeout
+    .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)
+    .min(remaining_after_acquire.as_millis() as u64);
+```
+
+**フォールバックパスも同様に修正**:
+```rust
+// save_chunk_individually内
+let busy_timeout_ms = original_timeout
+    .min(500)
+    .min(remaining_after_acquire.as_millis() as u64);
+```
+
+**今後の対策**:
+- 動的にタイムアウトを設定する場合は、元の設定値を超えないようにクランプ
+- オペレータが意図的に設定した制約は尊重する
+- リトライパスとフォールバックパスで一貫したロジックを使用
+
 ## 参照
 - PR #56: https://github.com/manaca0923/vtuber-overlay-suite/pull/56
 - SQLite Result Codes: https://www.sqlite.org/rescode.html

@@ -346,9 +346,6 @@ async fn save_chunk_with_transaction_and_timeout(
         return TransactionResult::Busy;
     }
 
-    // busy_timeoutをacquire後の残り時間で計算（最大500ms）
-    let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64).min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS);
-
     // 元のbusy_timeoutを取得（復元用）
     // 取得失敗時は復元不能なため、OtherErrorを返して続行しない
     // → 短いbusy_timeoutを設定後に復元できず、接続が劣化するリスクを回避
@@ -359,6 +356,15 @@ async fn save_chunk_with_transaction_and_timeout(
             return TransactionResult::OtherError;
         }
     };
+
+    // busy_timeoutをacquire後の残り時間で計算
+    // 3つの制約でクランプ:
+    // 1. original_timeout: プール設定を超えない（オペレータ意図を尊重）
+    // 2. MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: 1回の試行での最大待ち時間
+    // 3. remaining_after_acquire: 残り予算を超えない
+    let busy_timeout_ms = original_timeout
+        .min(MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS)
+        .min(remaining_after_acquire.as_millis() as u64);
 
     // busy_timeoutを設定（エラー時は適切に処理）
     if let Err(e) = set_busy_timeout(&mut conn, busy_timeout_ms).await {
@@ -578,7 +584,7 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         }
     };
 
-    // busy_timeoutを残り予算で制限（最大500ms）
+    // busy_timeoutを残り予算で制限
     // saturating_subでアンダーフローを防止（スケジューラ遅延等でelapsedがremainingを超える可能性）
     let remaining_after_acquire = remaining.saturating_sub(start_time.elapsed());
     if remaining_after_acquire.as_millis() < 50 {
@@ -589,7 +595,14 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         return;
     }
 
-    let busy_timeout_ms = (remaining_after_acquire.as_millis() as u64).min(500);
+    // busy_timeoutを計算
+    // 3つの制約でクランプ（リトライパスと同様）:
+    // 1. original_timeout: プール設定を超えない（オペレータ意図を尊重）
+    // 2. 500ms: フォールバックでの最大待ち時間
+    // 3. remaining_after_acquire: 残り予算を超えない
+    let busy_timeout_ms = original_timeout
+        .min(500)
+        .min(remaining_after_acquire.as_millis() as u64);
 
     // busy_timeoutを設定
     // 設定失敗時は予算を強制できないため即座に終了

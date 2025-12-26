@@ -1518,22 +1518,20 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T25: 外部API連携
 **優先度**: P2 | **見積**: 5日 | **依存**: T23
-**ステータス**: ⬜ **未着手**
+**ステータス**: ✅ **完了** (PR #57)
 
 ### 概要
 天気API、YouTube Analytics連携。
 
 ### チェックリスト
-- [ ] 天気APIクライアント実装（weather/mod.rs）
-- [ ] 天気情報キャッシュ（15分TTL）
-- [ ] YouTube Analytics連携（analytics/mod.rs）
-- [ ] KPIBlock用データ取得
-- [ ] WeatherSettings UI
+- [x] 天気APIクライアント実装（weather/mod.rs）
+- [x] 天気情報キャッシュ（15分TTL）
+- [x] YouTube視聴者数/高評価数取得（get_live_stream_stats）
+- [x] KPIBlock用データ取得（broadcast_kpi_update）
+- [x] WeatherSettings UI
 
-### 天気API候補
-- OpenWeatherMap（無料枠あり）
-- WeatherAPI
-- 気象庁API（日本専用）
+### 天気API
+- OpenWeatherMap API を採用（無料枠、日本語対応）
 
 ---
 

@@ -23,7 +23,7 @@
 
     // rules（ルール）
     maxLines: { min: 4, max: 14, default: 10 },
-    maxItems: { min: 6, max: 20, default: 14 },
+    maxItems: { min: 3, max: 20, default: 14 }, // SetList推奨:14, QueueList推奨:6
     cycleSec: { min: 10, max: 120, default: 30 },
     showSec: { min: 3, max: 15, default: 6 },
 
@@ -52,19 +52,27 @@
     // これらはオーバーレイ側でのみ使用されるため、3層同期は不要
     updateThrottle: { min: 1000, max: 10000, default: 2000 }, // KPIBlock用
     // queueMaxItems: QueueListの表示アイテム数制限。docs/300_overlay-specs.md の
-    // 「QueueList: 3-10」に基づく。汎用のmaxItems(6-20)とは異なる用途。
+    // 「QueueList: 3-10」に基づく。汎用のmaxItems(3-20)とは異なる用途。
     queueMaxItems: { min: 3, max: 10, default: 6 },
   };
 
   /**
    * 汎用クランプ関数
-   * @param {number} value - クランプする値
+   * NaN/Infinity/-Infinityなど非有限数は最小値にフォールバック
+   * 数値文字列（"10"など）もNumber()で変換してから処理
+   * @param {number|string} value - クランプする値
    * @param {number} min - 最小値
    * @param {number} max - 最大値
    * @returns {number} クランプ後の値
    */
   function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
+    // 数値文字列対応: Number()で変換（Number.isFiniteは文字列を変換しない）
+    const num = Number(value);
+    // NaN/Infinityなど非有限数は最小値にフォールバック
+    if (!Number.isFinite(num)) {
+      return min;
+    }
+    return Math.max(min, Math.min(max, num));
   }
 
   /**

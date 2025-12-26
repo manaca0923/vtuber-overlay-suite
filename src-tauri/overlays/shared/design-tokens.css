@@ -85,8 +85,8 @@
   --dt-clamp-max-lines-min: 4;
   --dt-clamp-max-lines-max: 14;
   --dt-clamp-max-lines-default: 10;
-  /* maxItems: 6〜20 */
-  --dt-clamp-max-items-min: 6;
+  /* maxItems: 3〜20 (SetList推奨:14, QueueList推奨:6) */
+  --dt-clamp-max-items-min: 3;
   --dt-clamp-max-items-max: 20;
   --dt-clamp-max-items-default: 14;
   /* cycleSec: 10〜120 */

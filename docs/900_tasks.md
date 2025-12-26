@@ -718,9 +718,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 将来的に`shared/setlist-styles.css`への統合を検討
   - 優先度: 低
 
-- [ ] **JSON Schema の `$id` URL更新** (PR#51)
-  - 現在: `https://example.local/...`
-  - 対応: 本番リリース前に実際のプロジェクトURLに更新、または相対パス（`./template-mvp-1.0.json`）に変更
+- [x] **JSON Schema の `$id` URL更新** (PR#51) ✅ 対応済み（2025-12-26）
+  - ~~現在: `https://example.local/...`~~
+  - 対応済み: 相対パス（`./template-mvp-1.0.json`）に変更
   - 対象ファイル: `src-tauri/schemas/template-mvp-1.0.json`
 
 - [ ] **コンポーネントタイプの同期維持** (PR#51)
@@ -734,11 +734,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/server/template_types.rs`
   - 優先度: 低
 
-- [ ] **コンポーネントIDの一意性チェック** (PR#51)
-  - 現在: slot重複チェックはあるが、コンポーネントIDの重複チェックがない
-  - 対応: IDが一意であることを期待している場合は検証を追加
-  - 対象ファイル: `src-tauri/src/commands/template.rs`
-  - 優先度: 低
+- [x] **コンポーネントIDの一意性チェック** (PR#51) ✅ 既に実装済み
+  - ~~現在: slot重複チェックはあるが、コンポーネントIDの重複チェックがない~~
+  - 対応済み: `has_id_duplicates()`が`template_types.rs`に実装済み、`template.rs`で使用
+  - テストも追加済み
 
 - [ ] **slotIdの型安全性** (PR#50)
   - 現在: `toSlotId`/`cssIdToSlotId`の正規表現の意図が曖昧
@@ -810,10 +809,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: 実装時に `calc()` または `fr` 単位の使用を検討
   - 対象ファイル: `src-tauri/overlays/shared/layout-v2.css`（実装時に作成）
 
-- [ ] **QueueListのmaxItems範囲の統一** (PR#48)
-  - 現在: TypeScript型定義で `maxItems: 6-20`、slot配置表で `QueueList: 3-10` と記述不整合
-  - 対応: 実装時にQueueList専用のクランプ範囲（3〜10）を追加するか、ドキュメントを統一
-  - 対象ファイル: `docs/300_overlay-specs.md`, `docs/400_data-models.md`, 実装コード
+- [x] **QueueListのmaxItems範囲の統一** (PR#48) ✅ 対応済み（2025-12-26）
+  - ~~現在: TypeScript型定義で `maxItems: 6-20`、slot配置表で `QueueList: 3-10` と記述不整合~~
+  - 対応済み: クランプ範囲を3〜20に統一（SetList推奨:14、QueueList推奨:6）
+  - 修正ファイル: `template_types.rs`, `template.ts`, `template-mvp-1.0.json`, `docs/400_data-models.md`
 
 - [ ] **オーバーレイのドラッグ自由配置機能**
   - プリセットレイアウトではなく、プレビュー画面上でドラッグ&ドロップで配置
@@ -852,22 +851,19 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### パフォーマンス
 
-- [ ] **コメントDB保存のバッチ処理最適化** (PR#53)
-  - 現在: コメントを1件ずつINSERT
-  - 問題: 高頻度チャットでI/O負荷が増加する可能性
-  - 対応: バッチINSERTまたはトランザクション内での複数INSERT
+- [x] **コメントDB保存のバッチ処理最適化** (PR#53) ✅ 対応済み（2025-12-26）
+  - ~~現在: コメントを1件ずつINSERT~~
+  - 対応済み: トランザクション内で複数INSERTを実行しI/O効率を向上
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（現時点ではパフォーマンス問題は未発生）
 
 - [ ] **オーバーレイパフォーマンステスト** (PR#19)
   - MAX_COMMENTSを10→30に増加済み
   - OBSブラウザソースでの長時間使用テスト
   - 低スペックマシンでの動作確認
 
-- [ ] **絵文字キャッシュのサイズ制限** (PR#24)
-  - 現在: `EMOJI_CACHE`（RwLock<HashMap>）はサイズ制限なし
-  - 問題: 長時間運用時にメモリが増加し続ける可能性
-  - 対応: LRUキャッシュに置き換えるか、上限を設定
+- [x] **絵文字キャッシュのサイズ制限** (PR#24) ✅ 対応済み（2025-12-26）
+  - ~~現在: `EMOJI_CACHE`（RwLock<HashMap>）はサイズ制限なし~~
+  - 対応済み: LRUキャッシュ（lruクレート）に置き換え、上限2000エントリに設定
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
 - [ ] **DensityManagerの定期クリーンアップ** (PR#54)
@@ -888,6 +884,22 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
 
+- [ ] **SQLITE_BUSYリトライ/backoff** (PR#55)
+  - 現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応
+  - 問題: 高負荷時にトランザクション開始/コミットが失敗する可能性
+  - 対応: リトライロジックとexponential backoffの実装を検討
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現状のbusy_timeout+フォールバックで問題なし）
+
+- [ ] **絵文字キャッシュのMutex contention最適化** (PR#55)
+  - 現在: `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出し
+  - 問題: 高スループット時にロック競合が発生しパース遅延が悪化する可能性
+  - 対応案:
+    1. ショートカットの重複排除をロック取得前に行い、ユニークなショートカットのみget()
+    2. 並行キャッシュ（`moka::sync::Cache`など）への置き換え
+  - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
+  - 優先度: 低（現状のキャッシュサイズ2000・通常のチャット速度では問題なし）
+
 ### テスト
 
 - [ ] **手動テスト項目の実施**
@@ -901,10 +913,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - メッセージ送受信テスト
   - 複数クライアント同時接続テスト
 
-- [ ] **TypeScript側のテンプレートバリデーションテスト** (PR#51)
-  - Rust側にはテストがあるが、TypeScript側の`hasSlotDuplicates`と`hasIdDuplicates`関数のテストがない
-  - 対応: Vitest/Jestなどでユニットテストを追加
-  - 対象ファイル: `src/types/template.ts`
+- [x] **TypeScript側のテンプレートバリデーションテスト** (PR#51) ✅ 対応済み（2025-12-26）
+  - ~~Rust側にはテストがあるが、TypeScript側の`hasSlotDuplicates`と`hasIdDuplicates`関数のテストがない~~
+  - 対応済み: Vitestでユニットテストを追加（14テストケース）
+  - 対象ファイル: `src/types/template.test.ts`
 
 - [ ] **UpdateBatcher/DensityManagerのユニットテスト** (PR#54)
   - パフォーマンス最適化モジュールのテストカバレッジ追加
@@ -914,6 +926,22 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 復元動作（density:normalで設定が戻るか）
   - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
   - 優先度: 低
+
+- [ ] **SQLITE_BUSY並行書き込みテスト** (PR#55)
+  - 2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証
+  - テスト対象:
+    - ロック競合時にbusy_timeoutで待機されるか
+    - フォールバック処理（個別INSERT）が正しく動作するか
+  - 対象ファイル: `src-tauri/src/db/mod.rs`, `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現状のスモークテストで基本動作は検証済み）
+
+- [ ] **絵文字キャッシュのストレステスト/ベンチマーク** (PR#55)
+  - 高スループット時のロック競合によるレイテンシ悪化を検出
+  - テスト対象:
+    - `convert_text_with_emoji_cache`の並行呼び出し
+    - 多数の絵文字マッチ時のレイテンシ測定
+  - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
+  - 優先度: 低（現状のチャット速度では問題なし）
 
 ### ドキュメント
 
@@ -1232,7 +1260,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 |-----------|------|----------|
 | offsetX/Y | -40〜+40 | 0 |
 | maxLines | 4〜14 | 10 |
-| maxItems | 6〜20 | 14 |
+| maxItems | 3〜20 | 14 (QueueList推奨:6) |
 | cycleSec | 10〜120 | 30 |
 | showSec | 3〜15 | 6 |
 | leftPct | 0.18〜0.28 | 0.22 |

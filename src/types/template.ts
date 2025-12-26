@@ -127,7 +127,7 @@ export const CLAMP_RANGES = {
   offsetY: { min: -40, max: 40, default: 0 },
   // rules
   maxLines: { min: 4, max: 14, default: 10 },
-  maxItems: { min: 6, max: 20, default: 14 },
+  maxItems: { min: 3, max: 20, default: 14 }, // SetList推奨:14, QueueList推奨:6
   cycleSec: { min: 10, max: 120, default: 30 },
   showSec: { min: 3, max: 15, default: 6 },
   // layout
@@ -150,9 +150,18 @@ export const CLAMP_RANGES = {
 
 /**
  * 汎用クランプ関数
+ *
+ * NaN/Infinity/-Infinityなど非有限数は最小値にフォールバック
+ * 数値文字列（"10"など）もNumber()で変換してから処理
  */
 function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+  // 数値文字列対応: Number()で変換（Number.isFiniteは文字列を変換しない）
+  const num = Number(value);
+  // NaN/Infinityなど非有限数は最小値にフォールバック
+  if (!Number.isFinite(num)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, num));
 }
 
 // ===== クランプ関数（tuning） =====

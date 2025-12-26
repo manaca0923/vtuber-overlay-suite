@@ -360,10 +360,20 @@ fn parse_runs(runs: &Option<Vec<RunItem>>) -> Option<Vec<MessageRun>> {
 /// 例: "こんにちは:_草lol:です" → [Text("こんにちは"), Emoji(...), Text("です")]
 ///
 /// ロック範囲を最小化するため:
+/// 0. キャッシュ空チェック（try_lock）- cold-cache時の正規表現スキャンを回避
 /// 1. 正規表現でマッチを検出（ロック外）
 /// 2. キャッシュから絵文字情報を一括取得（ロック範囲最小）
 /// 3. 結果を組み立て（ロック外）
 fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
+    // Step 0: キャッシュが空なら正規表現スキャンをスキップ（cold-cache最適化）
+    // try_lockを使用してブロッキングせずにチェック
+    if let Ok(cache) = EMOJI_CACHE.try_lock() {
+        if cache.is_empty() {
+            return vec![MessageRun::Text { text: text.to_string() }];
+        }
+    }
+    // try_lockが失敗した場合は他のスレッドがキャッシュを使用中なので続行
+
     // Step 1: 正規表現でマッチを検出（ロック外）
     let matches: Vec<_> = EMOJI_SHORTCUT_REGEX
         .find_iter(text)
@@ -383,7 +393,7 @@ fn convert_text_with_emoji_cache(text: &str) -> Vec<MessageRun> {
             Err(_) => return vec![MessageRun::Text { text: text.to_string() }],
         };
 
-        // キャッシュが空ならそのままテキストを返す
+        // キャッシュが空ならそのままテキストを返す（Step 0でtry_lockが失敗した場合のフォールバック）
         if cache.is_empty() {
             return vec![MessageRun::Text { text: text.to_string() }];
         }

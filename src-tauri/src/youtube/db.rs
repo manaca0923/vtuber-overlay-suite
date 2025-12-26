@@ -76,12 +76,23 @@ async fn save_chunk_with_transaction(pool: &SqlitePool, messages: &[ChatMessage]
 }
 
 /// チャンクを1件ずつ個別に保存（フォールバック用）
+///
+/// 単一接続を取得して再利用し、行ごとのpool checkout回避でパフォーマンス向上
 async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage]) {
     let mut success_count = 0;
     let mut error_count = 0;
 
+    // 単一接続を取得して再利用（行ごとのpool checkout回避）
+    let mut conn = match pool.acquire().await {
+        Ok(conn) => conn,
+        Err(e) => {
+            log::warn!("Failed to acquire connection for fallback: {:?}", e);
+            return;
+        }
+    };
+
     for msg in messages {
-        match insert_comment(pool, msg).await {
+        match insert_comment(&mut *conn, msg).await {
             Ok(_) => success_count += 1,
             Err(e) => {
                 error_count += 1;
@@ -358,5 +369,87 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(msg2_count.0, 0);
+    }
+
+    /// RAISE(ABORT)トリガー付きテーブルを作成（テスト用）
+    /// 特定のID（"trigger_fail"）でハードエラーを発生させる
+    async fn create_test_table_with_abort_trigger(pool: &SqlitePool) {
+        // テーブル作成
+        sqlx::query(
+            r#"CREATE TABLE comment_logs (
+                id TEXT PRIMARY KEY,
+                youtube_id TEXT UNIQUE NOT NULL,
+                message TEXT NOT NULL,
+                author_name TEXT NOT NULL,
+                author_channel_id TEXT NOT NULL,
+                author_image_url TEXT,
+                is_owner BOOLEAN NOT NULL DEFAULT 0,
+                is_moderator BOOLEAN NOT NULL DEFAULT 0,
+                is_member BOOLEAN NOT NULL DEFAULT 0,
+                message_type TEXT NOT NULL,
+                message_data TEXT,
+                published_at TEXT NOT NULL
+            )"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // 特定のIDでRAISE(ABORT)を発生させるトリガー
+        sqlx::query(
+            r#"CREATE TRIGGER abort_on_trigger_fail
+               BEFORE INSERT ON comment_logs
+               WHEN NEW.id = 'trigger_fail'
+               BEGIN
+                   SELECT RAISE(ABORT, 'Forced abort for testing');
+               END"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_fallback_with_abort_trigger() {
+        // RAISE(ABORT)トリガーによるハード障害をテスト
+        // トランザクション失敗 → フォールバック → 残りの行は保存される
+        let pool = create_test_pool().await;
+        create_test_table_with_abort_trigger(&pool).await;
+
+        let messages = vec![
+            create_test_message("msg1", "First"),
+            create_test_message("trigger_fail", "This triggers abort"), // ABORTトリガー
+            create_test_message("msg3", "Third"),
+        ];
+
+        save_comments_to_db(&pool, &messages).await;
+
+        // フォールバック処理により、トリガー対象以外の行は保存される
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count.0, 2, "Valid rows should be saved via fallback");
+
+        // 正常なメッセージが保存されていること
+        let msg1: (String,) = sqlx::query_as("SELECT message FROM comment_logs WHERE id = 'msg1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(msg1.0, "First");
+
+        let msg3: (String,) = sqlx::query_as("SELECT message FROM comment_logs WHERE id = 'msg3'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(msg3.0, "Third");
+
+        // トリガー対象のメッセージは保存されていないこと
+        let trigger_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM comment_logs WHERE id = 'trigger_fail'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(trigger_count.0, 0, "Trigger target should not be saved");
     }
 }

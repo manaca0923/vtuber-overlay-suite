@@ -866,12 +866,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: LRUキャッシュ（lruクレート）に置き換え、上限2000エントリに設定
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
-- [ ] **DensityManagerの定期クリーンアップ** (PR#54)
-  - 現在: `recordUpdate()`呼び出し時のみ古いエントリを除去
-  - 問題: 更新が止まった場合に履歴が残り続ける可能性
-  - 対応: 定期的なクリーンアップタイマー、または`windowMs`を超えたエントリの自動削除
+- [x] **DensityManagerの定期クリーンアップ** (PR#54, PR#56で対応済み)
+  - ~~現在: `recordUpdate()`呼び出し時のみ古いエントリを除去~~
+  - ~~問題: 更新が止まった場合に履歴が残り続ける可能性~~
+  - 対応済み: 定期クリーンアップタイマー（5秒間隔）と`destroy()`メソッドを実装
   - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
-  - 優先度: 低（現時点では配列サイズは最大で閾値程度に収まる）
 
 - [ ] **DensityManager閾値の設定可能化** (PR#54)
   - 現在: `highDensityThreshold: 5`（2秒間に5回）がハードコード
@@ -884,21 +883,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~keyring操作はOS APIへのブロッキング呼び出しの可能性~~
   - 対応済み: 全てのkeyring操作を`tokio::task::spawn_blocking`でラップ
 
-- [ ] **SQLITE_BUSYリトライ/backoff** (PR#55)
-  - 現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応
-  - 問題: 高負荷時にトランザクション開始/コミットが失敗する可能性
-  - 対応: リトライロジックとexponential backoffの実装を検討
+- [x] **SQLITE_BUSYリトライ/backoff** (PR#55, PR#56で対応済み)
+  - ~~現在: `busy_timeout`設定済み、フォールバック処理（個別INSERT）で対応~~
+  - ~~問題: 高負荷時にトランザクション開始/コミットが失敗する可能性~~
+  - 対応済み: リトライロジック（最大3回）とexponential backoff（100ms→200ms→400ms）を実装
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（現状のbusy_timeout+フォールバックで問題なし）
+  - 並行書き込みテスト追加（ファイルベースDB使用）
 
-- [ ] **絵文字キャッシュのMutex contention最適化** (PR#55)
-  - 現在: `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出し
-  - 問題: 高スループット時にロック競合が発生しパース遅延が悪化する可能性
-  - 対応案:
-    1. ショートカットの重複排除をロック取得前に行い、ユニークなショートカットのみget()
-    2. 並行キャッシュ（`moka::sync::Cache`など）への置き換え
+- [x] **絵文字キャッシュのMutex contention最適化** (PR#55, PR#56で対応済み)
+  - ~~現在: `Mutex<LruCache>`で毎回ロックを取得してget()を呼び出し~~
+  - ~~問題: 高スループット時にロック競合が発生しパース遅延が悪化する可能性~~
+  - 対応済み: ショートカットの重複排除をロック取得前に行い、ユニークなショートカットのみget()
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
-  - 優先度: 低（現状のキャッシュサイズ2000・通常のチャット速度では問題なし）
 
 ### テスト
 
@@ -927,13 +923,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
   - 優先度: 低
 
-- [ ] **SQLITE_BUSY並行書き込みテスト** (PR#55)
-  - 2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証
-  - テスト対象:
-    - ロック競合時にbusy_timeoutで待機されるか
-    - フォールバック処理（個別INSERT）が正しく動作するか
-  - 対象ファイル: `src-tauri/src/db/mod.rs`, `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（現状のスモークテストで基本動作は検証済み）
+- [x] **SQLITE_BUSY並行書き込みテスト** (PR#55, PR#56で対応済み)
+  - ~~2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証~~
+  - 対応済み: `test_concurrent_writes_with_retry`を追加
+    - ファイルベースDB使用（in-memoryでは各接続が独立DBを持つため）
+    - 2タスクから同時に30件ずつ書き込み
+    - リトライ/フォールバックで60件全て保存されることを検証
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
 
 - [ ] **絵文字キャッシュのストレステスト/ベンチマーク** (PR#55)
   - 高スループット時のロック競合によるレイテンシ悪化を検出

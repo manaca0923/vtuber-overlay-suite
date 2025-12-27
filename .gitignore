@@ -32,3 +32,4 @@ src-tauri/target
 *.sln
 *.sw?
 .codex/
+.claude/disable_codex_review

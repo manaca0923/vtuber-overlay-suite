@@ -298,6 +298,34 @@ const timeoutMs = validateTimeout(timeout);
 - 修正漏れを防止
 - コードの重複を削減
 
+### 中: reset()でのfetchInFlightリセット漏れ (Codex Review 5回目)
+
+**問題**:
+```javascript
+// reset()がfetchSucceededのみリセットしていた
+reset() {
+  this.fetchSucceeded = false;
+  // fetchInFlightがtrueのままだと、fetchAndApply()が即returnして再取得されない
+}
+```
+
+bfcacheからの復元時、fetchリクエストが中断されて`fetchInFlight=true`のままになっている可能性がある。
+
+**対応**:
+```javascript
+reset() {
+  this.fetchSucceeded = false;
+  this.fetchInFlight = false;  // 追加
+}
+```
+
+### 9. 状態リセット時のフラグ完全性
+
+状態をリセットするメソッドでは、関連するすべてのフラグをリセットする:
+- 「実行済み」フラグ（`fetchSucceeded`）
+- 「実行中」フラグ（`fetchInFlight`）
+- 片方だけリセットすると、もう片方の状態が残って不整合が発生する
+
 ## チェックリスト（今後の対応）
 
 - [x] reinitialize()での二重接続防止
@@ -309,4 +337,5 @@ const timeoutMs = validateTimeout(timeout);
 - [x] fetchLatestSetlistのtimeoutバリデーション
 - [x] SettingsFetcherのtimeoutバリデーション
 - [x] validateTimeout()共通関数の追加
+- [x] SettingsFetcher.reset()でfetchInFlightもリセット
 - [ ] combined.htmlへのbfcacheハンドリング追加（低優先度、OBS以外のブラウザ向け）

@@ -210,6 +210,7 @@ class SettingsFetcher {
    */
   reset() {
     this.fetchSucceeded = false;
+    this.fetchInFlight = false;
   }
 }
 

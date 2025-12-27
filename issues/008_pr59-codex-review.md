@@ -119,9 +119,23 @@ weather: saved.weather
 
 ---
 
+## 追加修正（3回目レビュー）
+
+### 残っていたsnake_case違反
+
+- `src/components/CommentControlPanel.tsx`: `get_live_chat_id`の引数
+- `src/components/settings/ApiKeySettingsPanel.tsx`: `validate_api_key`の引数
+
+### weather-widget.jsの修正
+
+- `data.location`が`null`や`undefined`の場合に空文字にフォールバックするよう修正
+
+---
+
 ## 学んだこと
 
 1. **ビルドスクリプトのrerun条件**: ファイルが存在しない場合でも`cargo:rerun-if-changed`を出力すべき
 2. **型変更時の後方互換**: 型定義を変更する際は、既存データのマイグレーション処理を必ず実装する
 3. **snake_caseルールの徹底**: Tauri invoke引数は常にRust側に合わせてsnake_caseを使用
 4. **オプショナルプロパティのスプレッド**: `saved.weather`のようなオプショナルプロパティをスプレッドする場合、`undefined`のケースを明示的に処理する必要がある
+5. **snake_case違反の網羅的確認**: 1回の修正で漏れがないよう、`grep`で全ファイルを確認すること

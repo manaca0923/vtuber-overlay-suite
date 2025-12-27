@@ -40,8 +40,9 @@ export function ApiKeySettingsPanel() {
     setSuccess('');
 
     try {
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       const isValid = await invoke<boolean>('validate_api_key', {
-        apiKey: apiKey.trim(),
+        api_key: apiKey.trim(),
       });
 
       if (isValid) {

@@ -432,9 +432,10 @@ export function CommentControlPanel({
 
       if (apiKey) {
         // 公式API経由
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         newLiveChatId = await invoke<string>('get_live_chat_id', {
-          apiKey: apiKey,
-          videoId: newVideoId,
+          api_key: apiKey,
+          video_id: newVideoId,
         });
       } else {
         // InnerTube経由（APIキー不要）

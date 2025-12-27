@@ -76,9 +76,10 @@ class WeatherWidget extends BaseComponent {
       this.descEl.textContent = data.description;
     }
     if (data.location !== undefined) {
-      this.location = data.location;
+      // nullやundefinedが渡された場合は空文字にフォールバック
+      this.location = data.location ?? '';
       if (this.locationEl) {
-        this.locationEl.textContent = data.location;
+        this.locationEl.textContent = this.location;
       }
     }
   }

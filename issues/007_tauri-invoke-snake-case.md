@@ -42,11 +42,8 @@ grep -r "invoke(" src/ --include="*.ts" --include="*.tsx" | grep -E "\{ *[a-z]+[
 ## PR#58での修正内容
 以下のファイルでsnake_case違反を修正:
 - `src/types/weather.ts`: `videoId` → `video_id`, `useBundledKey` → `use_bundled_key`
-- `src/components/ApiKeySetup.tsx`: `apiKey` → `api_key`, `videoId` → `video_id`, `liveChatId` → `live_chat_id`
-- `src/App.tsx`: `videoId` → `video_id`
-- `src/components/wizard/WizardStep1.tsx`: `apiKey` → `api_key`
-- `src/components/CommentControlPanel.tsx`: 複数の引数名を修正
-- `src/components/wizard/Wizard.tsx`: `videoId` → `video_id`, `liveChatId` → `live_chat_id`
+
+**注記**: 他のファイル（ApiKeySetup.tsx, App.tsx, WizardStep1.tsx, CommentControlPanel.tsx, Wizard.tsx）は既に別のPRで修正済みか、現在の実装でsnake_caseが使用されている。
 
 ## コメント追加
 invokeを使用するファイルには以下のコメントを追加して注意喚起:

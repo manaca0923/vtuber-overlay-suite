@@ -96,27 +96,54 @@ impl WeatherClient {
     }
 
     /// 都市名を設定
+    /// 空白のみの入力は空文字列に正規化される
     pub async fn set_city(&self, city: String) {
+        // 前後の空白を除去して正規化
+        let normalized_city = city.trim().to_string();
+
         let old_city = {
             let mut c = self.city.write().await;
             let old = c.clone();
-            *c = city.clone();
+            *c = normalized_city.clone();
             old
         };
 
         // 都市名変更時はキャッシュをクリア
-        if old_city != city {
+        if old_city != normalized_city {
             self.cache.clear().await;
             // 緯度経度キャッシュもクリア
             let mut coords = self.coords_cache.write().await;
             *coords = None;
-            log::info!("Weather city changed: {} -> {}", old_city, city);
+            log::info!("Weather city changed: {} -> {}", old_city, normalized_city);
         }
     }
 
     /// 現在の都市名を取得
     pub async fn get_city(&self) -> String {
         self.city.read().await.clone()
+    }
+
+    /// 表示用の地名を構築（都市名, 行政区画, 国）
+    fn build_display_name(
+        name: &str,
+        admin1: &Option<String>,
+        country: &Option<String>,
+    ) -> String {
+        let mut parts = vec![name.to_string()];
+
+        if let Some(a) = admin1 {
+            if !a.is_empty() && a != name {
+                parts.push(a.clone());
+            }
+        }
+
+        if let Some(c) = country {
+            if !c.is_empty() {
+                parts.push(c.clone());
+            }
+        }
+
+        parts.join(", ")
     }
 
     /// 都市名から緯度経度を取得（Geocoding API）
@@ -167,6 +194,9 @@ impl WeatherClient {
             .and_then(|r| r.into_iter().next())
             .ok_or_else(|| WeatherError::CityNotFound(city.to_string()))?;
 
+        // 表示名を構築: "都市名, 行政区画, 国" の形式で同名都市の混乱を避ける
+        let display_name = Self::build_display_name(&result.name, &result.admin1, &result.country);
+
         // キャッシュに保存
         {
             let mut cache = self.coords_cache.write().await;
@@ -174,7 +204,7 @@ impl WeatherClient {
                 city: city.to_string(),
                 latitude: result.latitude,
                 longitude: result.longitude,
-                display_name: result.name.clone(),
+                display_name: display_name.clone(),
             });
         }
 
@@ -183,10 +213,10 @@ impl WeatherClient {
             city,
             result.latitude,
             result.longitude,
-            result.name
+            display_name
         );
 
-        Ok((result.latitude, result.longitude, result.name))
+        Ok((result.latitude, result.longitude, display_name))
     }
 
     /// 天気情報を取得（キャッシュ優先）
@@ -330,5 +360,66 @@ mod tests {
             let cache = client.coords_cache.read().await;
             assert!(cache.is_none());
         }
+    }
+
+    #[tokio::test]
+    async fn test_set_city_trims_whitespace() {
+        let client = WeatherClient::new();
+        client.set_city("  Osaka  ".to_string()).await;
+        assert_eq!(client.get_city().await, "Osaka");
+    }
+
+    #[tokio::test]
+    async fn test_set_city_whitespace_only_becomes_empty() {
+        let client = WeatherClient::new();
+        client.set_city("   ".to_string()).await;
+        assert_eq!(client.get_city().await, "");
+    }
+
+    #[test]
+    fn test_build_display_name_city_only() {
+        let name = WeatherClient::build_display_name("Tokyo", &None, &None);
+        assert_eq!(name, "Tokyo");
+    }
+
+    #[test]
+    fn test_build_display_name_with_country() {
+        let name = WeatherClient::build_display_name(
+            "Tokyo",
+            &None,
+            &Some("Japan".to_string()),
+        );
+        assert_eq!(name, "Tokyo, Japan");
+    }
+
+    #[test]
+    fn test_build_display_name_with_admin1_and_country() {
+        let name = WeatherClient::build_display_name(
+            "Shibuya",
+            &Some("Tokyo".to_string()),
+            &Some("Japan".to_string()),
+        );
+        assert_eq!(name, "Shibuya, Tokyo, Japan");
+    }
+
+    #[test]
+    fn test_build_display_name_skips_duplicate_admin1() {
+        // admin1が都市名と同じ場合は重複を避ける
+        let name = WeatherClient::build_display_name(
+            "Tokyo",
+            &Some("Tokyo".to_string()),
+            &Some("Japan".to_string()),
+        );
+        assert_eq!(name, "Tokyo, Japan");
+    }
+
+    #[test]
+    fn test_build_display_name_skips_empty_parts() {
+        let name = WeatherClient::build_display_name(
+            "Tokyo",
+            &Some("".to_string()),
+            &Some("Japan".to_string()),
+        );
+        assert_eq!(name, "Tokyo, Japan");
     }
 }

@@ -186,10 +186,12 @@ async fn handle_connection(
     }
 
     // 接続時にキャッシュされたコメントを送信
+    // Note: キャッシュコメントは即時表示（instant: true）で送信し、
+    // 接続直後のキャッチアップを素早く行う
     if !cached_comments.is_empty() {
         log::info!("Sending {} cached comments to peer {}", cached_comments.len(), peer_id);
         for comment in cached_comments {
-            let msg = WsMessage::CommentAdd { payload: comment, instant: false };
+            let msg = WsMessage::CommentAdd { payload: comment, instant: true };
             if let Ok(json) = serde_json::to_string(&msg) {
                 if tx.send(Message::Text(json)).is_err() {
                     log::warn!("Failed to send cached comment to peer {}", peer_id);

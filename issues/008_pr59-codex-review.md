@@ -146,6 +146,35 @@ weather: saved.weather
 
 ---
 
+## 追加修正（5回目レビュー）
+
+### WebSocketキャッシュ送信時のinstantフラグ修正
+
+**問題**:
+`src-tauri/src/server/websocket.rs`でキャッシュコメント送信時に`instant: false`が固定されており、新規接続時のコメントがバッファモード（遅延表示）になっていた。
+
+**修正前**:
+```rust
+let msg = WsMessage::CommentAdd { payload: comment, instant: false };
+```
+
+**修正後**:
+```rust
+// Note: キャッシュコメントは即時表示（instant: true）で送信し、
+// 接続直後のキャッチアップを素早く行う
+let msg = WsMessage::CommentAdd { payload: comment, instant: true };
+```
+
+**ポイント**:
+- 新規接続時のキャッシュコメントは即時表示が適切
+- これにより接続直後のキャッチアップ体験が向上
+
+### weather-widget.jsの確認
+
+- 既に`location = ''`でデフォルト値が設定されており、追加修正は不要と判断
+
+---
+
 ## 学んだこと
 
 1. **ビルドスクリプトのrerun条件**: ファイルが存在しない場合でも`cargo:rerun-if-changed`を出力すべき
@@ -154,3 +183,4 @@ weather: saved.weather
 4. **オプショナルプロパティのスプレッド**: `saved.weather`のようなオプショナルプロパティをスプレッドする場合、`undefined`のケースを明示的に処理する必要がある
 5. **snake_case違反の網羅的確認**: 1回の修正で漏れがないよう、`grep`で全ファイルを確認すること
 6. **機能改善提案は900_tasks.mdへ**: 即座に対応不要な改善提案は`docs/900_tasks.md`に追記して管理する
+7. **キャッシュ送信時のフラグ**: WebSocket接続時にキャッシュを送信する場合、表示モードフラグ（instant等）の適切な値を検討する

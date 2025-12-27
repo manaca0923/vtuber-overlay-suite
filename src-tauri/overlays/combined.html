@@ -492,7 +492,12 @@
           const data = JSON.parse(event.data);
           switch (data.type) {
             case 'comment:add':
-              commentQueue.queue(data.payload);
+              // instant=trueなら即時表示（gRPC/InnerTube）、falseならバッファリング（公式APIポーリング）
+              if (data.instant) {
+                commentQueue.addInstant(data.payload);
+              } else {
+                commentQueue.queue(data.payload);
+              }
               break;
             case 'comment:remove':
               const el = document.querySelector(`[data-id="${CSS.escape(data.payload?.id)}"]`);

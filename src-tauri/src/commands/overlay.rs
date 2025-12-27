@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::server::types::{CommentPosition, LayoutPreset, SetlistPosition};
+use crate::server::types::{CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition};
 use crate::AppState;
 
 /// HEXカラーコードのバリデーション (#RRGGBB形式)
@@ -78,6 +78,14 @@ pub struct SetlistSettings {
     pub font_size: u32,
 }
 
+/// 天気ウィジェット設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherSettings {
+    pub enabled: bool,
+    pub position: WeatherPosition,
+}
+
 /// オーバーレイ設定全体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,6 +95,8 @@ pub struct OverlaySettings {
     pub common: CommonSettings,
     pub comment: CommentSettings,
     pub setlist: SetlistSettings,
+    #[serde(default)]
+    pub weather: Option<WeatherSettings>,
 }
 
 /// オーバーレイ設定を保存
@@ -153,7 +163,8 @@ pub async fn broadcast_settings_update(
     validate_overlay_settings(&settings)?;
 
     use crate::server::types::{
-        CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload, WsMessage,
+        CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload,
+        WeatherSettingsPayload, WsMessage,
     };
 
     let payload = SettingsUpdatePayload {
@@ -164,16 +175,20 @@ pub async fn broadcast_settings_update(
         border_radius: settings.common.border_radius,
         comment: CommentSettingsPayload {
             enabled: settings.comment.enabled,
-            position: settings.comment.position, // Copy trait実装済みのため.clone()不要
+            position: settings.comment.position,
             show_avatar: settings.comment.show_avatar,
             font_size: settings.comment.font_size,
         },
         setlist: SetlistSettingsPayload {
             enabled: settings.setlist.enabled,
-            position: settings.setlist.position, // Copy trait実装済みのため.clone()不要
+            position: settings.setlist.position,
             show_artist: settings.setlist.show_artist,
             font_size: settings.setlist.font_size,
         },
+        weather: settings.weather.map(|w| WeatherSettingsPayload {
+            enabled: w.enabled,
+            position: w.position,
+        }),
     };
 
     let server_state = state.server.read().await;

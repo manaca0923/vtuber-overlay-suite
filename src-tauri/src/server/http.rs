@@ -28,9 +28,13 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         overlays_dir,
     };
 
-    // 静的ファイル配信（shared/ディレクトリ内のCSS/JS）
+    // 静的ファイル配信
     let shared_dir = state.overlays_dir.join("shared");
+    let components_dir = state.overlays_dir.join("components");
+    let styles_dir = state.overlays_dir.join("styles");
     let serve_shared = ServeDir::new(&shared_dir);
+    let serve_components = ServeDir::new(&components_dir);
+    let serve_styles = ServeDir::new(&styles_dir);
 
     let app = Router::new()
         .route("/api/health", get(health_check))
@@ -42,6 +46,8 @@ pub async fn start_http_server_with_db(db: SqlitePool, overlays_dir: PathBuf) ->
         .route("/overlay/combined", get(overlay_combined))
         .route("/overlay/combined-v2", get(overlay_combined_v2))
         .nest_service("/overlay/shared", serve_shared)
+        .nest_service("/overlay/components", serve_components)
+        .nest_service("/overlay/styles", serve_styles)
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -273,6 +279,8 @@ struct OverlaySettingsApiResponse {
     border_radius: u32,
     comment: CommentSettingsApi,
     setlist: SetlistSettingsApi,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    weather: Option<WeatherSettingsApi>,
 }
 
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
@@ -292,6 +300,33 @@ struct SetlistSettingsApi {
     position: SetlistPosition,
     show_artist: bool,
     font_size: u32,
+}
+
+/// 天気ウィジェットの表示位置
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum WeatherPositionApi {
+    LeftTop,
+    LeftBottom,
+    RightTop,
+    RightBottom,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WeatherSettingsApi {
+    enabled: bool,
+    position: WeatherPositionApi,
+}
+
+/// 文字列からWeatherPositionに変換
+fn parse_weather_position(s: &str) -> WeatherPositionApi {
+    match s {
+        "left-bottom" => WeatherPositionApi::LeftBottom,
+        "right-top" => WeatherPositionApi::RightTop,
+        "right-bottom" => WeatherPositionApi::RightBottom,
+        _ => WeatherPositionApi::LeftTop, // デフォルト
+    }
 }
 
 /// デフォルトのオーバーレイ設定を生成
@@ -314,6 +349,10 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
             show_artist: true,
             font_size: 24,
         },
+        weather: Some(WeatherSettingsApi {
+            enabled: true,
+            position: WeatherPositionApi::LeftTop,
+        }),
     }
 }
 
@@ -367,6 +406,22 @@ async fn get_overlay_settings_api(
             match serde_json::from_str::<serde_json::Value>(&json_str) {
                 Ok(settings) => {
                     // SettingsUpdatePayloadと同じ形式に変換
+                    // 天気設定をパース（存在する場合のみ）
+                    let weather = if settings["weather"].is_object() {
+                        Some(WeatherSettingsApi {
+                            enabled: settings["weather"]["enabled"].as_bool().unwrap_or(true),
+                            position: parse_weather_position(
+                                settings["weather"]["position"].as_str().unwrap_or("left-top")
+                            ),
+                        })
+                    } else {
+                        // デフォルト値
+                        Some(WeatherSettingsApi {
+                            enabled: true,
+                            position: WeatherPositionApi::LeftTop,
+                        })
+                    };
+
                     let response = OverlaySettingsApiResponse {
                         theme: settings["theme"].as_str().unwrap_or("default").to_string(),
                         layout: parse_layout_preset(
@@ -391,6 +446,7 @@ async fn get_overlay_settings_api(
                             show_artist: settings["setlist"]["showArtist"].as_bool().unwrap_or(true),
                             font_size: settings["setlist"]["fontSize"].as_u64().unwrap_or(24) as u32,
                         },
+                        weather,
                     };
                     Json(response).into_response()
                 }

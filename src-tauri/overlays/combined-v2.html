@@ -227,6 +227,15 @@
     }
 
     // ===== WebSocket設定更新 =====
+    // 天気ウィジェットの位置マッピング
+    const WEATHER_POSITION_MAP = {
+      'left-top': 'left.topBelow',
+      'left-bottom': 'left.bottom',
+      'right-top': 'right.top',
+      'right-bottom': 'right.bottom',
+    };
+    let currentWeatherPosition = null;
+
     function applySettingsUpdate(settings) {
       const root = document.documentElement;
 
@@ -265,6 +274,37 @@
           setlistEnabled = settings.setlist.enabled;
           updateVisibility();
         }
+      }
+
+      // 天気ウィジェット設定
+      if (settings.weather) {
+        applyWeatherSettings(settings.weather);
+      }
+    }
+
+    function applyWeatherSettings(weatherSettings) {
+      const enabled = weatherSettings.enabled !== false;
+      const position = weatherSettings.position || 'left-top';
+      const mountPoint = WEATHER_POSITION_MAP[position] || 'left.topBelow';
+
+      // 無効化された場合はアンマウント
+      if (!enabled) {
+        if (currentWeatherPosition) {
+          ComponentRegistry.unmount(currentWeatherPosition);
+          currentWeatherPosition = null;
+        }
+        return;
+      }
+
+      // 位置が変更された場合は再マウント
+      if (currentWeatherPosition !== mountPoint) {
+        // 古い位置からアンマウント
+        if (currentWeatherPosition) {
+          ComponentRegistry.unmount(currentWeatherPosition);
+        }
+        // 新しい位置にマウント
+        ComponentRegistry.mount(mountPoint, 'WeatherWidget', {});
+        currentWeatherPosition = mountPoint;
       }
     }
 
@@ -419,7 +459,12 @@
           const data = JSON.parse(event.data);
           switch (data.type) {
             case 'comment:add':
-              commentQueue.queue(data.payload);
+              // instant=trueなら即時表示（gRPC/InnerTube）、falseならバッファリング（公式APIポーリング）
+              if (data.instant) {
+                commentQueue.addInstant(data.payload);
+              } else {
+                commentQueue.queue(data.payload);
+              }
               break;
             case 'comment:remove':
               const el = document.querySelector(`[data-id="${CSS.escape(data.payload?.id)}"]`);
@@ -499,7 +544,7 @@
     function initDefaultComponents() {
       // 左カラム
       ComponentRegistry.mount('left.top', 'ClockWidget', {});
-      ComponentRegistry.mount('left.topBelow', 'WeatherWidget', {});
+      // WeatherWidgetは設定に基づいて配置されるため、ここではマウントしない
       ComponentRegistry.mount('left.bottom', 'BrandBlock', {});
 
       // 中央カラム
@@ -510,6 +555,9 @@
       ComponentRegistry.mount('right.lowerLeft', 'KPIBlock', {});
       ComponentRegistry.mount('right.lowerRight', 'QueueList', { rules: { maxItems: 6 } });
       ComponentRegistry.mount('right.bottom', 'PromoPanel', {});
+
+      // 天気ウィジェットをデフォルト設定で初期化
+      applyWeatherSettings({ enabled: true, position: 'left-top' });
     }
 
     // URLパラメータでコンポーネントを制御

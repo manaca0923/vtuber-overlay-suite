@@ -362,7 +362,8 @@ function removeCommentWithAnimation(element) {
 
 /**
  * コメントキューマネージャー
- * 5秒間に溜まったコメントを5秒間で等間隔表示
+ * - instant=false: 5秒間に溜まったコメントを5秒間で等間隔表示（公式APIポーリング用）
+ * - instant=true: 即座に表示（gRPC/InnerTube用）
  */
 class CommentQueueManager {
   constructor(options = {}) {
@@ -373,14 +374,45 @@ class CommentQueueManager {
     this.BUFFER_INTERVAL = options.bufferInterval || 5000;
     this.MIN_DISPLAY_INTERVAL = options.minInterval || 100;
     this.MAX_DISPLAY_INTERVAL = options.maxInterval || 1000;
+    // 即時表示時の表示間隔（連続で来た場合のスロットリング）
+    this.INSTANT_DISPLAY_INTERVAL = options.instantInterval || 150;
     this.onAddComment = options.onAddComment || (() => {});
+    // 処理済みIDのセット（重複防止用）
+    this.processedIds = new Set();
+    this.MAX_PROCESSED_IDS = 1000;
 
-    // 定期フラッシュ開始
+    // 定期フラッシュ開始（バッファモード用）
     setInterval(() => this.flushBuffer(), this.BUFFER_INTERVAL);
   }
 
   /**
-   * コメントをバッファに追加
+   * 処理済みIDを記録（メモリリーク防止のため古いIDを削除）
+   * @param {string} id - コメントID
+   */
+  _markProcessed(id) {
+    this.processedIds.add(id);
+    if (this.processedIds.size > this.MAX_PROCESSED_IDS) {
+      // 古いIDを削除（Setは挿入順を保持）
+      const iterator = this.processedIds.values();
+      this.processedIds.delete(iterator.next().value);
+    }
+  }
+
+  /**
+   * 重複チェック
+   * @param {string} id - コメントID
+   * @returns {boolean} 重複している場合true
+   */
+  _isDuplicate(id) {
+    if (this.processedIds.has(id)) return true;
+    if (this.commentBuffer.some(c => c.id === id)) return true;
+    if (this.displayQueue.some(c => c.id === id)) return true;
+    if (document.querySelector(`[data-id="${CSS.escape(id)}"]`)) return true;
+    return false;
+  }
+
+  /**
+   * コメントをバッファに追加（バッファモード）
    * @param {Object} comment - コメントデータ
    */
   queue(comment) {
@@ -390,15 +422,60 @@ class CommentQueueManager {
     }
 
     // 重複チェック
-    if (this.commentBuffer.some(c => c.id === comment.id)) return;
-    if (this.displayQueue.some(c => c.id === comment.id)) return;
-    if (document.querySelector(`[data-id="${CSS.escape(comment.id)}"]`)) return;
+    if (this._isDuplicate(comment.id)) return;
 
     this.commentBuffer.push(comment);
   }
 
   /**
-   * バッファを表示キューに移動
+   * コメントを即座に表示（即時モード）
+   * gRPC/InnerTube用：バッファをスキップして即座に表示
+   * @param {Object} comment - コメントデータ
+   */
+  addInstant(comment) {
+    if (!comment || !comment.id) {
+      console.warn('Invalid comment: missing id', comment);
+      return;
+    }
+
+    // 重複チェック
+    if (this._isDuplicate(comment.id)) return;
+
+    // 処理済みとしてマーク
+    this._markProcessed(comment.id);
+
+    // 即座に表示キューに追加
+    this.displayQueue.push(comment);
+
+    // 処理中でなければ開始（間隔を短く設定）
+    if (!this.isProcessingQueue) {
+      this._processInstantQueue();
+    }
+  }
+
+  /**
+   * 即時モード用のキュー処理
+   */
+  _processInstantQueue() {
+    if (this.displayQueue.length === 0) {
+      this.isProcessingQueue = false;
+      return;
+    }
+
+    this.isProcessingQueue = true;
+    const comment = this.displayQueue.shift();
+    this.onAddComment(comment);
+
+    // 次のコメントがあれば短い間隔で処理
+    if (this.displayQueue.length > 0) {
+      setTimeout(() => this._processInstantQueue(), this.INSTANT_DISPLAY_INTERVAL);
+    } else {
+      this.isProcessingQueue = false;
+    }
+  }
+
+  /**
+   * バッファを表示キューに移動（バッファモード用）
    */
   flushBuffer() {
     if (this.commentBuffer.length > 0) {
@@ -410,6 +487,9 @@ class CommentQueueManager {
       );
 
       console.log(`Flushing ${count} comments with ${this.currentDisplayInterval}ms interval`);
+
+      // 処理済みとしてマーク
+      this.commentBuffer.forEach(c => this._markProcessed(c.id));
 
       this.displayQueue.push(...this.commentBuffer);
       this.commentBuffer.length = 0;

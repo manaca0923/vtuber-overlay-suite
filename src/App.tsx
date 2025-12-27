@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ApiKeySetup } from './components/ApiKeySetup';
 import { CommentControlPanel } from './components/CommentControlPanel';
 import { SongList } from './components/SongList';
 import { SetlistList } from './components/SetlistList';
@@ -51,35 +50,13 @@ function App() {
   // コメント取得開始ハンドラ
   const handleStartPolling = useCallback(async (videoId: string) => {
     try {
-      await invoke('start_polling_innertube', { video_id: videoId });
+      await invoke('start_polling_innertube', { videoId: videoId });
       setIsPolling(true);
       showStatus('success', 'コメント取得を開始しました');
     } catch (e) {
       showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
     }
   }, [showStatus]);
-
-  // コメント取得停止ハンドラ
-  const handleStopPolling = useCallback(async () => {
-    try {
-      await invoke('stop_polling_innertube');
-      setIsPolling(false);
-      showStatus('success', 'コメント取得を停止しました');
-    } catch (e) {
-      showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
-    }
-  }, [showStatus]);
-
-  // 開始ボタンクリック時の処理
-  const handleStartClick = useCallback(() => {
-    if (wizardSettings?.video_id) {
-      // 設定済みのVideo IDがあればそのまま開始
-      handleStartPolling(wizardSettings.video_id);
-    } else {
-      // なければモーダルを表示
-      setIsVideoIdModalOpen(true);
-    }
-  }, [wizardSettings?.video_id, handleStartPolling]);
 
   // ウィザード完了ハンドラ
   const handleWizardComplete = useCallback(async () => {
@@ -237,62 +214,21 @@ function App() {
                 </span>
               )}
 
-              {/* InnerTube コメント取得（メイン機能） */}
-              <button
-                onClick={handleStartClick}
-                disabled={isPolling}
-                className={`px-3 py-1 text-sm rounded transition-colors ${
-                  isPolling
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-600 text-white hover:bg-green-700'
-                }`}
-              >
-                コメント取得開始
-              </button>
-              <button
-                onClick={handleStopPolling}
-                disabled={!isPolling}
-                className={`px-3 py-1 text-sm rounded transition-colors ${
-                  !isPolling
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-red-600 text-white hover:bg-red-700'
-                }`}
-              >
-                コメント取得停止
-              </button>
               <TestModeButton />
             </div>
-            {/* 公式API操作パネル（デバッグモードのみ） */}
-            {import.meta.env.DEV && (
-              <>
-                <CommentControlPanel
-                  apiKey={apiKey}
-                  videoId={wizardSettings?.video_id ?? ''}
-                  liveChatId={wizardSettings?.live_chat_id ?? ''}
-                  onSettingsChange={(settings) => {
-                    setWizardSettings((prev) => ({
-                      video_id: settings.videoId ?? prev?.video_id ?? '',
-                      live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
-                      saved_at: new Date().toISOString(),
-                    }));
-                  }}
-                />
-                <ApiKeySetup
-                  onSettingsChange={(settings) => {
-                    if (settings.apiKey) {
-                      setApiKey(settings.apiKey);
-                    }
-                    if (settings.videoId || settings.liveChatId) {
-                      setWizardSettings((prev) => ({
-                        video_id: settings.videoId ?? prev?.video_id ?? '',
-                        live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
-                        saved_at: new Date().toISOString(),
-                      }));
-                    }
-                  }}
-                />
-              </>
-            )}
+            {/* コメント取得制御パネル */}
+            <CommentControlPanel
+              apiKey={apiKey}
+              videoId={wizardSettings?.video_id ?? ''}
+              liveChatId={wizardSettings?.live_chat_id ?? ''}
+              onSettingsChange={(settings) => {
+                setWizardSettings((prev) => ({
+                  video_id: settings.videoId ?? prev?.video_id ?? '',
+                  live_chat_id: settings.liveChatId ?? prev?.live_chat_id ?? '',
+                  saved_at: new Date().toISOString(),
+                }));
+              }}
+            />
           </div>
         )}
         {activeTab === 'setlist' && (

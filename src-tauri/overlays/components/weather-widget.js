@@ -50,14 +50,13 @@ class WeatherWidget extends BaseComponent {
     container.appendChild(this.tempEl);
     container.appendChild(this.descEl);
 
-    if (this.location) {
-      this.locationEl = this.createElement('span', {
-        className: 'weather-location',
-        textContent: this.location,
-        style: { opacity: '0.7', marginLeft: '8px' },
-      });
-      container.appendChild(this.locationEl);
-    }
+    // locationElは常に作成（後からupdate()で設定される可能性があるため）
+    this.locationEl = this.createElement('span', {
+      className: 'weather-location',
+      textContent: this.location,
+      style: { opacity: '0.7', marginLeft: '8px' },
+    });
+    container.appendChild(this.locationEl);
 
     return container;
   }
@@ -76,9 +75,11 @@ class WeatherWidget extends BaseComponent {
       this.description = data.description;
       this.descEl.textContent = data.description;
     }
-    if (data.location !== undefined && this.locationEl) {
+    if (data.location !== undefined) {
       this.location = data.location;
-      this.locationEl.textContent = data.location;
+      if (this.locationEl) {
+        this.locationEl.textContent = data.location;
+      }
     }
   }
 

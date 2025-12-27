@@ -4,6 +4,7 @@ import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
 import { SetlistSettingsPanel } from './SetlistSettingsPanel';
 import { WeatherSettingsPanel } from './WeatherSettingsPanel';
+import { ApiKeySettingsPanel } from './ApiKeySettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
   DEFAULT_OVERLAY_SETTINGS,
@@ -47,6 +48,10 @@ export function OverlaySettings() {
             setlist: {
               ...DEFAULT_OVERLAY_SETTINGS.setlist,
               ...saved.setlist,
+            },
+            weather: {
+              ...DEFAULT_OVERLAY_SETTINGS.weather,
+              ...saved.weather,
             },
           };
           setSettings(merged);
@@ -198,10 +203,18 @@ export function OverlaySettings() {
                 />
               )}
               {activePanel === 'weather' && (
-                <WeatherSettingsPanel />
+                <WeatherSettingsPanel
+                  settings={settings.weather}
+                  onChange={(weather) => {
+                    setSettings((prev) => ({ ...prev, weather }));
+                  }}
+                />
               )}
             </div>
           </div>
+
+          {/* YouTube APIキー設定 */}
+          <ApiKeySettingsPanel />
 
           {/* メッセージ表示 */}
           {error && (

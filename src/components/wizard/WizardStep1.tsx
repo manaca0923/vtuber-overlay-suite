@@ -49,7 +49,7 @@ export default function WizardStep1({
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { api_key: apiKey });
+        await invoke('save_api_key', { apiKey: apiKey });
         if (!isMountedRef.current) return;
         setSuccess('APIキーが有効です。保存しました。');
         onValidationChange(true);

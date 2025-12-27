@@ -73,7 +73,7 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { api_key: apiKey });
+        await invoke('save_api_key', { apiKey: apiKey });
         setIsApiKeyLoaded(true);
         setSuccess('APIキーが有効です。保存しました。');
         // 親コンポーネントに通知
@@ -104,16 +104,16 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
       }
 
       const chatId = await invoke<string>('get_live_chat_id', {
-        api_key: apiKey,
-        video_id: extractedVideoId,
+        apiKey: apiKey,
+        videoId: extractedVideoId,
       });
       setLiveChatId(chatId);
       setVideoId(extractedVideoId); // 抽出したIDに更新
 
       // 設定を保存
       await invoke('save_wizard_settings', {
-        video_id: extractedVideoId,
-        live_chat_id: chatId,
+        videoId: extractedVideoId,
+        liveChatId: chatId,
       });
 
       // 親コンポーネントに通知（即時反映）

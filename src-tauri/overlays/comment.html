@@ -318,7 +318,12 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'comment:add') {
-            commentQueue.queue(data.payload);
+            // instant=trueなら即時表示（gRPC/InnerTube）、falseならバッファリング（公式APIポーリング）
+            if (data.instant) {
+              commentQueue.addInstant(data.payload);
+            } else {
+              commentQueue.queue(data.payload);
+            }
           } else if (data.type === 'comment:remove') {
             removeComment(data.payload?.id);
           } else if (data.type === 'settings:update') {

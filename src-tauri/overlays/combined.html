@@ -458,6 +458,24 @@
       }, 100);
     });
 
+    // ===== bfcacheハンドリング =====
+    // pagehide: ページ非表示時（event.persisted=falseなら通常離脱、trueならbfcache保存）
+    window.addEventListener('pagehide', (event) => {
+      // bfcacheに保存される場合はcleanupを呼ばない
+      if (!event.persisted) {
+        wsManager.cleanup();
+      }
+    });
+
+    // pageshow: ページ表示時（bfcache復元時はevent.persisted=true）
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        console.log('Page restored from bfcache, reconnecting...');
+        settingsFetcher.reset();
+        wsManager.reinitialize();
+      }
+    });
+
     // ===== 初期化 =====
     applyUrlSettings();
     settingsFetcher.fetchAndApply();

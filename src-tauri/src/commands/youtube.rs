@@ -508,17 +508,32 @@ pub async fn save_wizard_settings(
     .map_err(|e| format!("DB error: {}", e))?
     .and_then(|s: String| serde_json::from_str(&s).ok());
 
-    // マージ: 新しい値が空文字列または None の場合は既存値を維持
+    // マージロジック:
+    // - video_id: 空文字列の場合は既存値を維持
+    // - live_chat_id: video_idが変更された場合は新しい値を使用（空でも上書き）
+    //                 video_idが同じ場合のみ既存値を維持
+    // - use_bundled_key: None の場合は既存値を維持
     let merged_video_id = if video_id.is_empty() {
         existing.as_ref().map(|e| e.video_id.clone()).unwrap_or_default()
     } else {
-        video_id
+        video_id.clone()
     };
-    let merged_live_chat_id = if live_chat_id.is_empty() {
+
+    // video_idが変更された場合、live_chat_idは新しい値を使用（古いchat_idは無効）
+    let video_id_changed = existing.as_ref()
+        .map(|e| e.video_id != merged_video_id)
+        .unwrap_or(true);
+
+    let merged_live_chat_id = if video_id_changed {
+        // video_idが変更された場合は新しいlive_chat_idを使用（空でもOK）
+        live_chat_id
+    } else if live_chat_id.is_empty() {
+        // video_idが同じで、live_chat_idが空の場合は既存値を維持
         existing.as_ref().map(|e| e.live_chat_id.clone()).unwrap_or_default()
     } else {
         live_chat_id
     };
+
     let merged_use_bundled_key = use_bundled_key.or_else(|| {
         existing.as_ref().and_then(|e| e.use_bundled_key)
     });

@@ -81,6 +81,32 @@ let merged_video_id = if video_id.is_empty() {
 // live_chat_id, use_bundled_key も同様にマージ
 ```
 
+### P2: video_id変更時にlive_chat_idがマージされる問題（Codex Review 2回目）
+
+**問題**:
+InnerTubeモードで動画を切り替えた場合、`live_chat_id`が空文字列として送られるが、
+マージロジックにより古い`live_chat_id`が保持されてしまう。
+これにより、新しい動画に古い動画のchat_idが紐づく不整合が発生。
+
+**対応**:
+video_idが変更された場合は、live_chat_idをマージせず新しい値（空でも）を使用:
+```rust
+// video_idが変更された場合、live_chat_idは新しい値を使用（古いchat_idは無効）
+let video_id_changed = existing.as_ref()
+    .map(|e| e.video_id != merged_video_id)
+    .unwrap_or(true);
+
+let merged_live_chat_id = if video_id_changed {
+    // video_idが変更された場合は新しいlive_chat_idを使用（空でもOK）
+    live_chat_id
+} else if live_chat_id.is_empty() {
+    // video_idが同じで、live_chat_idが空の場合は既存値を維持
+    existing.live_chat_id.clone()
+} else {
+    live_chat_id
+};
+```
+
 ## 学んだこと
 
 ### 1. null vs undefined の区別
@@ -99,7 +125,15 @@ UIを先に更新する場合（オプティミスティック更新）は、失
 - 空文字列や`null`は「更新しない」という意図を表す
 - バックエンド側でマージ処理を行うことで、フロントエンドのミスを防げる
 
+### 4. 関連フィールドのマージ戦略
+
+設定のマージ時、関連するフィールド間の整合性を考慮する:
+- `video_id`と`live_chat_id`は1対1の関係
+- `video_id`が変更されたら、`live_chat_id`は古い値をマージすべきではない
+- 関連フィールドの変更を検知して適切にマージする
+
 ## チェックリスト（今後の対応）
 
-- [ ] 同様のDB読み込みパターンで`!== undefined`を使っている箇所がないか確認
-- [ ] オプティミスティックUIのロールバック漏れがないか確認
+- [x] 同様のDB読み込みパターンで`!== undefined`を使っている箇所がないか確認（template.tsは数値のみで問題なし）
+- [x] オプティミスティックUIのロールバック漏れがないか確認（対応済み）
+- [x] 関連フィールドのマージ戦略を考慮（video_id/live_chat_id）

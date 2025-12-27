@@ -7,31 +7,32 @@ PR #19, #38, #39, #40 で受けたTauri/Rust統合関連の指摘と解決方法
 
 ## 1. Tauri 2.0のinvokeパラメータ命名規則
 
-### 指摘内容 (PR#19)
-Tauri 2.0では`#[tauri::command]`マクロがRust側のスネークケースパラメータを自動的にcamelCaseに変換する。
+### ⚠️ 重要: 命名規則の訂正 (PR#58で判明)
 
-### 解決方法
+**以前の記載は誤りでした。** 実際にはTauri 2.0でも**フロントエンド側でsnake_caseを使用する必要があります**。
+
+### 正しい解決方法
 ```typescript
 // フロントエンド側（TypeScript）
 await invoke('start_polling', {
-  apiKey: apiKey,           // camelCase
-  liveChatId: liveChatId,   // camelCase
-  nextPageToken: token,     // camelCase
+  api_key: apiKey,           // ✅ snake_case（Rustと一致させる）
+  live_chat_id: liveChatId,  // ✅ snake_case
+  next_page_token: token,    // ✅ snake_case
 });
 
 // Rust側
 #[tauri::command]
 pub async fn start_polling(
-    api_key: String,         // snake_case（自動変換される）
+    api_key: String,         // snake_case
     live_chat_id: String,
     next_page_token: Option<String>,
 ) -> Result<(), String> { ... }
 ```
 
 ### 今後の対策
-- Tauri invokeパラメータはフロントエンドでcamelCase
-- Rust側はsnake_case（自動変換に任せる）
-- より明示的にするなら`#[serde(rename = "apiKey")]`を使用
+- Tauri invokeパラメータは**フロントエンドでもsnake_case**
+- Rust側のパラメータ名と完全に一致させる
+- 詳細は `issues/007_tauri-invoke-snake-case.md` を参照
 
 ---
 
@@ -194,7 +195,7 @@ if let Some(caps) = re.captures(html) { ... }
 
 ## チェックリスト（Tauri/Rust実装時）
 
-- [ ] invokeパラメータの命名規則は正しいか（camelCase/snake_case）
+- [ ] invokeパラメータの命名規則は正しいか（フロントエンドもsnake_case）
 - [ ] RwLockのpoisonedエラーをハンドリングしているか
 - [ ] 機密情報はkeyringで保存しているか
 - [ ] ログにAPIキーが出力されないか

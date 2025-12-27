@@ -99,30 +99,8 @@ pub fn run() {
       Ok(())
     })
     .manage({
-      // 天気クライアントを作成し、keyringからAPIキーを読み込む
+      // 天気クライアントを作成（Open-Meteo APIはAPIキー不要）
       let weather_client = Arc::new(weather::WeatherClient::new());
-
-      // 起動時にkeyringから天気APIキーを復元
-      // keyringアクセスはブロッキング呼び出しなので、spawn_blockingでラップ
-      // block_on内でspawn_blockingを使用し、UIスレッドのブロックを最小化
-      let weather_clone = Arc::clone(&weather_client);
-      tauri::async_runtime::block_on(async move {
-        match tokio::task::spawn_blocking(keyring::get_weather_api_key).await {
-          Ok(Ok(api_key)) => {
-            weather_clone.set_api_key(api_key).await;
-            log::info!("Weather API key restored from keyring");
-          }
-          Ok(Err(keyring::KeyringError::NotFound)) => {
-            log::debug!("No weather API key found in keyring");
-          }
-          Ok(Err(e)) => {
-            log::warn!("Failed to read weather API key from keyring: {}", e);
-          }
-          Err(e) => {
-            log::warn!("spawn_blocking failed for weather keyring read: {}", e);
-          }
-        }
-      });
 
       AppState {
         poller: Arc::new(Mutex::new(None)),
@@ -191,8 +169,6 @@ pub fn run() {
           commands::youtube::get_unified_polling_mode,
           commands::youtube::get_live_stream_stats,
           commands::youtube::broadcast_kpi_update,
-          commands::weather::set_weather_api_key,
-          commands::weather::has_weather_api_key,
           commands::weather::set_weather_city,
           commands::weather::get_weather_city,
           commands::weather::get_weather,
@@ -260,8 +236,6 @@ pub fn run() {
           commands::youtube::get_unified_polling_mode,
           commands::youtube::get_live_stream_stats,
           commands::youtube::broadcast_kpi_update,
-          commands::weather::set_weather_api_key,
-          commands::weather::has_weather_api_key,
           commands::weather::set_weather_city,
           commands::weather::get_weather_city,
           commands::weather::get_weather,

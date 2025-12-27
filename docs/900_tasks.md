@@ -937,6 +937,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
   - 優先度: 低
 
+- [ ] **天気API（Open-Meteo）Geocodingエラーケースのテスト** (PR#58)
+  - `geocode_city`が`results: None`または空配列のとき`WeatherError::CityNotFound`になるケースのテスト
+  - Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト
+  - Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
 - [x] **SQLITE_BUSY並行書き込みテスト** (PR#55, PR#56で対応済み)
   - ~~2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証~~
   - 対応済み: `test_concurrent_writes_with_retry`を追加

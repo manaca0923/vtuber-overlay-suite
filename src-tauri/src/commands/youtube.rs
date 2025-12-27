@@ -488,6 +488,7 @@ pub async fn send_test_comment(
 }
 
 /// ウィザード設定を保存（videoId, liveChatId, useBundledKey）
+/// 空の値や null は既存値を維持する（マージ方式）
 #[tauri::command]
 pub async fn save_wizard_settings(
     video_id: String,
@@ -498,11 +499,35 @@ pub async fn save_wizard_settings(
     let pool = &state.db;
     let now = chrono::Utc::now().to_rfc3339();
 
+    // 既存の設定を読み込んでマージ
+    let existing: Option<WizardSettingsData> = sqlx::query_scalar(
+        "SELECT value FROM settings WHERE key = 'wizard_settings'"
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?
+    .and_then(|s: String| serde_json::from_str(&s).ok());
+
+    // マージ: 新しい値が空文字列または None の場合は既存値を維持
+    let merged_video_id = if video_id.is_empty() {
+        existing.as_ref().map(|e| e.video_id.clone()).unwrap_or_default()
+    } else {
+        video_id
+    };
+    let merged_live_chat_id = if live_chat_id.is_empty() {
+        existing.as_ref().map(|e| e.live_chat_id.clone()).unwrap_or_default()
+    } else {
+        live_chat_id
+    };
+    let merged_use_bundled_key = use_bundled_key.or_else(|| {
+        existing.as_ref().and_then(|e| e.use_bundled_key)
+    });
+
     // JSON形式でウィザード設定を保存
     let settings_data = serde_json::json!({
-        "video_id": video_id,
-        "live_chat_id": live_chat_id,
-        "use_bundled_key": use_bundled_key,
+        "video_id": merged_video_id,
+        "live_chat_id": merged_live_chat_id,
+        "use_bundled_key": merged_use_bundled_key,
         "saved_at": now
     });
     let settings_str =
@@ -524,7 +549,7 @@ pub async fn save_wizard_settings(
 
     log::info!(
         "Saved wizard settings: video_id={}, live_chat_id={}, use_bundled_key={:?}",
-        video_id, live_chat_id, use_bundled_key
+        merged_video_id, merged_live_chat_id, merged_use_bundled_key
     );
     Ok(())
 }

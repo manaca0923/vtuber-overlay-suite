@@ -127,9 +127,11 @@ export function CommentControlPanel({
           video_id: string;
           live_chat_id: string;
           saved_at: string;
-          use_bundled_key?: boolean;
+          use_bundled_key?: boolean | null;
         } | null>('load_wizard_settings');
-        if (isMountedRef.current && settings?.use_bundled_key !== undefined) {
+        // use_bundled_keyがbooleanの場合のみ設定（nullやundefinedはデフォルト値を維持）
+        // WizardやApiKeySetupはnullを渡すため、nullをデフォルト値(true)として扱う
+        if (isMountedRef.current && typeof settings?.use_bundled_key === 'boolean') {
           setUseBundledKey(settings.use_bundled_key);
         }
       } catch (err) {
@@ -552,9 +554,12 @@ export function CommentControlPanel({
                 checked={useBundledKey}
                 onChange={async (e) => {
                   const newValue = e.target.checked;
+                  const oldValue = useBundledKey;
                   setUseBundledKey(newValue);
                   // 設定を永続化
                   try {
+                    // videoIdやliveChatIdが空でも保存を試みる
+                    // （Rust側でマージ処理を行うため）
                     await invoke('save_wizard_settings', {
                       video_id: videoId,
                       live_chat_id: liveChatId,
@@ -562,6 +567,8 @@ export function CommentControlPanel({
                     });
                   } catch (err) {
                     console.error('Failed to save useBundledKey:', err);
+                    // 保存失敗時はUIを元の状態に戻す
+                    setUseBundledKey(oldValue);
                   }
                 }}
                 disabled={isPolling}

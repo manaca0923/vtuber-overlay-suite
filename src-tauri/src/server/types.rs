@@ -15,6 +15,9 @@ pub enum WsMessage {
     #[serde(rename = "comment:add")]
     CommentAdd {
         payload: crate::youtube::types::ChatMessage,
+        /// 即座に表示するかどうか（gRPC/InnerTubeの場合はtrue、ポーリングの場合はfalse）
+        #[serde(default)]
+        instant: bool,
     },
 
     /// コメント削除（モデレーション）
@@ -89,6 +92,27 @@ pub struct SettingsUpdatePayload {
     pub comment: CommentSettingsPayload,
     // セットリストオーバーレイ設定
     pub setlist: SetlistSettingsPayload,
+    // 天気ウィジェット設定
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weather: Option<WeatherSettingsPayload>,
+}
+
+/// 天気ウィジェット設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherSettingsPayload {
+    pub enabled: bool,
+    pub position: WeatherPosition,
+}
+
+/// 天気ウィジェットの表示位置
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WeatherPosition {
+    LeftTop,
+    LeftBottom,
+    RightTop,
+    RightBottom,
 }
 
 /// コメントオーバーレイの表示位置

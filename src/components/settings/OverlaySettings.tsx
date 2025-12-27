@@ -4,6 +4,7 @@ import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
 import { SetlistSettingsPanel } from './SetlistSettingsPanel';
 import { WeatherSettingsPanel } from './WeatherSettingsPanel';
+import { ApiKeySettingsPanel } from './ApiKeySettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
   DEFAULT_OVERLAY_SETTINGS,
@@ -32,10 +33,16 @@ export function OverlaySettings() {
       try {
         const saved = await loadOverlaySettings();
         if (saved) {
+          // 旧レイアウトプリセット（streaming/talk/music/gaming）を新プリセットにマイグレーション
+          const validLayouts: LayoutPreset[] = ['custom', 'three-column'];
+          const migratedLayout: LayoutPreset = validLayouts.includes(saved.layout as LayoutPreset)
+            ? (saved.layout as LayoutPreset)
+            : 'three-column'; // 旧プリセットはthree-columnにフォールバック
+
           // 古い設定と新しいデフォルト値をマージ（マイグレーション対応）
           const merged: Settings = {
             theme: saved.theme ?? DEFAULT_OVERLAY_SETTINGS.theme,
-            layout: saved.layout ?? DEFAULT_OVERLAY_SETTINGS.layout,
+            layout: migratedLayout,
             common: {
               ...DEFAULT_OVERLAY_SETTINGS.common,
               ...saved.common,
@@ -48,6 +55,10 @@ export function OverlaySettings() {
               ...DEFAULT_OVERLAY_SETTINGS.setlist,
               ...saved.setlist,
             },
+            // saved.weatherがundefinedの場合はデフォルト値を使用
+            weather: saved.weather
+              ? { ...DEFAULT_OVERLAY_SETTINGS.weather, ...saved.weather }
+              : DEFAULT_OVERLAY_SETTINGS.weather,
           };
           setSettings(merged);
         }
@@ -198,10 +209,18 @@ export function OverlaySettings() {
                 />
               )}
               {activePanel === 'weather' && (
-                <WeatherSettingsPanel />
+                <WeatherSettingsPanel
+                  settings={settings.weather}
+                  onChange={(weather) => {
+                    setSettings((prev) => ({ ...prev, weather }));
+                  }}
+                />
               )}
             </div>
           </div>
+
+          {/* YouTube APIキー設定 */}
+          <ApiKeySettingsPanel />
 
           {/* メッセージ表示 */}
           {error && (

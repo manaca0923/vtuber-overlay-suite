@@ -65,6 +65,7 @@ export default function Wizard({ onComplete }: WizardProps) {
     // ウィザード設定を保存
     if (wizardData.videoId && wizardData.liveChatId) {
       try {
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         await invoke('save_wizard_settings', {
           video_id: wizardData.videoId,
           live_chat_id: wizardData.liveChatId,
@@ -84,6 +85,7 @@ export default function Wizard({ onComplete }: WizardProps) {
   const handleSkipApiKey = async () => {
     // ダミーの設定を保存してウィザード完了扱いにする
     try {
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       await invoke('save_wizard_settings', {
         video_id: '',
         live_chat_id: '',

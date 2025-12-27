@@ -1,4 +1,14 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load .env file from project root (parent of src-tauri)
+    // This allows YOUTUBE_API_KEY_PRIMARY etc. to be available at compile time via option_env!
+    let env_path = std::path::Path::new("../.env");
+    if env_path.exists() {
+        dotenvy::from_path(env_path).ok();
+    }
+    // Re-run build if .env changes (always output, even if file doesn't exist yet)
+    // This ensures newly created .env files trigger a rebuild
+    println!("cargo:rerun-if-changed=../.env");
+
     // Tauri build
     tauri_build::build();
 

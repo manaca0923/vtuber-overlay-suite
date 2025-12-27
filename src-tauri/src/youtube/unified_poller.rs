@@ -159,10 +159,10 @@ impl UnifiedPoller {
                             // DBに保存
                             save_comments_to_db(&db_pool, &messages_clone).await;
 
-                            // WebSocketでブロードキャスト
+                            // WebSocketでブロードキャスト（公式APIはバッファリング表示）
                             let state_lock = server_state.read().await;
                             for msg in messages_clone {
-                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg }).await;
+                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg, instant: false }).await;
                             }
                         });
                     }
@@ -400,10 +400,10 @@ async fn run_innertube_loop(
                     // DBに保存
                     save_comments_to_db(&db_pool, &new_messages).await;
 
-                    // WebSocketでブロードキャスト
+                    // WebSocketでブロードキャスト（InnerTubeは即時表示）
                     let state_lock = server_state.read().await;
                     for msg in &new_messages {
-                        state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone() }).await;
+                        state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone(), instant: true }).await;
                     }
                 }
 

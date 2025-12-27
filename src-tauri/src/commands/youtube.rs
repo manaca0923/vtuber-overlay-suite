@@ -207,12 +207,13 @@ pub async fn start_polling(
                 // DBに保存
                 save_comments_to_db(&db_pool_clone, &messages_clone).await;
 
-                // WebSocketでブロードキャスト
+                // WebSocketでブロードキャスト（公式APIはバッファリング表示）
                 let state_lock = server_state_clone.read().await;
                 for message in messages_clone {
                     state_lock
                         .broadcast(WsMessage::CommentAdd {
                             payload: message.clone(),
+                            instant: false,
                         })
                         .await;
                 }
@@ -473,12 +474,13 @@ pub async fn send_test_comment(
         message_runs: None,
     };
 
-    // WebSocketでブロードキャスト
+    // WebSocketでブロードキャスト（テストメッセージは即時表示）
     let server_state = Arc::clone(&state.server);
     let state_lock = server_state.read().await;
     state_lock
         .broadcast(WsMessage::CommentAdd {
             payload: test_message,
+            instant: true,
         })
         .await;
 
@@ -876,13 +878,14 @@ pub async fn start_polling_innertube(
                 // DBに保存
                 save_comments_to_db(&db_pool, &new_messages).await;
 
-                // WebSocketでブロードキャスト
+                // WebSocketでブロードキャスト（InnerTubeは即時表示）
                 let server_state_clone = Arc::clone(&server_state);
                 for message in new_messages {
                     let state_lock = server_state_clone.read().await;
                     state_lock
                         .broadcast(WsMessage::CommentAdd {
                             payload: message,
+                            instant: true,
                         })
                         .await;
                 }

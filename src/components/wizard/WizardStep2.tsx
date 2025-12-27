@@ -52,6 +52,7 @@ export default function WizardStep2({
 
     const timer = setTimeout(async () => {
       try {
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         const chatId = await invoke<string>('get_live_chat_id', {
           api_key: apiKey,
           video_id: videoId,

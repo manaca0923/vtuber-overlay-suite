@@ -27,8 +27,11 @@ export type CommentPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom
 // セットリスト位置
 export type SetlistPosition = 'top' | 'bottom' | 'left' | 'right';
 
+// 天気ウィジェット位置（3カラムレイアウト用）
+export type WeatherPosition = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
+
 // レイアウトプリセット
-export type LayoutPreset = 'streaming' | 'talk' | 'music' | 'gaming' | 'custom' | 'three-column';
+export type LayoutPreset = 'custom' | 'three-column';
 
 // レイアウトバージョン
 export type LayoutVersion = 'v1' | 'v2';
@@ -50,28 +53,11 @@ export interface LayoutPresetConfig {
 
 // レイアウトプリセット定義
 export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutPresetConfig> = {
-  streaming: {
-    name: '配信向け',
-    description: 'ゲーム配信など、画面上部を空ける',
+  'three-column': {
+    name: '3カラム',
+    description: '左22%/中央56%/右22%の固定レイアウト',
+    version: 'v2',
     comment: { position: 'bottom-left', enabled: true },
-    setlist: { position: 'bottom', enabled: true },
-  },
-  talk: {
-    name: '雑談向け',
-    description: '顔出し配信で左にセトリ、右下にコメント',
-    comment: { position: 'bottom-right', enabled: true },
-    setlist: { position: 'left', enabled: true },
-  },
-  music: {
-    name: '歌配信向け',
-    description: 'セトリを目立たせ、コメントは控えめ',
-    comment: { position: 'top-right', enabled: true },
-    setlist: { position: 'bottom', enabled: true },
-  },
-  gaming: {
-    name: 'ゲーム配信向け',
-    description: 'ゲーム画面の中央を確保',
-    comment: { position: 'top-left', enabled: true },
     setlist: { position: 'right', enabled: true },
   },
   custom: {
@@ -79,13 +65,6 @@ export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutPresetConfig> = {
     description: '個別に設定をカスタマイズ',
     comment: { position: 'bottom-right', enabled: true },
     setlist: { position: 'bottom', enabled: true },
-  },
-  'three-column': {
-    name: '3カラム',
-    description: '左22%/中央56%/右22%の固定レイアウト',
-    version: 'v2',
-    comment: { position: 'bottom-left', enabled: true },
-    setlist: { position: 'right', enabled: true },
   },
 };
 
@@ -113,6 +92,12 @@ export interface SetlistSettings {
   fontSize: number;
 }
 
+// 天気ウィジェット設定
+export interface WeatherSettings {
+  enabled: boolean;
+  position: WeatherPosition;
+}
+
 // オーバーレイ設定全体
 export interface OverlaySettings {
   theme: ThemeName;
@@ -120,12 +105,13 @@ export interface OverlaySettings {
   common: CommonSettings;
   comment: CommentSettings;
   setlist: SetlistSettings;
+  weather?: WeatherSettings; // オプショナル（後方互換性のため）
 }
 
 // デフォルト設定
 export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   theme: 'default',
-  layout: 'streaming',
+  layout: 'three-column',
   common: {
     primaryColor: '#6366f1',
     fontFamily: "'Yu Gothic', 'Meiryo', sans-serif",
@@ -142,6 +128,10 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
     position: 'bottom',
     showArtist: true,
     fontSize: 24,
+  },
+  weather: {
+    enabled: true,
+    position: 'left-top',
   },
 };
 

@@ -73,6 +73,7 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
 
       if (isValid) {
         // APIキーを保存
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         await invoke('save_api_key', { api_key: apiKey });
         setIsApiKeyLoaded(true);
         setSuccess('APIキーが有効です。保存しました。');
@@ -103,6 +104,7 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
         extractedVideoId = urlMatch[1];
       }
 
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       const chatId = await invoke<string>('get_live_chat_id', {
         api_key: apiKey,
         video_id: extractedVideoId,
@@ -111,6 +113,7 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
       setVideoId(extractedVideoId); // 抽出したIDに更新
 
       // 設定を保存
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       await invoke('save_wizard_settings', {
         video_id: extractedVideoId,
         live_chat_id: chatId,
@@ -133,12 +136,13 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
     setSuccess('');
 
     try {
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       const result = await invoke<[ChatMessage[], string | null, number]>(
         'get_chat_messages',
         {
-          apiKey: apiKey,
-          liveChatId: liveChatId,
-          pageToken: null,
+          api_key: apiKey,
+          live_chat_id: liveChatId,
+          page_token: null,
         }
       );
       const newMessages = result[0];

@@ -309,7 +309,8 @@ export function CommentControlPanel({
   // 現在のモードでAPIキーが必要かどうか
   const currentModeRequiresApiKey = API_MODE_INFO[apiMode].requiresApiKey;
   const hasValidApiKey = apiKey && apiKey.length > 0;
-  const canStartPolling = videoId && (apiMode === 'innertube' || hasValidApiKey);
+  // APIキーが必要なモードでは、ユーザーAPIキーまたは同梱キー使用のいずれかがあれば開始可能
+  const canStartPolling = videoId && (apiMode === 'innertube' || hasValidApiKey || (currentModeRequiresApiKey && useBundledKey));
 
   // 統合ポーラーを使った開始処理
   const handleStartPolling = useCallback(
@@ -333,6 +334,7 @@ export function CommentControlPanel({
 
       try {
         // 統合ポーラーを使用
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         await invoke('start_unified_polling', {
           video_id: videoId,
           mode: apiMode,
@@ -384,7 +386,7 @@ export function CommentControlPanel({
   // APIモード変更ハンドラ
   const handleApiModeChange = useCallback(async (newMode: ApiMode) => {
     if (isPolling) {
-      setError('ポーリング中はモードを変更できません。停止してから変更してください。');
+      setError('取得中はモードを変更できません。停止してから変更してください。');
       return;
     }
 
@@ -430,6 +432,7 @@ export function CommentControlPanel({
 
       if (apiKey) {
         // 公式API経由
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         newLiveChatId = await invoke<string>('get_live_chat_id', {
           api_key: apiKey,
           video_id: newVideoId,
@@ -442,6 +445,7 @@ export function CommentControlPanel({
       }
 
       // 設定を保存
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       await invoke('save_wizard_settings', {
         video_id: newVideoId,
         live_chat_id: newLiveChatId,
@@ -585,7 +589,7 @@ export function CommentControlPanel({
         </div>
         {isPolling && (
           <p className="mt-1 text-xs text-orange-600">
-            ※ポーリング中は変更できません。停止してから変更してください。
+            ※取得中は変更できません。停止してから変更してください。
           </p>
         )}
       </div>

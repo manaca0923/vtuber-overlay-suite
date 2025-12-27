@@ -4,3 +4,4 @@ export { CommentSettingsPanel } from './CommentSettingsPanel';
 export { SetlistSettingsPanel } from './SetlistSettingsPanel';
 export { OverlayPreview } from './OverlayPreview';
 export { WeatherSettingsPanel } from './WeatherSettingsPanel';
+export { ApiKeySettingsPanel } from './ApiKeySettingsPanel';

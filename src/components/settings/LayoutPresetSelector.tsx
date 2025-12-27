@@ -85,7 +85,7 @@ export function LayoutPresetSelector({ selected, onChange }: LayoutPresetSelecto
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-700">レイアウトプリセット</label>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {presetEntries.map(([key, config]) => (
           <button
             key={key}

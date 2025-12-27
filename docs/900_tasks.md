@@ -662,7 +662,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | T22 | ✅ 完了 | 2025-12-25 |
 | T23 | ✅ 完了 | 2025-12-25 |
 | T24 | ✅ 完了 | 2025-12-26 |
-| T25 | ⬜ 未着手 | - |
+| T25 | ✅ 完了 | 2025-12-27 |
 
 **ステータス凡例**: ⬜ 未着手 / 🔄 進行中 / ✅ 完了 / ⏸️ 保留
 
@@ -990,13 +990,8 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低
 
-- [ ] **天気API keyringフォールバックのテスト** (PR#57)
-  - keyringにキーがあるがメモリにない場合のフォールバック動作を検証
-  - テスト対象:
-    - `ensure_api_key_synced`関数の動作（keyringアクセスをモック化）
-    - `get_weather`/`fetch_weather`/`broadcast_weather_update`でのフォールバック呼び出し
-  - 対象ファイル: `src-tauri/src/commands/weather.rs`
-  - 優先度: 中（OS keyringへの依存でモック化が必要）
+- [x] **天気API keyringフォールバックのテスト** (PR#57) → **不要化** (PR#58)
+  - Open-Meteo移行によりAPIキー不要化、テスト対象が削除されたため不要
 
 - [ ] **YouTube `get_live_stream_stats` のHTTPステータスマッピングテスト** (PR#57)
   - 404/400/5xxエラー時のYouTubeErrorマッピングを検証
@@ -1560,7 +1555,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T25: 外部API連携
 **優先度**: P2 | **見積**: 5日 | **依存**: T23
-**ステータス**: ✅ **完了** (PR #57)
+**ステータス**: ✅ **完了** (PR #57, PR #58)
 
 ### 概要
 天気API、YouTube Analytics連携。
@@ -1571,9 +1566,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] YouTube視聴者数/高評価数取得（get_live_stream_stats）
 - [x] KPIBlock用データ取得（broadcast_kpi_update）
 - [x] WeatherSettings UI
+- [x] Open-Meteoへの移行（APIキー不要化）(PR #58)
 
 ### 天気API
-- OpenWeatherMap API を採用（無料枠、日本語対応）
+- Open-Meteo API を採用（APIキー不要、登録不要）
+- Geocoding APIで都市名→緯度経度変換
+- WMOコードから天気絵文字/日本語説明を生成
 
 ---
 

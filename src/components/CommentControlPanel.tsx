@@ -334,12 +334,12 @@ export function CommentControlPanel({
 
       try {
         // 統合ポーラーを使用
-        // 注意: Tauri 2.0ではRust側snake_case引数に対してフロントエンドはcamelCaseを使用
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
         await invoke('start_unified_polling', {
-          videoId: videoId,
+          video_id: videoId,
           mode: apiMode,
-          useBundledKey: useBundledKey,
-          userApiKey: hasValidApiKey ? apiKey : null,
+          use_bundled_key: useBundledKey,
+          user_api_key: hasValidApiKey ? apiKey : null,
         });
         if (isMountedRef.current) {
           setIsPolling(true);
@@ -444,10 +444,10 @@ export function CommentControlPanel({
       }
 
       // 設定を保存
-      // 注意: Tauri 2.0ではRust側snake_case引数に対してフロントエンドはcamelCaseを使用
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
       await invoke('save_wizard_settings', {
-        videoId: newVideoId,
-        liveChatId: newLiveChatId,
+        video_id: newVideoId,
+        live_chat_id: newLiveChatId,
       });
 
       // 親コンポーネントに通知

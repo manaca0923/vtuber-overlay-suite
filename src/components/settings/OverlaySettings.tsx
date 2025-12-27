@@ -55,10 +55,10 @@ export function OverlaySettings() {
               ...DEFAULT_OVERLAY_SETTINGS.setlist,
               ...saved.setlist,
             },
-            weather: {
-              ...DEFAULT_OVERLAY_SETTINGS.weather,
-              ...saved.weather,
-            },
+            // saved.weatherがundefinedの場合はデフォルト値を使用
+            weather: saved.weather
+              ? { ...DEFAULT_OVERLAY_SETTINGS.weather, ...saved.weather }
+              : DEFAULT_OVERLAY_SETTINGS.weather,
           };
           setSettings(merged);
         }

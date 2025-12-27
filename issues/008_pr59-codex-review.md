@@ -88,8 +88,40 @@ const migratedLayout: LayoutPreset = validLayouts.includes(saved.layout as Layou
 
 ---
 
+## 追加修正（2回目レビュー）
+
+### 追加で修正したsnake_case違反
+
+**対象ファイル**:
+- `src/components/ApiKeySetup.tsx`:
+  - `get_live_chat_id`: `apiKey` → `api_key`, `videoId` → `video_id`
+  - `save_wizard_settings`: `videoId` → `video_id`, `liveChatId` → `live_chat_id`
+  - `get_chat_messages`: `apiKey` → `api_key`, `liveChatId` → `live_chat_id`, `pageToken` → `page_token`
+- `src/components/CommentControlPanel.tsx`:
+  - `start_unified_polling`: `videoId` → `video_id`, `useBundledKey` → `use_bundled_key`, `userApiKey` → `user_api_key`
+  - `save_wizard_settings`: `videoId` → `video_id`, `liveChatId` → `live_chat_id`
+- `src/components/wizard/Wizard.tsx`:
+  - `save_wizard_settings`（2箇所）: `videoId` → `video_id`, `liveChatId` → `live_chat_id`
+- `src/components/wizard/WizardStep2.tsx`:
+  - `get_live_chat_id`: `apiKey` → `api_key`, `videoId` → `video_id`
+
+### CIエラー修正
+
+**問題**: `OverlaySettings.tsx`で`saved.weather`が`undefined`の場合にスプレッド演算子で展開すると、`WeatherSettings`型（`enabled: boolean`必須）に合わない
+
+**修正**:
+```typescript
+// saved.weatherがundefinedの場合はデフォルト値を使用
+weather: saved.weather
+  ? { ...DEFAULT_OVERLAY_SETTINGS.weather, ...saved.weather }
+  : DEFAULT_OVERLAY_SETTINGS.weather,
+```
+
+---
+
 ## 学んだこと
 
 1. **ビルドスクリプトのrerun条件**: ファイルが存在しない場合でも`cargo:rerun-if-changed`を出力すべき
 2. **型変更時の後方互換**: 型定義を変更する際は、既存データのマイグレーション処理を必ず実装する
 3. **snake_caseルールの徹底**: Tauri invoke引数は常にRust側に合わせてsnake_caseを使用
+4. **オプショナルプロパティのスプレッド**: `saved.weather`のようなオプショナルプロパティをスプレッドする場合、`undefined`のケースを明示的に処理する必要がある

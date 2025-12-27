@@ -175,6 +175,36 @@ let msg = WsMessage::CommentAdd { payload: comment, instant: true };
 
 ---
 
+## 追加修正（6回目レビュー）
+
+### WeatherPositionApi型の重複削除
+
+**問題**:
+`src-tauri/src/server/http.rs`に`WeatherPositionApi`、`types.rs`に`WeatherPosition`と同じ構造の型が重複定義されていた。
+
+**修正**:
+- `http.rs`から`WeatherPositionApi`型を削除
+- `types.rs`の`WeatherPosition`をインポートして再利用
+- `parse_weather_position()`の戻り値型も`WeatherPosition`に変更
+
+### APIデフォルト値の不整合修正
+
+**問題**:
+`default_overlay_settings()`で`layout: LayoutPreset::Streaming`を使用していたが、フロントエンド側では`streaming`は旧プリセットとしてマイグレーション対象になっていた。
+
+**修正**:
+```rust
+// 修正前
+layout: LayoutPreset::Streaming,
+
+// 修正後
+// Note: フロントエンド側で旧プリセット（streaming等）はthree-columnにマイグレーションされるため、
+// API側もデフォルトをThreeColumnに統一
+layout: LayoutPreset::ThreeColumn,
+```
+
+---
+
 ## 学んだこと
 
 1. **ビルドスクリプトのrerun条件**: ファイルが存在しない場合でも`cargo:rerun-if-changed`を出力すべき
@@ -184,3 +214,5 @@ let msg = WsMessage::CommentAdd { payload: comment, instant: true };
 5. **snake_case違反の網羅的確認**: 1回の修正で漏れがないよう、`grep`で全ファイルを確認すること
 6. **機能改善提案は900_tasks.mdへ**: 即座に対応不要な改善提案は`docs/900_tasks.md`に追記して管理する
 7. **キャッシュ送信時のフラグ**: WebSocket接続時にキャッシュを送信する場合、表示モードフラグ（instant等）の適切な値を検討する
+8. **型の重複定義を避ける**: 同じ構造の型を複数箇所で定義せず、共通モジュールで定義して再利用する
+9. **デフォルト値の一貫性**: バックエンドとフロントエンドでデフォルト値が異なると不整合が発生するため、一貫性を保つ

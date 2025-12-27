@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
-use super::types::{CommentPosition, LayoutPreset, SetlistPosition};
+use super::types::{CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition};
 
 /// HTTPサーバー用の共有状態
 #[derive(Clone)]
@@ -302,30 +302,20 @@ struct SetlistSettingsApi {
     font_size: u32,
 }
 
-/// 天気ウィジェットの表示位置
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum WeatherPositionApi {
-    LeftTop,
-    LeftBottom,
-    RightTop,
-    RightBottom,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WeatherSettingsApi {
     enabled: bool,
-    position: WeatherPositionApi,
+    position: WeatherPosition,
 }
 
 /// 文字列からWeatherPositionに変換
-fn parse_weather_position(s: &str) -> WeatherPositionApi {
+fn parse_weather_position(s: &str) -> WeatherPosition {
     match s {
-        "left-bottom" => WeatherPositionApi::LeftBottom,
-        "right-top" => WeatherPositionApi::RightTop,
-        "right-bottom" => WeatherPositionApi::RightBottom,
-        _ => WeatherPositionApi::LeftTop, // デフォルト
+        "left-bottom" => WeatherPosition::LeftBottom,
+        "right-top" => WeatherPosition::RightTop,
+        "right-bottom" => WeatherPosition::RightBottom,
+        _ => WeatherPosition::LeftTop, // デフォルト
     }
 }
 
@@ -333,7 +323,9 @@ fn parse_weather_position(s: &str) -> WeatherPositionApi {
 fn default_overlay_settings() -> OverlaySettingsApiResponse {
     OverlaySettingsApiResponse {
         theme: "default".to_string(),
-        layout: LayoutPreset::Streaming,
+        // Note: フロントエンド側で旧プリセット（streaming等）はthree-columnにマイグレーションされるため、
+        // API側もデフォルトをThreeColumnに統一
+        layout: LayoutPreset::ThreeColumn,
         primary_color: "#6366f1".to_string(),
         font_family: "'Yu Gothic', 'Meiryo', sans-serif".to_string(),
         border_radius: 8,
@@ -351,7 +343,7 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
         },
         weather: Some(WeatherSettingsApi {
             enabled: true,
-            position: WeatherPositionApi::LeftTop,
+            position: WeatherPosition::LeftTop,
         }),
     }
 }
@@ -418,7 +410,7 @@ async fn get_overlay_settings_api(
                         // デフォルト値
                         Some(WeatherSettingsApi {
                             enabled: true,
-                            position: WeatherPositionApi::LeftTop,
+                            position: WeatherPosition::LeftTop,
                         })
                     };
 

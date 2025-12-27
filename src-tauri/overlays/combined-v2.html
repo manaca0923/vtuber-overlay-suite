@@ -141,6 +141,8 @@
       WS_URL,
       API_BASE_URL,
       SETTINGS_FETCH_TIMEOUT,
+      WebSocketManager,
+      SettingsFetcher,
       updateSetlistDisplay,
       fetchLatestSetlist
     } = window.OverlayCore;
@@ -150,11 +152,6 @@
     let showArtist = true;
     let commentEnabled = true;
     let setlistEnabled = true;
-
-    let ws = null;
-    let reconnectDelay = 1000;
-    let reconnectTimerId = null;
-    let isShuttingDown = false;
 
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
     // letを使用: bfcache復元時に再初期化するため
@@ -358,135 +355,78 @@
       updateSetlistDisplay(data, setlistElements, updateArtistVisibility);
     }
 
-    // ===== WebSocket接続 =====
-    let settingsVersion = 0;
-    let fetchInFlight = false;
-    let settingsFetchSucceeded = false;
-
-    async function fetchAndApplySettings() {
-      if (fetchInFlight) return;
-      fetchInFlight = true;
-      const requestVersion = settingsVersion;
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), SETTINGS_FETCH_TIMEOUT);
-        const response = await fetch(`${API_BASE_URL}/overlay/settings`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const settings = await response.json();
-          if (settingsVersion > requestVersion) return;
-          applySettingsUpdate(settings);
-          applyUrlSettings();
-          settingsFetchSucceeded = true;
-        }
-      } catch (e) {
-        console.log('Settings API not available, using defaults');
-      } finally {
-        fetchInFlight = false;
+    // ===== 設定フェッチャー =====
+    const settingsFetcher = new SettingsFetcher({
+      apiBaseUrl: API_BASE_URL,
+      timeout: SETTINGS_FETCH_TIMEOUT,
+      onSettingsApply: (settings) => {
+        applySettingsUpdate(settings);
+        applyUrlSettings();
       }
-    }
+    });
 
-    function connectWebSocket() {
-      // OBSリロード時などでisShuttingDownがtrueのまま呼ばれる場合に備えてリセット
-      // ※ connectWebSocket()が呼ばれる = 接続を意図しているため、シャットダウン状態を解除
-      isShuttingDown = false;
-
-      ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        reconnectDelay = 1000;
-        // ペンディング中の再接続タイマーをクリア（二重接続防止）
-        // 手動/早期再接続でonopenに到達した場合、予約済みタイマーが残っている可能性がある
-        if (reconnectTimerId) {
-          clearTimeout(reconnectTimerId);
-          reconnectTimerId = null;
+    // ===== WebSocket接続マネージャー =====
+    const wsManager = new WebSocketManager({
+      url: WS_URL,
+      onOpen: () => {
+        if (!settingsFetcher.hasFetched()) {
+          settingsFetcher.fetchAndApply();
         }
-        if (!settingsFetchSucceeded) {
-          fetchAndApplySettings();
-        }
-        // 共有モジュールのfetchLatestSetlistを使用
         fetchLatestSetlist(API_BASE_URL, updateSetlist);
-      };
+      },
+      onMessage: (data) => {
+        switch (data.type) {
+          case 'comment:add':
+            // instant=trueなら即時表示（gRPC/InnerTube）、falseならバッファリング（公式APIポーリング）
+            if (data.instant) {
+              commentQueue.addInstant(data.payload);
+            } else {
+              commentQueue.queue(data.payload);
+            }
+            break;
+          case 'comment:remove':
+            const el = document.querySelector(`[data-id="${CSS.escape(data.payload?.id)}"]`);
+            if (el) removeCommentWithAnimation(el);
+            break;
+          case 'setlist:update':
+            updateSetlist({
+              songs: data.payload.songs.map(s => ({ title: s.title, artist: s.artist })),
+              currentIndex: data.payload.currentIndex
+            });
+            break;
+          case 'settings:update':
+            settingsFetcher.incrementVersion();
+            applySettingsUpdate(data.payload);
+            applyUrlSettings();
+            break;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          switch (data.type) {
-            case 'comment:add':
-              // instant=trueなら即時表示（gRPC/InnerTube）、falseならバッファリング（公式APIポーリング）
-              if (data.instant) {
-                commentQueue.addInstant(data.payload);
-              } else {
-                commentQueue.queue(data.payload);
-              }
-              break;
-            case 'comment:remove':
-              const el = document.querySelector(`[data-id="${CSS.escape(data.payload?.id)}"]`);
-              if (el) removeCommentWithAnimation(el);
-              break;
-            case 'setlist:update':
-              updateSetlist({
-                songs: data.payload.songs.map(s => ({ title: s.title, artist: s.artist })),
-                currentIndex: data.payload.currentIndex
-              });
-              break;
-            case 'settings:update':
-              settingsVersion++;
-              applySettingsUpdate(data.payload);
-              applyUrlSettings();
-              break;
-
-            // 新規コンポーネント用イベント（T24: バッチ更新 + 過密検出）
-            case 'kpi:update':
-              updateBatcher.queue('KPIBlock', data.payload);
-              densityManager.recordUpdate('right.lowerLeft');
-              break;
-            case 'queue:update':
-              updateBatcher.queue('QueueList', data.payload);
-              densityManager.recordUpdate('right.lowerRight');
-              break;
-            case 'promo:update':
-              updateBatcher.queue('PromoPanel', data.payload);
-              densityManager.recordUpdate('right.bottom');
-              break;
-            case 'weather:update':
-              // 天気ウィジェットは左カラム（slot-left-topBelow）に配置されるため、
-              // 右下エリアの過密検出（densityManager）には記録しない。
-              // 右下エリア: right.lowerLeft, right.lowerRight, right.bottom のみが対象
-              updateBatcher.queue('WeatherWidget', data.payload);
-              break;
-            case 'template:update':
-              if (data.payload && data.payload.components) {
-                ComponentRegistry.applyTemplate(data.payload.components);
-              }
-              break;
-          }
-        } catch (e) {
-          console.error('Failed to parse message:', e);
+          // 新規コンポーネント用イベント（T24: バッチ更新 + 過密検出）
+          case 'kpi:update':
+            updateBatcher.queue('KPIBlock', data.payload);
+            densityManager.recordUpdate('right.lowerLeft');
+            break;
+          case 'queue:update':
+            updateBatcher.queue('QueueList', data.payload);
+            densityManager.recordUpdate('right.lowerRight');
+            break;
+          case 'promo:update':
+            updateBatcher.queue('PromoPanel', data.payload);
+            densityManager.recordUpdate('right.bottom');
+            break;
+          case 'weather:update':
+            // 天気ウィジェットは左カラム（slot-left-topBelow）に配置されるため、
+            // 右下エリアの過密検出（densityManager）には記録しない。
+            // 右下エリア: right.lowerLeft, right.lowerRight, right.bottom のみが対象
+            updateBatcher.queue('WeatherWidget', data.payload);
+            break;
+          case 'template:update':
+            if (data.payload && data.payload.components) {
+              ComponentRegistry.applyTemplate(data.payload.components);
+            }
+            break;
         }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        // シャットダウン中は再接続しない
-        if (isShuttingDown) {
-          console.log('WebSocket closed (shutdown)');
-          return;
-        }
-        console.log('WebSocket closed, reconnecting...');
-        reconnectTimerId = setTimeout(() => {
-          reconnectTimerId = null;
-          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-          connectWebSocket();
-        }, reconnectDelay);
-      };
-    }
+      }
+    });
 
     // ===== ウィンドウリサイズ =====
     let resizeTimeout;
@@ -545,21 +485,8 @@
     // - OBSブラウザソース等のbfcache非対応環境ではpagehide(persisted=false)で確実にクリーンアップ
 
     function cleanup() {
-      // シャットダウンフラグを立てて再接続を防止
-      isShuttingDown = true;
-
-      // 再接続タイマーをクリア
-      if (reconnectTimerId) {
-        clearTimeout(reconnectTimerId);
-        reconnectTimerId = null;
-      }
-
-      // WebSocketを閉じる（oncloseハンドラを無効化してから）
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-        ws = null; // 閉じたソケットを"生きている"と誤認しないようnull化
-      }
+      // WebSocketマネージャーのクリーンアップ（再接続タイマーも含む）
+      wsManager.cleanup();
 
       if (densityManager) {
         densityManager.destroy();
@@ -585,18 +512,11 @@
     // bfcache復元時の再接続
     window.addEventListener('pageshow', (event) => {
       if (event.persisted) {
-        // bfcacheから復元された場合、フラグをリセットして再接続可能にする
+        // bfcacheから復元された場合
         console.log('Page restored from bfcache, reconnecting...');
-        isShuttingDown = false;
-        reconnectDelay = 1000;
 
-        // ペンディング中の再接続タイマーをクリア（二重接続防止）
-        // ws.oncloseがタイマーをスケジュール済みの場合があるため、
-        // connectWebSocket()を呼ぶ前にクリアする
-        if (reconnectTimerId) {
-          clearTimeout(reconnectTimerId);
-          reconnectTimerId = null;
-        }
+        // 設定フェッチャーをリセット（復元後に必ず再取得）
+        settingsFetcher.reset();
 
         // マネージャーを再作成（destroyされている可能性があるため）
         // 注: bfcache復元時はbeforeunload/pagehideでcleanupが呼ばれていないため、
@@ -611,23 +531,16 @@
           console.log('UpdateBatcher reinitialized after bfcache restore');
         }
 
-        // 二重接続を防止: CONNECTING/OPEN状態では再接続しない
-        if (!ws || (ws.readyState !== WebSocket.CONNECTING && ws.readyState !== WebSocket.OPEN)) {
-          connectWebSocket();
-        }
+        // WebSocketマネージャーを再初期化
+        wsManager.reinitialize();
       }
     });
 
     // ===== 初期化 =====
-    // 防御的リセット: 初期化前にシャットダウン状態をクリア
-    // リロード時やbfcache非対応環境で、前回のシャットダウン状態が残っている可能性がある
-    // connectWebSocket()より前にエラーが発生しても、再接続が抑制されないようにする
-    isShuttingDown = false;
-
     applyUrlSettings();
-    fetchAndApplySettings();
+    settingsFetcher.fetchAndApply();
     applyComponentSettings();
-    connectWebSocket();
+    wsManager.connect();
   </script>
 </body>
 

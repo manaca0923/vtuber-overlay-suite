@@ -17,6 +17,20 @@ const MAX_RECONNECT_DELAY = 30000;
 const INITIAL_RECONNECT_DELAY = 1000;
 
 // =============================================================================
+// ユーティリティ関数
+// =============================================================================
+
+/**
+ * タイムアウト値をバリデートし、無効な場合はデフォルト値を返す
+ * @param {*} timeout - タイムアウト値
+ * @param {number} defaultValue - デフォルト値
+ * @returns {number} - 有効なタイムアウト値
+ */
+function validateTimeout(timeout, defaultValue = SETTINGS_FETCH_TIMEOUT) {
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : defaultValue;
+}
+
+// =============================================================================
 // WebSocket接続マネージャー
 // =============================================================================
 
@@ -58,7 +72,7 @@ class WebSocketManager {
         const data = JSON.parse(event.data);
         this.onMessage(data);
       } catch (e) {
-        console.error('Failed to parse message:', e);
+        console.error('WebSocket message handling error:', e);
       }
     };
 
@@ -96,6 +110,8 @@ class WebSocketManager {
     }
 
     if (this.ws) {
+      // oncloseハンドラを無効化して不要なログ/再接続を防止
+      this.ws.onclose = null;
       this.ws.close();
       this.ws = null;
     }
@@ -107,6 +123,19 @@ class WebSocketManager {
   reinitialize() {
     this.isShuttingDown = false;
     this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+
+    // ペンディング中の再接続タイマーをクリア（二重接続防止）
+    if (this.reconnectTimerId) {
+      clearTimeout(this.reconnectTimerId);
+      this.reconnectTimerId = null;
+    }
+
+    // 既存の接続がある場合はスキップ（二重接続防止）
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      console.log('WebSocket already connected or connecting, skipping reinitialize');
+      return;
+    }
+
     this.connect();
   }
 }
@@ -138,13 +167,13 @@ class SettingsFetcher {
     this.fetchInFlight = true;
     const requestVersion = this.settingsVersion;
 
+    const controller = new AbortController();
+    const timeoutMs = validateTimeout(this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
       const response = await fetch(`${this.apiBaseUrl}/overlay/settings`, {
         signal: controller.signal
       });
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         const settings = await response.json();
@@ -156,6 +185,7 @@ class SettingsFetcher {
     } catch (e) {
       console.log('Settings API not available, using defaults');
     } finally {
+      clearTimeout(timeoutId);
       this.fetchInFlight = false;
     }
   }
@@ -172,6 +202,15 @@ class SettingsFetcher {
    */
   hasFetched() {
     return this.fetchSucceeded;
+  }
+
+  /**
+   * 状態をリセット（bfcache復元時に使用）
+   * 次回のfetchAndApplyで必ず再取得される
+   */
+  reset() {
+    this.fetchSucceeded = false;
+    this.fetchInFlight = false;
   }
 }
 
@@ -256,39 +295,54 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
   const currentIndex = data.currentIndex ?? -1;
   const { prevEl, currentEl, nextEl } = elements;
 
-  // 前の曲
-  if (currentIndex > 0) {
-    const prevSong = songs[currentIndex - 1];
-    prevEl.querySelector('.song-number').textContent = currentIndex;
-    prevEl.querySelector('.song-title').textContent = prevSong.title;
-    prevEl.querySelector('.song-artist').textContent = prevSong.artist || '';
-    prevEl.style.display = 'flex';
-  } else {
-    prevEl.style.display = 'none';
+  // 前の曲（要素が存在する場合のみ更新）
+  if (prevEl) {
+    if (currentIndex > 0) {
+      const prevSong = songs[currentIndex - 1];
+      const prevNumber = prevEl.querySelector('.song-number');
+      const prevTitle = prevEl.querySelector('.song-title');
+      const prevArtist = prevEl.querySelector('.song-artist');
+      if (prevNumber) prevNumber.textContent = currentIndex;
+      if (prevTitle) prevTitle.textContent = prevSong.title;
+      if (prevArtist) prevArtist.textContent = prevSong.artist || '';
+      prevEl.style.display = 'flex';
+    } else {
+      prevEl.style.display = 'none';
+    }
   }
 
-  // 現在の曲
-  if (currentIndex >= 0 && currentIndex < songs.length) {
-    const currentSong = songs[currentIndex];
-    currentEl.querySelector('.song-number').textContent = currentIndex + 1;
-    currentEl.querySelector('.song-title').textContent = currentSong.title;
-    currentEl.querySelector('.song-artist').textContent = currentSong.artist || '';
-    currentEl.style.display = 'flex';
-  } else {
-    currentEl.querySelector('.song-number').textContent = '-';
-    currentEl.querySelector('.song-title').textContent = '待機中...';
-    currentEl.querySelector('.song-artist').textContent = '';
+  // 現在の曲（要素が存在する場合のみ更新）
+  if (currentEl) {
+    const currentNumber = currentEl.querySelector('.song-number');
+    const currentTitle = currentEl.querySelector('.song-title');
+    const currentArtist = currentEl.querySelector('.song-artist');
+    if (currentIndex >= 0 && currentIndex < songs.length) {
+      const currentSong = songs[currentIndex];
+      if (currentNumber) currentNumber.textContent = currentIndex + 1;
+      if (currentTitle) currentTitle.textContent = currentSong.title;
+      if (currentArtist) currentArtist.textContent = currentSong.artist || '';
+      currentEl.style.display = 'flex';
+    } else {
+      if (currentNumber) currentNumber.textContent = '-';
+      if (currentTitle) currentTitle.textContent = '待機中...';
+      if (currentArtist) currentArtist.textContent = '';
+    }
   }
 
-  // 次の曲
-  if (currentIndex >= 0 && currentIndex < songs.length - 1) {
-    const nextSong = songs[currentIndex + 1];
-    nextEl.querySelector('.song-number').textContent = currentIndex + 2;
-    nextEl.querySelector('.song-title').textContent = nextSong.title;
-    nextEl.querySelector('.song-artist').textContent = nextSong.artist || '';
-    nextEl.style.display = 'flex';
-  } else {
-    nextEl.style.display = 'none';
+  // 次の曲（要素が存在する場合のみ更新）
+  if (nextEl) {
+    if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+      const nextSong = songs[currentIndex + 1];
+      const nextNumber = nextEl.querySelector('.song-number');
+      const nextTitle = nextEl.querySelector('.song-title');
+      const nextArtist = nextEl.querySelector('.song-artist');
+      if (nextNumber) nextNumber.textContent = currentIndex + 2;
+      if (nextTitle) nextTitle.textContent = nextSong.title;
+      if (nextArtist) nextArtist.textContent = nextSong.artist || '';
+      nextEl.style.display = 'flex';
+    } else {
+      nextEl.style.display = 'none';
+    }
   }
 
   onArtistVisibilityUpdate();
@@ -298,10 +352,16 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
  * 最新セットリストをフェッチ
  * @param {string} apiBaseUrl - APIベースURL
  * @param {Function} onUpdate - 更新コールバック
+ * @param {number} timeout - タイムアウト時間（ミリ秒）
  */
-async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate) {
+async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
+  const timeoutMs = validateTimeout(timeout);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${apiBaseUrl}/setlist/latest`);
+    const response = await fetch(`${apiBaseUrl}/setlist/latest`, {
+      signal: controller.signal
+    });
     if (response.ok) {
       const data = await response.json();
       if (data.songs) {
@@ -313,6 +373,8 @@ async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate) {
     }
   } catch (e) {
     console.log('Failed to fetch setlist');
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

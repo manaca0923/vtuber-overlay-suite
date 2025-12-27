@@ -710,19 +710,35 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: `shared/overlay-core.js`に共通ロジックを抽出
   - 抽出済み: updateSetlistDisplay, fetchLatestSetlist, 定数類
 
-- [ ] **オーバーレイ共通ロジックの抽出（第2段階）** (PR#61レビュー)
-  - 現在: WebSocketManager, SettingsFetcher等のクラスは定義済みだが未使用
-  - 対応: combined.htmlとcombined-v2.htmlでこれらのクラスを使用するようリファクタリング
-  - 追加検討:
-    - DOM要素のnullチェック追加（updateSetlistDisplay）
-    - fetchLatestSetlistにタイムアウト処理追加（SettingsFetcher.fetchAndApplyと一貫性）
-  - 見込み効果: さらに50-100行程度のコード削減
-  - 優先度: 低
+- [x] **オーバーレイ共通ロジックの抽出（第2段階）** (PR#61レビュー) ✅ 対応済み（2025-12-27）
+  - ~~現在: WebSocketManager, SettingsFetcher等のクラスは定義済みだが未使用~~
+  - 対応済み: combined.htmlとcombined-v2.htmlでWebSocketManager, SettingsFetcherを使用
+  - updateSetlistDisplayにDOM要素のnullチェック追加
+  - fetchLatestSetlistにタイムアウト処理追加
+  - 効果: 約110行のコード削減（267削除, 157追加）
+
+- [ ] **combined.htmlへのbfcacheハンドリング追加** (PR#62)
+  - 現在: combined-v2.htmlにはbfcache対応（pagehide/pageshow）があるが、combined.htmlにはない
+  - 対応: combined.htmlにもbfcacheハンドリングを追加、または`setupBfcacheHandlers`ヘルパーを使用
+  - 優先度: 低（OBS以外のブラウザ向け）
+
+- [x] **SettingsFetcherのhasFetched()リセット機能** (PR#62) ✅ 対応済み（2025-12-27）
+  - ~~現在: bfcache復元時にfetchSucceededがリセットされない~~
+  - 対応済み: reset()メソッドを追加し、combined-v2.htmlのbfcache復元時に呼び出し
 
 - [ ] **layout-v2.cssのセットリストスタイル重複** (PR#49)
   - `layout-v2.css:112-166`と`combined.html`のスタイル定義（`.setlist-item`等）が重複
   - 将来的に`shared/setlist-styles.css`への統合を検討
   - 優先度: 低
+
+### テスト（推奨）
+
+- [ ] **overlay-core.jsのユニットテスト** (PR#62 Codexレビュー)
+  - `WebSocketManager.reinitialize()`が「再接続タイマー残存」かつ「既存接続がCONNECTING/OPEN」のときに二重接続しないこと
+  - `SettingsFetcher.reset()`後に`fetchAndApply()`が確実に再取得を行うこと（bfcache復元相当）
+  - `fetchLatestSetlist`が`timeout=0/負値/undefined`のときもデフォルト値で動作し、Abortが即時発火しないこと
+  - `updateSetlistDisplay`が`prevEl/currentEl/nextEl`の一部欠落時でも他要素の更新が継続されること
+  - 優先度: 中（将来的にJestまたはPlaywrightでテスト追加）
 
 - [x] **JSON Schema の `$id` URL更新** (PR#51) ✅ 対応済み（2025-12-26）
   - ~~現在: `https://example.local/...`~~

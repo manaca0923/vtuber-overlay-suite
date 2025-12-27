@@ -728,6 +728,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: JSON SchemaからTypeScript型を自動生成、またはビルド時の検証スクリプト追加を検討
   - 優先度: 低（現時点では手動同期で問題なし）
 
+- [ ] **CommentControlPanel設定読み込みの統合** (PR#60)
+  - 現在: `loadApiMode`と`loadUseBundledKey`が別々のuseEffectで実装
+  - 対応: 設定項目が増えた場合、単一の設定読み込みAPIに統合を検討
+  - 対象ファイル: `src/components/CommentControlPanel.tsx`
+  - 優先度: 低（現時点では2つのuseEffectで問題なし）
+
 - [ ] **layout_type の検証がない** (PR#51)
   - 現在: `layout_type`は"threeColumn"固定だが、バリデーションで検証されていない
   - 対応: 将来のレイアウトタイプ拡張を見越してenumにするか検証を追加

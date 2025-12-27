@@ -263,6 +263,41 @@ bfcacheからの復元時、状態管理クラスの内部フラグも適切に�
 const value = Number.isFinite(input) && input > 0 ? input : DEFAULT_VALUE;
 ```
 
+### 中: SettingsFetcherのtimeoutバリデーション漏れ (Codex Review 4回目)
+
+**問題**:
+```javascript
+// fetchLatestSetlistにはバリデーションを追加したが、SettingsFetcherには未対応だった
+class SettingsFetcher {
+  async fetchAndApply() {
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    // this.timeoutが0/undefined/負値の場合に即時Abort
+  }
+}
+```
+
+**対応**:
+共通関数`validateTimeout()`を追加し、両方の箇所で使用するように統一:
+```javascript
+// 共通バリデーション関数
+function validateTimeout(timeout, defaultValue = SETTINGS_FETCH_TIMEOUT) {
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : defaultValue;
+}
+
+// SettingsFetcher.fetchAndApply
+const timeoutMs = validateTimeout(this.timeout);
+
+// fetchLatestSetlist
+const timeoutMs = validateTimeout(timeout);
+```
+
+### 8. バリデーションロジックの共通化
+
+同じバリデーションを複数箇所で行う場合:
+- 共通関数に抽出して一貫性を保つ
+- 修正漏れを防止
+- コードの重複を削減
+
 ## チェックリスト（今後の対応）
 
 - [x] reinitialize()での二重接続防止
@@ -272,4 +307,6 @@ const value = Number.isFinite(input) && input > 0 ? input : DEFAULT_VALUE;
 - [x] SettingsFetcherのreset()メソッド追加
 - [x] combined-v2.htmlでのbfcache復元時settingsFetcher.reset()呼び出し
 - [x] fetchLatestSetlistのtimeoutバリデーション
+- [x] SettingsFetcherのtimeoutバリデーション
+- [x] validateTimeout()共通関数の追加
 - [ ] combined.htmlへのbfcacheハンドリング追加（低優先度、OBS以外のブラウザ向け）

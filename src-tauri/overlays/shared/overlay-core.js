@@ -17,6 +17,20 @@ const MAX_RECONNECT_DELAY = 30000;
 const INITIAL_RECONNECT_DELAY = 1000;
 
 // =============================================================================
+// ユーティリティ関数
+// =============================================================================
+
+/**
+ * タイムアウト値をバリデートし、無効な場合はデフォルト値を返す
+ * @param {*} timeout - タイムアウト値
+ * @param {number} defaultValue - デフォルト値
+ * @returns {number} - 有効なタイムアウト値
+ */
+function validateTimeout(timeout, defaultValue = SETTINGS_FETCH_TIMEOUT) {
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : defaultValue;
+}
+
+// =============================================================================
 // WebSocket接続マネージャー
 // =============================================================================
 
@@ -154,7 +168,8 @@ class SettingsFetcher {
     const requestVersion = this.settingsVersion;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutMs = validateTimeout(this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`${this.apiBaseUrl}/overlay/settings`, {
         signal: controller.signal
@@ -339,8 +354,7 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
  * @param {number} timeout - タイムアウト時間（ミリ秒）
  */
 async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
-  // タイムアウト値のバリデーション（0/undefined/負値の場合はデフォルト値を使用）
-  const timeoutMs = Number.isFinite(timeout) && timeout > 0 ? timeout : SETTINGS_FETCH_TIMEOUT;
+  const timeoutMs = validateTimeout(timeout);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {

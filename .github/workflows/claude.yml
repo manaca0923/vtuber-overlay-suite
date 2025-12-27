@@ -11,8 +11,9 @@ on:
     types: [submitted]
 
 # 同一PRで同時実行を防止（Claude Codeインストールの競合回避）
+# claude-code-review.ymlと同じgroupを使用して、全Claude関連ワークフローの同時実行を防ぐ
 concurrency:
-  group: claude-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  group: claude-code-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: false
 
 jobs:

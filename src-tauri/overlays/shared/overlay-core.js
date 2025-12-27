@@ -256,36 +256,51 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
   const currentIndex = data.currentIndex ?? -1;
   const { prevEl, currentEl, nextEl } = elements;
 
+  // DOM要素のnullチェック
+  if (!prevEl || !currentEl || !nextEl) {
+    console.warn('updateSetlistDisplay: Required DOM elements not found');
+    return;
+  }
+
   // 前の曲
   if (currentIndex > 0) {
     const prevSong = songs[currentIndex - 1];
-    prevEl.querySelector('.song-number').textContent = currentIndex;
-    prevEl.querySelector('.song-title').textContent = prevSong.title;
-    prevEl.querySelector('.song-artist').textContent = prevSong.artist || '';
+    const prevNumber = prevEl.querySelector('.song-number');
+    const prevTitle = prevEl.querySelector('.song-title');
+    const prevArtist = prevEl.querySelector('.song-artist');
+    if (prevNumber) prevNumber.textContent = currentIndex;
+    if (prevTitle) prevTitle.textContent = prevSong.title;
+    if (prevArtist) prevArtist.textContent = prevSong.artist || '';
     prevEl.style.display = 'flex';
   } else {
     prevEl.style.display = 'none';
   }
 
   // 現在の曲
+  const currentNumber = currentEl.querySelector('.song-number');
+  const currentTitle = currentEl.querySelector('.song-title');
+  const currentArtist = currentEl.querySelector('.song-artist');
   if (currentIndex >= 0 && currentIndex < songs.length) {
     const currentSong = songs[currentIndex];
-    currentEl.querySelector('.song-number').textContent = currentIndex + 1;
-    currentEl.querySelector('.song-title').textContent = currentSong.title;
-    currentEl.querySelector('.song-artist').textContent = currentSong.artist || '';
+    if (currentNumber) currentNumber.textContent = currentIndex + 1;
+    if (currentTitle) currentTitle.textContent = currentSong.title;
+    if (currentArtist) currentArtist.textContent = currentSong.artist || '';
     currentEl.style.display = 'flex';
   } else {
-    currentEl.querySelector('.song-number').textContent = '-';
-    currentEl.querySelector('.song-title').textContent = '待機中...';
-    currentEl.querySelector('.song-artist').textContent = '';
+    if (currentNumber) currentNumber.textContent = '-';
+    if (currentTitle) currentTitle.textContent = '待機中...';
+    if (currentArtist) currentArtist.textContent = '';
   }
 
   // 次の曲
   if (currentIndex >= 0 && currentIndex < songs.length - 1) {
     const nextSong = songs[currentIndex + 1];
-    nextEl.querySelector('.song-number').textContent = currentIndex + 2;
-    nextEl.querySelector('.song-title').textContent = nextSong.title;
-    nextEl.querySelector('.song-artist').textContent = nextSong.artist || '';
+    const nextNumber = nextEl.querySelector('.song-number');
+    const nextTitle = nextEl.querySelector('.song-title');
+    const nextArtist = nextEl.querySelector('.song-artist');
+    if (nextNumber) nextNumber.textContent = currentIndex + 2;
+    if (nextTitle) nextTitle.textContent = nextSong.title;
+    if (nextArtist) nextArtist.textContent = nextSong.artist || '';
     nextEl.style.display = 'flex';
   } else {
     nextEl.style.display = 'none';
@@ -298,10 +313,16 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
  * 最新セットリストをフェッチ
  * @param {string} apiBaseUrl - APIベースURL
  * @param {Function} onUpdate - 更新コールバック
+ * @param {number} timeout - タイムアウト時間（ミリ秒）
  */
-async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate) {
+async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
   try {
-    const response = await fetch(`${apiBaseUrl}/setlist/latest`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(`${apiBaseUrl}/setlist/latest`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
       if (data.songs) {

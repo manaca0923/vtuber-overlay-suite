@@ -114,9 +114,91 @@ this.connect();
 - 意図しないログ出力を回避
 - 再接続タイマーのスケジューリングを防止
 
+### 中: clearTimeoutをtry/finallyで確実に実行 (Codex Review 2回目)
+
+**問題**:
+```javascript
+// 修正前
+async function fetchLatestSetlist(...) {
+  try {
+    const timeoutId = setTimeout(...);
+    const response = await fetch(...);
+    clearTimeout(timeoutId);  // 例外発生時はここに到達しない
+    ...
+  } catch (e) {
+    // clearTimeoutが呼ばれない
+  }
+}
+```
+
+例外やAbort時にタイマーが残り、連続呼び出しでタイマーが増殖する。
+
+**対応**:
+```javascript
+// 修正後
+async function fetchLatestSetlist(...) {
+  const timeoutId = setTimeout(...);
+  try {
+    const response = await fetch(...);
+    ...
+  } catch (e) {
+    ...
+  } finally {
+    clearTimeout(timeoutId);  // 必ず実行される
+  }
+}
+```
+
+### 中: updateSetlistDisplayの要素単位ガード (Codex Review 2回目)
+
+**問題**:
+```javascript
+// 修正前
+if (!prevEl || !currentEl || !nextEl) {
+  return;  // いずれか欠落で全体が停止
+}
+```
+
+prev/nextがないレイアウトでも現在曲表示まで停止する。
+
+**対応**:
+```javascript
+// 修正後
+if (prevEl) { /* prev更新 */ }
+if (currentEl) { /* current更新 */ }
+if (nextEl) { /* next更新 */ }
+```
+
+各要素を独立してガードすることで、部分的なレイアウトでも動作する。
+
+## 学んだこと
+
+### 4. タイマーのtry/finallyパターン
+
+AbortControllerとsetTimeoutを組み合わせる場合:
+- `clearTimeout`は必ず`finally`ブロックで実行
+- 例外やAbort時もタイマーをクリーンアップ
+
+```javascript
+const timeoutId = setTimeout(() => controller.abort(), timeout);
+try {
+  await fetch(...);
+} finally {
+  clearTimeout(timeoutId);  // 必ず実行
+}
+```
+
+### 5. DOM要素の部分欠落への対応
+
+レイアウトによって一部のDOM要素が存在しない場合:
+- 全体をreturnするのではなく、要素単位でガード
+- 各要素の更新を独立させて部分的な動作を維持
+
 ## チェックリスト（今後の対応）
 
 - [x] reinitialize()での二重接続防止
 - [x] cleanup()でのoncloseハンドラ無効化
+- [x] clearTimeoutをtry/finallyに移動
+- [x] updateSetlistDisplayの要素単位ガード
 - [ ] combined.htmlへのbfcacheハンドリング追加（低優先度、OBS以外のブラウザ向け）
 - [ ] SettingsFetcherのhasFetched()リセット機能（低優先度）

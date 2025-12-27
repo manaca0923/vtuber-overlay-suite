@@ -153,13 +153,12 @@ class SettingsFetcher {
     this.fetchInFlight = true;
     const requestVersion = this.settingsVersion;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
       const response = await fetch(`${this.apiBaseUrl}/overlay/settings`, {
         signal: controller.signal
       });
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         const settings = await response.json();
@@ -171,6 +170,7 @@ class SettingsFetcher {
     } catch (e) {
       console.log('Settings API not available, using defaults');
     } finally {
+      clearTimeout(timeoutId);
       this.fetchInFlight = false;
     }
   }
@@ -271,54 +271,54 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
   const currentIndex = data.currentIndex ?? -1;
   const { prevEl, currentEl, nextEl } = elements;
 
-  // DOM要素のnullチェック
-  if (!prevEl || !currentEl || !nextEl) {
-    console.warn('updateSetlistDisplay: Required DOM elements not found');
-    return;
+  // 前の曲（要素が存在する場合のみ更新）
+  if (prevEl) {
+    if (currentIndex > 0) {
+      const prevSong = songs[currentIndex - 1];
+      const prevNumber = prevEl.querySelector('.song-number');
+      const prevTitle = prevEl.querySelector('.song-title');
+      const prevArtist = prevEl.querySelector('.song-artist');
+      if (prevNumber) prevNumber.textContent = currentIndex;
+      if (prevTitle) prevTitle.textContent = prevSong.title;
+      if (prevArtist) prevArtist.textContent = prevSong.artist || '';
+      prevEl.style.display = 'flex';
+    } else {
+      prevEl.style.display = 'none';
+    }
   }
 
-  // 前の曲
-  if (currentIndex > 0) {
-    const prevSong = songs[currentIndex - 1];
-    const prevNumber = prevEl.querySelector('.song-number');
-    const prevTitle = prevEl.querySelector('.song-title');
-    const prevArtist = prevEl.querySelector('.song-artist');
-    if (prevNumber) prevNumber.textContent = currentIndex;
-    if (prevTitle) prevTitle.textContent = prevSong.title;
-    if (prevArtist) prevArtist.textContent = prevSong.artist || '';
-    prevEl.style.display = 'flex';
-  } else {
-    prevEl.style.display = 'none';
+  // 現在の曲（要素が存在する場合のみ更新）
+  if (currentEl) {
+    const currentNumber = currentEl.querySelector('.song-number');
+    const currentTitle = currentEl.querySelector('.song-title');
+    const currentArtist = currentEl.querySelector('.song-artist');
+    if (currentIndex >= 0 && currentIndex < songs.length) {
+      const currentSong = songs[currentIndex];
+      if (currentNumber) currentNumber.textContent = currentIndex + 1;
+      if (currentTitle) currentTitle.textContent = currentSong.title;
+      if (currentArtist) currentArtist.textContent = currentSong.artist || '';
+      currentEl.style.display = 'flex';
+    } else {
+      if (currentNumber) currentNumber.textContent = '-';
+      if (currentTitle) currentTitle.textContent = '待機中...';
+      if (currentArtist) currentArtist.textContent = '';
+    }
   }
 
-  // 現在の曲
-  const currentNumber = currentEl.querySelector('.song-number');
-  const currentTitle = currentEl.querySelector('.song-title');
-  const currentArtist = currentEl.querySelector('.song-artist');
-  if (currentIndex >= 0 && currentIndex < songs.length) {
-    const currentSong = songs[currentIndex];
-    if (currentNumber) currentNumber.textContent = currentIndex + 1;
-    if (currentTitle) currentTitle.textContent = currentSong.title;
-    if (currentArtist) currentArtist.textContent = currentSong.artist || '';
-    currentEl.style.display = 'flex';
-  } else {
-    if (currentNumber) currentNumber.textContent = '-';
-    if (currentTitle) currentTitle.textContent = '待機中...';
-    if (currentArtist) currentArtist.textContent = '';
-  }
-
-  // 次の曲
-  if (currentIndex >= 0 && currentIndex < songs.length - 1) {
-    const nextSong = songs[currentIndex + 1];
-    const nextNumber = nextEl.querySelector('.song-number');
-    const nextTitle = nextEl.querySelector('.song-title');
-    const nextArtist = nextEl.querySelector('.song-artist');
-    if (nextNumber) nextNumber.textContent = currentIndex + 2;
-    if (nextTitle) nextTitle.textContent = nextSong.title;
-    if (nextArtist) nextArtist.textContent = nextSong.artist || '';
-    nextEl.style.display = 'flex';
-  } else {
-    nextEl.style.display = 'none';
+  // 次の曲（要素が存在する場合のみ更新）
+  if (nextEl) {
+    if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+      const nextSong = songs[currentIndex + 1];
+      const nextNumber = nextEl.querySelector('.song-number');
+      const nextTitle = nextEl.querySelector('.song-title');
+      const nextArtist = nextEl.querySelector('.song-artist');
+      if (nextNumber) nextNumber.textContent = currentIndex + 2;
+      if (nextTitle) nextTitle.textContent = nextSong.title;
+      if (nextArtist) nextArtist.textContent = nextSong.artist || '';
+      nextEl.style.display = 'flex';
+    } else {
+      nextEl.style.display = 'none';
+    }
   }
 
   onArtistVisibilityUpdate();
@@ -331,13 +331,12 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
  * @param {number} timeout - タイムアウト時間（ミリ秒）
  */
 async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
     const response = await fetch(`${apiBaseUrl}/setlist/latest`, {
       signal: controller.signal
     });
-    clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
       if (data.songs) {
@@ -349,6 +348,8 @@ async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout =
     }
   } catch (e) {
     console.log('Failed to fetch setlist');
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

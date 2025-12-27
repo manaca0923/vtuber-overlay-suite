@@ -58,7 +58,7 @@ class WebSocketManager {
         const data = JSON.parse(event.data);
         this.onMessage(data);
       } catch (e) {
-        console.error('Failed to parse message:', e);
+        console.error('WebSocket message handling error:', e);
       }
     };
 

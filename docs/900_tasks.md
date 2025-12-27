@@ -731,6 +731,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 将来的に`shared/setlist-styles.css`への統合を検討
   - 優先度: 低
 
+### テスト（推奨）
+
+- [ ] **overlay-core.jsのユニットテスト** (PR#62 Codexレビュー)
+  - `WebSocketManager.reinitialize()`が「再接続タイマー残存」かつ「既存接続がCONNECTING/OPEN」のときに二重接続しないこと
+  - `SettingsFetcher.reset()`後に`fetchAndApply()`が確実に再取得を行うこと（bfcache復元相当）
+  - `fetchLatestSetlist`が`timeout=0/負値/undefined`のときもデフォルト値で動作し、Abortが即時発火しないこと
+  - `updateSetlistDisplay`が`prevEl/currentEl/nextEl`の一部欠落時でも他要素の更新が継続されること
+  - 優先度: 中（将来的にJestまたはPlaywrightでテスト追加）
+
 - [x] **JSON Schema の `$id` URL更新** (PR#51) ✅ 対応済み（2025-12-26）
   - ~~現在: `https://example.local/...`~~
   - 対応済み: 相対パス（`./template-mvp-1.0.json`）に変更

@@ -28,6 +28,25 @@ output_json() {
   fi
 }
 
+notify_discord() {
+  local status="$1"     # OK / FAIL / NODIFF
+  local snap="$2"
+  local base="$3"
+
+  # Webhook未設定なら何もしない
+  [ -n "${DISCORD_WEBHOOK_URL:-}" ] || return 0
+
+  local repo
+  repo="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
+
+  local content="✅ Codex Review: ${status}\nrepo: ${repo}\nbase: ${base}\nsnapshot: ${snap}"
+
+  # Discord payloadは content が基本
+  jq -n --arg content "$content" '{content:$content}' \
+    | curl -sS -X POST -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL" \
+      >/dev/null 2>&1 || true
+}
+
 # 差分がない場合
 if git diff --quiet "${BASE_BRANCH}...HEAD"; then
   printf "No diffs to review against %s.\n" "$BASE_BRANCH" > .codex/review.md
@@ -35,6 +54,7 @@ if git diff --quiet "${BASE_BRANCH}...HEAD"; then
   cp .codex/review.md "$snap"
   echo "$snap" > .codex/review.latest_snapshot
   output_json "📋 Codex Review: No diffs against ${BASE_BRANCH}" "Snapshot: $snap"
+  notify_discord "NODIFF" "$snap" "$BASE_BRANCH"
   exit 0
 fi
 
@@ -89,6 +109,7 @@ if ! {
   cp .codex/review.md "$snap"
   echo "$snap" > .codex/review.latest_snapshot
   output_json "❌ Codex Review: Failed" "Please check .codex/review.md for details"
+  notify_discord "FAIL" "$snap" "$BASE_BRANCH"
   exit 1
 fi
 
@@ -99,3 +120,4 @@ echo "$snap" > .codex/review.latest_snapshot
 # レビュー結果の全文を表示
 review_content=$(cat .codex/review.md)
 output_json "✅ Codex Review: Complete (Saved: $snap)" "$review_content"
+notify_discord "OK" "$snap" "$BASE_BRANCH"

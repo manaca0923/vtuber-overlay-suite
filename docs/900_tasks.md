@@ -717,10 +717,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - fetchLatestSetlistにタイムアウト処理追加
   - 効果: 約110行のコード削減（267削除, 157追加）
 
-- [ ] **combined.htmlへのbfcacheハンドリング追加** (PR#62)
-  - 現在: combined-v2.htmlにはbfcache対応（pagehide/pageshow）があるが、combined.htmlにはない
-  - 対応: combined.htmlにもbfcacheハンドリングを追加、または`setupBfcacheHandlers`ヘルパーを使用
-  - 優先度: 低（OBS以外のブラウザ向け）
+- [x] **combined.htmlへのbfcacheハンドリング追加** (PR#62, PR#63) ✅ 対応済み（2025-12-27）
+  - ~~現在: combined-v2.htmlにはbfcache対応（pagehide/pageshow）があるが、combined.htmlにはない~~
+  - 対応済み: combined.htmlにpagehide/pageshowハンドラを追加
+  - pagehide: event.persisted=falseの場合のみwsManager.cleanup()
+  - pageshow: event.persisted=trueの場合にsettingsFetcher.reset()とwsManager.reinitialize()
 
 - [x] **SettingsFetcherのhasFetched()リセット機能** (PR#62) ✅ 対応済み（2025-12-27）
   - ~~現在: bfcache復元時にfetchSucceededがリセットされない~~

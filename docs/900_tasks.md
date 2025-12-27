@@ -843,11 +843,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: 将来的にユーザーへのフィードバックとして合計値を表示することを検討
   - 優先度: 低
 
-- [ ] **useBundledKey状態の永続化** (PR#40)
-  - 現在: `useBundledKey`はローカルステートのみで管理、アプリ再起動時にリセット
-  - 対応: `apiMode`と同様にDBに保存することを検討
-  - 対象ファイル: `src/components/CommentControlPanel.tsx`
-  - 優先度: 低
+- [x] **useBundledKey状態の永続化** (PR#40) ✅ 対応済み（2025-12-27）
+  - ~~現在: `useBundledKey`はローカルステートのみで管理、アプリ再起動時にリセット~~
+  - 対応済み: wizard_settings（DBのsettingsテーブル）に保存、起動時に読み込み
+  - 対象ファイル: `src/components/CommentControlPanel.tsx`, `src-tauri/src/commands/youtube.rs`
 
 - [x] **コメントキューの即時/バッファモード分離** (PR#59) ✅ 対応済み（2025-12-27）
   - ~~現在: `displayQueue`と`isProcessingQueue`が即時モードとバッファモードで共有~~

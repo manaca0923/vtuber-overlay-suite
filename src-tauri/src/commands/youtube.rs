@@ -487,11 +487,12 @@ pub async fn send_test_comment(
     Ok(())
 }
 
-/// ウィザード設定を保存（videoId, liveChatId）
+/// ウィザード設定を保存（videoId, liveChatId, useBundledKey）
 #[tauri::command]
 pub async fn save_wizard_settings(
     video_id: String,
     live_chat_id: String,
+    use_bundled_key: Option<bool>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let pool = &state.db;
@@ -501,6 +502,7 @@ pub async fn save_wizard_settings(
     let settings_data = serde_json::json!({
         "video_id": video_id,
         "live_chat_id": live_chat_id,
+        "use_bundled_key": use_bundled_key,
         "saved_at": now
     });
     let settings_str =
@@ -520,7 +522,10 @@ pub async fn save_wizard_settings(
     .await
     .map_err(|e| format!("DB error: {}", e))?;
 
-    log::info!("Saved wizard settings: video_id={}, live_chat_id={}", video_id, live_chat_id);
+    log::info!(
+        "Saved wizard settings: video_id={}, live_chat_id={}, use_bundled_key={:?}",
+        video_id, live_chat_id, use_bundled_key
+    );
     Ok(())
 }
 
@@ -553,6 +558,9 @@ pub struct WizardSettingsData {
     pub video_id: String,
     pub live_chat_id: String,
     pub saved_at: String,
+    /// 同梱APIキー使用フラグ（後方互換性のためOption）
+    #[serde(default)]
+    pub use_bundled_key: Option<bool>,
 }
 
 // ================================

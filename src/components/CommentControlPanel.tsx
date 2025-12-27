@@ -119,6 +119,26 @@ export function CommentControlPanel({
     loadApiMode();
   }, []);
 
+  // useBundledKeyを読み込み（wizard_settingsから）
+  useEffect(() => {
+    async function loadUseBundledKey() {
+      try {
+        const settings = await invoke<{
+          video_id: string;
+          live_chat_id: string;
+          saved_at: string;
+          use_bundled_key?: boolean;
+        } | null>('load_wizard_settings');
+        if (isMountedRef.current && settings?.use_bundled_key !== undefined) {
+          setUseBundledKey(settings.use_bundled_key);
+        }
+      } catch (err) {
+        console.error('Failed to load useBundledKey:', err);
+      }
+    }
+    loadUseBundledKey();
+  }, []);
+
   // InnerTube/gRPC/Officialステータスイベントを監視
   useEffect(() => {
     let unlistenInnerTube: UnlistenFn | null = null;
@@ -449,6 +469,7 @@ export function CommentControlPanel({
       await invoke('save_wizard_settings', {
         video_id: newVideoId,
         live_chat_id: newLiveChatId,
+        use_bundled_key: useBundledKey,
       });
 
       // 親コンポーネントに通知
@@ -466,7 +487,7 @@ export function CommentControlPanel({
         setIsUpdating(false);
       }
     }
-  }, [apiKey, editVideoInput, onSettingsChange]);
+  }, [apiKey, editVideoInput, onSettingsChange, useBundledKey]);
 
   // クォータ情報を計算
   const estimatedRemainingQuota = pollingState
@@ -529,7 +550,20 @@ export function CommentControlPanel({
                 type="checkbox"
                 id="useBundledKey"
                 checked={useBundledKey}
-                onChange={(e) => setUseBundledKey(e.target.checked)}
+                onChange={async (e) => {
+                  const newValue = e.target.checked;
+                  setUseBundledKey(newValue);
+                  // 設定を永続化
+                  try {
+                    await invoke('save_wizard_settings', {
+                      video_id: videoId,
+                      live_chat_id: liveChatId,
+                      use_bundled_key: newValue,
+                    });
+                  } catch (err) {
+                    console.error('Failed to save useBundledKey:', err);
+                  }
+                }}
                 disabled={isPolling}
                 className="rounded"
               />

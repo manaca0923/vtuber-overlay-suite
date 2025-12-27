@@ -66,9 +66,11 @@ export default function Wizard({ onComplete }: WizardProps) {
     if (wizardData.videoId && wizardData.liveChatId) {
       try {
         // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
+        // use_bundled_key: nullで既存値を維持（ウィザードではuseBundledKeyを管理しない）
         await invoke('save_wizard_settings', {
           video_id: wizardData.videoId,
           live_chat_id: wizardData.liveChatId,
+          use_bundled_key: null,
         });
       } catch (err) {
         console.error('Failed to save wizard settings:', err);
@@ -86,9 +88,11 @@ export default function Wizard({ onComplete }: WizardProps) {
     // ダミーの設定を保存してウィザード完了扱いにする
     try {
       // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
+      // use_bundled_key: nullで既存値を維持
       await invoke('save_wizard_settings', {
         video_id: '',
         live_chat_id: '',
+        use_bundled_key: null,
       });
     } catch (err) {
       console.error('Failed to save wizard settings:', err);

@@ -114,9 +114,11 @@ export function ApiKeySetup({ onSettingsChange }: ApiKeySetupProps) {
 
       // 設定を保存
       // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
+      // use_bundled_key: nullで既存値を維持（このコンポーネントではuseBundledKeyを管理しない）
       await invoke('save_wizard_settings', {
         video_id: extractedVideoId,
         live_chat_id: chatId,
+        use_bundled_key: null,
       });
 
       // 親コンポーネントに通知（即時反映）

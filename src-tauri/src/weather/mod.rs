@@ -17,7 +17,7 @@ mod cache;
 mod types;
 
 pub use cache::WeatherCache;
-pub use types::{GeocodingResponse, GeocodingResult, OpenMeteoResponse, WeatherData};
+pub use types::{GeocodingResponse, OpenMeteoResponse, WeatherData};
 
 use reqwest::Client;
 use std::sync::Arc;

@@ -20,7 +20,8 @@ pub struct GeocodingResponse {
 /// Geocoding検索結果
 #[derive(Debug, Clone, Deserialize)]
 pub struct GeocodingResult {
-    /// 都市ID
+    /// 都市ID（APIレスポンスに含まれるがアプリ内では未使用）
+    #[allow(dead_code)]
     pub id: i64,
     /// 都市名
     pub name: String,

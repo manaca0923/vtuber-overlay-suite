@@ -41,8 +41,9 @@ export const getWeatherCacheTtl = () =>
   invoke<number>('get_weather_cache_ttl');
 
 // Tauri Commands - KPI/視聴者数
+// 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
 export const getLiveStreamStats = (videoId: string, useBundledKey: boolean) =>
-  invoke<LiveStreamStats>('get_live_stream_stats', { videoId: videoId, useBundledKey: useBundledKey });
+  invoke<LiveStreamStats>('get_live_stream_stats', { video_id: videoId, use_bundled_key: useBundledKey });
 
 export const broadcastKpiUpdate = (
   main: number | null,

@@ -364,18 +364,28 @@ function removeCommentWithAnimation(element) {
  * コメントキューマネージャー
  * - instant=false: 5秒間に溜まったコメントを5秒間で等間隔表示（公式APIポーリング用）
  * - instant=true: 即座に表示（gRPC/InnerTube用）
+ *
+ * 重要: 即時キューとバッファキューは完全に分離されており、
+ * それぞれ独立したキューと処理フラグを持つ。
+ * これにより、バッファ処理中でも即時コメントは短間隔で処理される。
  */
 class CommentQueueManager {
   constructor(options = {}) {
+    // バッファモード用（公式APIポーリング）
     this.commentBuffer = [];
-    this.displayQueue = [];
-    this.isProcessingQueue = false;
+    this.bufferQueue = [];
+    this.isProcessingBuffer = false;
     this.currentDisplayInterval = 300;
     this.BUFFER_INTERVAL = options.bufferInterval || 5000;
     this.MIN_DISPLAY_INTERVAL = options.minInterval || 100;
     this.MAX_DISPLAY_INTERVAL = options.maxInterval || 1000;
+
+    // 即時モード用（gRPC/InnerTube）
+    this.instantQueue = [];
+    this.isProcessingInstant = false;
     // 即時表示時の表示間隔（連続で来た場合のスロットリング）
     this.INSTANT_DISPLAY_INTERVAL = options.instantInterval || 150;
+
     this.onAddComment = options.onAddComment || (() => {});
     // 処理済みIDのセット（重複防止用）
     this.processedIds = new Set();
@@ -406,7 +416,8 @@ class CommentQueueManager {
   _isDuplicate(id) {
     if (this.processedIds.has(id)) return true;
     if (this.commentBuffer.some(c => c.id === id)) return true;
-    if (this.displayQueue.some(c => c.id === id)) return true;
+    if (this.bufferQueue.some(c => c.id === id)) return true;
+    if (this.instantQueue.some(c => c.id === id)) return true;
     if (document.querySelector(`[data-id="${CSS.escape(id)}"]`)) return true;
     return false;
   }
@@ -430,6 +441,8 @@ class CommentQueueManager {
   /**
    * コメントを即座に表示（即時モード）
    * gRPC/InnerTube用：バッファをスキップして即座に表示
+   * Note: バッファ処理とは独立したキュー・フラグを使用するため、
+   * バッファ処理中でも即時コメントは短間隔で処理される
    * @param {Object} comment - コメントデータ
    */
   addInstant(comment) {
@@ -444,33 +457,34 @@ class CommentQueueManager {
     // 処理済みとしてマーク
     this._markProcessed(comment.id);
 
-    // 即座に表示キューに追加
-    this.displayQueue.push(comment);
+    // 即時キューに追加（バッファキューとは別）
+    this.instantQueue.push(comment);
 
-    // 処理中でなければ開始（間隔を短く設定）
-    if (!this.isProcessingQueue) {
+    // 即時処理中でなければ開始
+    if (!this.isProcessingInstant) {
       this._processInstantQueue();
     }
   }
 
   /**
    * 即時モード用のキュー処理
+   * バッファ処理とは独立して動作
    */
   _processInstantQueue() {
-    if (this.displayQueue.length === 0) {
-      this.isProcessingQueue = false;
+    if (this.instantQueue.length === 0) {
+      this.isProcessingInstant = false;
       return;
     }
 
-    this.isProcessingQueue = true;
-    const comment = this.displayQueue.shift();
+    this.isProcessingInstant = true;
+    const comment = this.instantQueue.shift();
     this.onAddComment(comment);
 
     // 次のコメントがあれば短い間隔で処理
-    if (this.displayQueue.length > 0) {
+    if (this.instantQueue.length > 0) {
       setTimeout(() => this._processInstantQueue(), this.INSTANT_DISPLAY_INTERVAL);
     } else {
-      this.isProcessingQueue = false;
+      this.isProcessingInstant = false;
     }
   }
 
@@ -491,27 +505,36 @@ class CommentQueueManager {
       // 処理済みとしてマーク
       this.commentBuffer.forEach(c => this._markProcessed(c.id));
 
-      this.displayQueue.push(...this.commentBuffer);
+      this.bufferQueue.push(...this.commentBuffer);
       this.commentBuffer.length = 0;
 
-      this.processQueue();
+      this._processBufferQueue();
     }
   }
 
   /**
-   * 表示キューを処理
+   * バッファキューを処理
+   * 即時処理とは独立して動作
    */
-  processQueue() {
-    if (this.isProcessingQueue || this.displayQueue.length === 0) return;
+  _processBufferQueue() {
+    if (this.isProcessingBuffer || this.bufferQueue.length === 0) return;
 
-    this.isProcessingQueue = true;
-    const comment = this.displayQueue.shift();
+    this.isProcessingBuffer = true;
+    const comment = this.bufferQueue.shift();
     this.onAddComment(comment);
 
     setTimeout(() => {
-      this.isProcessingQueue = false;
-      this.processQueue();
+      this.isProcessingBuffer = false;
+      this._processBufferQueue();
     }, this.currentDisplayInterval);
+  }
+
+  /**
+   * 表示キューを処理（後方互換性のため残す）
+   * @deprecated _processBufferQueue() を使用してください
+   */
+  processQueue() {
+    this._processBufferQueue();
   }
 }
 

@@ -849,12 +849,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src/components/CommentControlPanel.tsx`
   - 優先度: 低
 
-- [ ] **コメントキューの即時/バッファモード分離** (PR#59)
-  - 現在: `displayQueue`と`isProcessingQueue`が即時モードとバッファモードで共有
-  - 問題: 即時処理中に`flushBuffer()`が走るとバッファモードコメントも`INSTANT_DISPLAY_INTERVAL`で処理される可能性
-  - 対応: `instantQueue`と`bufferQueue`を分離し、それぞれ独立して処理
+- [x] **コメントキューの即時/バッファモード分離** (PR#59) ✅ 対応済み（2025-12-27）
+  - ~~現在: `displayQueue`と`isProcessingQueue`が即時モードとバッファモードで共有~~
+  - 対応済み: `instantQueue`/`isProcessingInstant`と`bufferQueue`/`isProcessingBuffer`を分離
   - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
-  - 優先度: 低（現状、公式APIモードとgRPC/InnerTubeモードは排他的に使用されるため実害なし）
 
 ### パフォーマンス
 

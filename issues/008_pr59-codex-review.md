@@ -216,3 +216,41 @@ layout: LayoutPreset::ThreeColumn,
 7. **キャッシュ送信時のフラグ**: WebSocket接続時にキャッシュを送信する場合、表示モードフラグ（instant等）の適切な値を検討する
 8. **型の重複定義を避ける**: 同じ構造の型を複数箇所で定義せず、共通モジュールで定義して再利用する
 9. **デフォルト値の一貫性**: バックエンドとフロントエンドでデフォルト値が異なると不整合が発生するため、一貫性を保つ
+
+---
+
+## 追加修正（7回目レビュー）
+
+### コメントキューの即時/バッファモード分離
+
+**問題**:
+`comment-renderer.js`で即時モード（gRPC/InnerTube）とバッファモード（公式API）が同じキュー（`displayQueue`）と処理フラグ（`isProcessingQueue`）を共有していた。バッファ処理中に即時コメントが来ると、バッファ間隔（最大1000ms）で処理されてしまう可能性があった。
+
+**修正**:
+キューと処理フラグを完全に分離：
+
+```javascript
+// バッファモード用
+this.bufferQueue = [];
+this.isProcessingBuffer = false;
+
+// 即時モード用
+this.instantQueue = [];
+this.isProcessingInstant = false;
+```
+
+**メソッド変更**:
+- `_processInstantQueue()`: `instantQueue`と`isProcessingInstant`のみを使用
+- `_processBufferQueue()`: `bufferQueue`と`isProcessingBuffer`のみを使用
+- `processQueue()`: 後方互換性のため残し、`_processBufferQueue()`を呼び出す
+
+**効果**:
+- バッファ処理中でも即時コメントは`INSTANT_DISPLAY_INTERVAL`（150ms）で処理される
+- 即時処理中でもバッファコメントは計算された間隔で処理される
+- 両モードが完全に独立して動作
+
+---
+
+## 学んだこと（追記）
+
+10. **共有状態の分離**: 異なるモード（即時/バッファ）で同じ状態（キュー、フラグ）を共有すると、一方のモードが他方の動作に影響を与える。モードごとに独立した状態を持つべき

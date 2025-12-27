@@ -96,6 +96,8 @@ class WebSocketManager {
     }
 
     if (this.ws) {
+      // oncloseハンドラを無効化して不要なログ/再接続を防止
+      this.ws.onclose = null;
       this.ws.close();
       this.ws = null;
     }
@@ -107,6 +109,19 @@ class WebSocketManager {
   reinitialize() {
     this.isShuttingDown = false;
     this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+
+    // ペンディング中の再接続タイマーをクリア（二重接続防止）
+    if (this.reconnectTimerId) {
+      clearTimeout(this.reconnectTimerId);
+      this.reconnectTimerId = null;
+    }
+
+    // 既存の接続がある場合はスキップ（二重接続防止）
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      console.log('WebSocket already connected or connecting, skipping reinitialize');
+      return;
+    }
+
     this.connect();
   }
 }

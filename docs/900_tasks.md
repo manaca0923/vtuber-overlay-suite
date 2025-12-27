@@ -717,6 +717,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - fetchLatestSetlistにタイムアウト処理追加
   - 効果: 約110行のコード削減（267削除, 157追加）
 
+- [ ] **combined.htmlへのbfcacheハンドリング追加** (PR#62)
+  - 現在: combined-v2.htmlにはbfcache対応（pagehide/pageshow）があるが、combined.htmlにはない
+  - 対応: combined.htmlにもbfcacheハンドリングを追加、または`setupBfcacheHandlers`ヘルパーを使用
+  - 優先度: 低（OBS以外のブラウザ向け）
+
+- [ ] **SettingsFetcherのhasFetched()リセット機能** (PR#62)
+  - 現在: bfcache復元時にfetchSucceededがリセットされない
+  - 対応: SettingsFetcherにreset()メソッドを追加し、bfcache復元時に呼び出す
+  - 優先度: 低
+
 - [ ] **layout-v2.cssのセットリストスタイル重複** (PR#49)
   - `layout-v2.css:112-166`と`combined.html`のスタイル定義（`.setlist-item`等）が重複
   - 将来的に`shared/setlist-styles.css`への統合を検討

@@ -1,0 +1,367 @@
+/**
+ * オーバーレイ共通コアモジュール
+ * combined.html と combined-v2.html で共有するWebSocket/設定管理ロジック
+ */
+
+(function() {
+'use strict';
+
+// =============================================================================
+// 定数
+// =============================================================================
+
+const WS_URL = 'ws://localhost:19801/ws';
+const API_BASE_URL = 'http://localhost:19800/api';
+const SETTINGS_FETCH_TIMEOUT = 3000;
+const MAX_RECONNECT_DELAY = 30000;
+const INITIAL_RECONNECT_DELAY = 1000;
+
+// =============================================================================
+// WebSocket接続マネージャー
+// =============================================================================
+
+/**
+ * WebSocket接続を管理するクラス
+ * 自動再接続、指数バックオフ、bfcache対応を提供
+ */
+class WebSocketManager {
+  constructor(options = {}) {
+    this.url = options.url || WS_URL;
+    this.ws = null;
+    this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+    this.reconnectTimerId = null;
+    this.isShuttingDown = false;
+
+    // コールバック
+    this.onOpen = options.onOpen || (() => {});
+    this.onMessage = options.onMessage || (() => {});
+    this.onError = options.onError || ((error) => console.error('WebSocket error:', error));
+    this.onClose = options.onClose || (() => {});
+  }
+
+  /**
+   * WebSocket接続を開始
+   */
+  connect() {
+    if (this.isShuttingDown) return;
+
+    this.ws = new WebSocket(this.url);
+
+    this.ws.onopen = () => {
+      console.log('WebSocket connected');
+      this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+      this.onOpen();
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.onMessage(data);
+      } catch (e) {
+        console.error('Failed to parse message:', e);
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      this.onError(error);
+    };
+
+    this.ws.onclose = () => {
+      this.onClose();
+
+      // シャットダウン中は再接続しない
+      if (this.isShuttingDown) {
+        console.log('WebSocket closed (shutdown)');
+        return;
+      }
+
+      console.log('WebSocket closed, reconnecting...');
+      this.reconnectTimerId = setTimeout(() => {
+        this.reconnectTimerId = null;
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
+        this.connect();
+      }, this.reconnectDelay);
+    };
+  }
+
+  /**
+   * 接続をクリーンアップ
+   */
+  cleanup() {
+    this.isShuttingDown = true;
+
+    if (this.reconnectTimerId) {
+      clearTimeout(this.reconnectTimerId);
+      this.reconnectTimerId = null;
+    }
+
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
+  /**
+   * bfcache復元時に再初期化
+   */
+  reinitialize() {
+    this.isShuttingDown = false;
+    this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+    this.connect();
+  }
+}
+
+// =============================================================================
+// 設定フェッチャー
+// =============================================================================
+
+/**
+ * API設定をフェッチして適用するクラス
+ */
+class SettingsFetcher {
+  constructor(options = {}) {
+    this.apiBaseUrl = options.apiBaseUrl || API_BASE_URL;
+    this.timeout = options.timeout || SETTINGS_FETCH_TIMEOUT;
+    this.settingsVersion = 0;
+    this.fetchInFlight = false;
+    this.fetchSucceeded = false;
+
+    // コールバック
+    this.onSettingsApply = options.onSettingsApply || (() => {});
+  }
+
+  /**
+   * 設定をフェッチして適用
+   */
+  async fetchAndApply() {
+    if (this.fetchInFlight) return;
+    this.fetchInFlight = true;
+    const requestVersion = this.settingsVersion;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      const response = await fetch(`${this.apiBaseUrl}/overlay/settings`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const settings = await response.json();
+        // 新しいリクエストが来ていたらスキップ
+        if (this.settingsVersion > requestVersion) return;
+        this.onSettingsApply(settings);
+        this.fetchSucceeded = true;
+      }
+    } catch (e) {
+      console.log('Settings API not available, using defaults');
+    } finally {
+      this.fetchInFlight = false;
+    }
+  }
+
+  /**
+   * 設定バージョンをインクリメント（WebSocket経由の更新時）
+   */
+  incrementVersion() {
+    this.settingsVersion++;
+  }
+
+  /**
+   * フェッチ済みかどうか
+   */
+  hasFetched() {
+    return this.fetchSucceeded;
+  }
+}
+
+// =============================================================================
+// URLパラメータパーサー
+// =============================================================================
+
+/**
+ * URLパラメータをパースしてCSS変数やフラグに適用するユーティリティ
+ */
+class UrlParamsParser {
+  constructor(options = {}) {
+    this.validators = options.validators || {};
+  }
+
+  /**
+   * URLパラメータを取得
+   */
+  getParams() {
+    return new URLSearchParams(window.location.search);
+  }
+
+  /**
+   * CSS変数を適用
+   * @param {string} paramName - URLパラメータ名
+   * @param {string} cssVar - CSS変数名
+   * @param {Function} validator - バリデーション関数
+   * @param {Function} transform - 変換関数（オプション）
+   */
+  applyCssVar(paramName, cssVar, validator, transform = (v) => v) {
+    const params = this.getParams();
+    const value = params.get(paramName);
+    if (value && validator(value)) {
+      document.documentElement.style.setProperty(cssVar, transform(value));
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * ブールパラメータを取得
+   * @param {string} paramName - URLパラメータ名
+   * @param {boolean} defaultValue - デフォルト値
+   */
+  getBoolParam(paramName, defaultValue = true) {
+    const params = this.getParams();
+    const value = params.get(paramName);
+    if (value !== null) {
+      return value === 'true';
+    }
+    return defaultValue;
+  }
+
+  /**
+   * 文字列パラメータを取得（バリデーション付き）
+   * @param {string} paramName - URLパラメータ名
+   * @param {Array} validValues - 有効な値のリスト
+   * @param {string} defaultValue - デフォルト値
+   */
+  getStringParam(paramName, validValues, defaultValue = null) {
+    const params = this.getParams();
+    const value = params.get(paramName);
+    if (value && validValues.includes(value)) {
+      return value;
+    }
+    return defaultValue;
+  }
+}
+
+// =============================================================================
+// セットリスト更新ヘルパー
+// =============================================================================
+
+/**
+ * セットリスト表示を更新するヘルパー関数
+ * @param {Object} data - セットリストデータ { songs, currentIndex }
+ * @param {Object} elements - DOM要素 { prevEl, currentEl, nextEl }
+ * @param {Function} onArtistVisibilityUpdate - アーティスト表示更新コールバック
+ */
+function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {}) {
+  const songs = data.songs || [];
+  const currentIndex = data.currentIndex ?? -1;
+  const { prevEl, currentEl, nextEl } = elements;
+
+  // 前の曲
+  if (currentIndex > 0) {
+    const prevSong = songs[currentIndex - 1];
+    prevEl.querySelector('.song-number').textContent = currentIndex;
+    prevEl.querySelector('.song-title').textContent = prevSong.title;
+    prevEl.querySelector('.song-artist').textContent = prevSong.artist || '';
+    prevEl.style.display = 'flex';
+  } else {
+    prevEl.style.display = 'none';
+  }
+
+  // 現在の曲
+  if (currentIndex >= 0 && currentIndex < songs.length) {
+    const currentSong = songs[currentIndex];
+    currentEl.querySelector('.song-number').textContent = currentIndex + 1;
+    currentEl.querySelector('.song-title').textContent = currentSong.title;
+    currentEl.querySelector('.song-artist').textContent = currentSong.artist || '';
+    currentEl.style.display = 'flex';
+  } else {
+    currentEl.querySelector('.song-number').textContent = '-';
+    currentEl.querySelector('.song-title').textContent = '待機中...';
+    currentEl.querySelector('.song-artist').textContent = '';
+  }
+
+  // 次の曲
+  if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+    const nextSong = songs[currentIndex + 1];
+    nextEl.querySelector('.song-number').textContent = currentIndex + 2;
+    nextEl.querySelector('.song-title').textContent = nextSong.title;
+    nextEl.querySelector('.song-artist').textContent = nextSong.artist || '';
+    nextEl.style.display = 'flex';
+  } else {
+    nextEl.style.display = 'none';
+  }
+
+  onArtistVisibilityUpdate();
+}
+
+/**
+ * 最新セットリストをフェッチ
+ * @param {string} apiBaseUrl - APIベースURL
+ * @param {Function} onUpdate - 更新コールバック
+ */
+async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate) {
+  try {
+    const response = await fetch(`${apiBaseUrl}/setlist/latest`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.songs) {
+        onUpdate({
+          songs: data.songs.map(s => ({ title: s.title, artist: s.artist })),
+          currentIndex: data.setlist.currentIndex
+        });
+      }
+    }
+  } catch (e) {
+    console.log('Failed to fetch setlist');
+  }
+}
+
+// =============================================================================
+// bfcache対応ヘルパー
+// =============================================================================
+
+/**
+ * bfcache対応のイベントリスナーを設定
+ * @param {Function} onCleanup - クリーンアップ時のコールバック
+ * @param {Function} onRestore - 復元時のコールバック
+ */
+function setupBfcacheHandlers(onCleanup, onRestore) {
+  // ページ非表示時
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) {
+      // bfcacheに保存されない場合はクリーンアップ
+      onCleanup();
+    }
+  });
+
+  // ページ表示時（bfcacheからの復元時）
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      // bfcacheから復元された場合は再初期化
+      onRestore();
+    }
+  });
+}
+
+// =============================================================================
+// エクスポート
+// =============================================================================
+
+window.OverlayCore = {
+  // 定数
+  WS_URL,
+  API_BASE_URL,
+  SETTINGS_FETCH_TIMEOUT,
+
+  // クラス
+  WebSocketManager,
+  SettingsFetcher,
+  UrlParamsParser,
+
+  // ヘルパー関数
+  updateSetlistDisplay,
+  fetchLatestSetlist,
+  setupBfcacheHandlers
+};
+
+})();

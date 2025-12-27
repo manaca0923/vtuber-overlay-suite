@@ -722,10 +722,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: combined.htmlにもbfcacheハンドリングを追加、または`setupBfcacheHandlers`ヘルパーを使用
   - 優先度: 低（OBS以外のブラウザ向け）
 
-- [ ] **SettingsFetcherのhasFetched()リセット機能** (PR#62)
-  - 現在: bfcache復元時にfetchSucceededがリセットされない
-  - 対応: SettingsFetcherにreset()メソッドを追加し、bfcache復元時に呼び出す
-  - 優先度: 低
+- [x] **SettingsFetcherのhasFetched()リセット機能** (PR#62) ✅ 対応済み（2025-12-27）
+  - ~~現在: bfcache復元時にfetchSucceededがリセットされない~~
+  - 対応済み: reset()メソッドを追加し、combined-v2.htmlのbfcache復元時に呼び出し
 
 - [ ] **layout-v2.cssのセットリストスタイル重複** (PR#49)
   - `layout-v2.css:112-166`と`combined.html`のスタイル定義（`.setlist-item`等）が重複

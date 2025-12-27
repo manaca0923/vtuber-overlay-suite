@@ -194,11 +194,82 @@ try {
 - 全体をreturnするのではなく、要素単位でガード
 - 各要素の更新を独立させて部分的な動作を維持
 
+### 中: SettingsFetcherのbfcache復元時リセット (Codex Review 3回目)
+
+**問題**:
+```javascript
+// combined-v2.html (修正前)
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    wsManager.reinitialize();  // settingsFetcherはhasFetched=trueのまま
+  }
+});
+```
+
+bfcache復元時に`settingsFetcher.hasFetched()`が`true`のままだと、`onOpen`での再取得がスキップされる可能性がある。
+
+**対応**:
+```javascript
+// overlay-core.js - reset()メソッド追加
+reset() {
+  this.fetchSucceeded = false;
+}
+
+// combined-v2.html - pageshow時にreset()を呼ぶ
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    settingsFetcher.reset();  // 追加
+    wsManager.reinitialize();
+  }
+});
+```
+
+### 中: fetchLatestSetlistのtimeoutバリデーション (Codex Review 3回目)
+
+**問題**:
+```javascript
+// 修正前
+async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  // timeout=0やundefinedで即時Abort
+}
+```
+
+呼び出し元が`timeout`を明示的に渡さない場合、または0/負値を渡した場合に即時Abortになる。
+
+**対応**:
+```javascript
+// 修正後
+async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
+  const timeoutMs = Number.isFinite(timeout) && timeout > 0 ? timeout : SETTINGS_FETCH_TIMEOUT;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+}
+```
+
+### 6. 状態管理クラスのbfcache対応
+
+bfcacheからの復元時、状態管理クラスの内部フラグも適切にリセットする必要がある:
+- `hasFetched`などの「完了済み」フラグはリセット
+- 次回のフェッチで必ず再取得されるようにする
+
+### 7. 引数のデフォルト値とフォールバック
+
+デフォルト引数だけでは不十分な場合がある:
+- 呼び出し元が明示的に`undefined`や無効値を渡す可能性
+- `Number.isFinite()`と正値チェックでフォールバック
+
+```javascript
+// 安全なフォールバックパターン
+const value = Number.isFinite(input) && input > 0 ? input : DEFAULT_VALUE;
+```
+
 ## チェックリスト（今後の対応）
 
 - [x] reinitialize()での二重接続防止
 - [x] cleanup()でのoncloseハンドラ無効化
 - [x] clearTimeoutをtry/finallyに移動
 - [x] updateSetlistDisplayの要素単位ガード
+- [x] SettingsFetcherのreset()メソッド追加
+- [x] combined-v2.htmlでのbfcache復元時settingsFetcher.reset()呼び出し
+- [x] fetchLatestSetlistのtimeoutバリデーション
 - [ ] combined.htmlへのbfcacheハンドリング追加（低優先度、OBS以外のブラウザ向け）
-- [ ] SettingsFetcherのhasFetched()リセット機能（低優先度）

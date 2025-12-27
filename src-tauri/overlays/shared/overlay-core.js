@@ -188,6 +188,14 @@ class SettingsFetcher {
   hasFetched() {
     return this.fetchSucceeded;
   }
+
+  /**
+   * 状態をリセット（bfcache復元時に使用）
+   * 次回のfetchAndApplyで必ず再取得される
+   */
+  reset() {
+    this.fetchSucceeded = false;
+  }
 }
 
 // =============================================================================
@@ -331,8 +339,10 @@ function updateSetlistDisplay(data, elements, onArtistVisibilityUpdate = () => {
  * @param {number} timeout - タイムアウト時間（ミリ秒）
  */
 async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout = SETTINGS_FETCH_TIMEOUT) {
+  // タイムアウト値のバリデーション（0/undefined/負値の場合はデフォルト値を使用）
+  const timeoutMs = Number.isFinite(timeout) && timeout > 0 ? timeout : SETTINGS_FETCH_TIMEOUT;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${apiBaseUrl}/setlist/latest`, {
       signal: controller.signal

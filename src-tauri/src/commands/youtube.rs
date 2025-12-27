@@ -487,20 +487,62 @@ pub async fn send_test_comment(
     Ok(())
 }
 
-/// ウィザード設定を保存（videoId, liveChatId）
+/// ウィザード設定を保存（videoId, liveChatId, useBundledKey）
+/// 空の値や null は既存値を維持する（マージ方式）
 #[tauri::command]
 pub async fn save_wizard_settings(
     video_id: String,
     live_chat_id: String,
+    use_bundled_key: Option<bool>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let pool = &state.db;
     let now = chrono::Utc::now().to_rfc3339();
 
+    // 既存の設定を読み込んでマージ
+    let existing: Option<WizardSettingsData> = sqlx::query_scalar(
+        "SELECT value FROM settings WHERE key = 'wizard_settings'"
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("DB error: {}", e))?
+    .and_then(|s: String| serde_json::from_str(&s).ok());
+
+    // マージロジック:
+    // - video_id: 空文字列の場合は既存値を維持
+    // - live_chat_id: video_idが変更された場合は新しい値を使用（空でも上書き）
+    //                 video_idが同じ場合のみ既存値を維持
+    // - use_bundled_key: None の場合は既存値を維持
+    let merged_video_id = if video_id.is_empty() {
+        existing.as_ref().map(|e| e.video_id.clone()).unwrap_or_default()
+    } else {
+        video_id.clone()
+    };
+
+    // video_idが変更された場合、live_chat_idは新しい値を使用（古いchat_idは無効）
+    let video_id_changed = existing.as_ref()
+        .map(|e| e.video_id != merged_video_id)
+        .unwrap_or(true);
+
+    let merged_live_chat_id = if video_id_changed {
+        // video_idが変更された場合は新しいlive_chat_idを使用（空でもOK）
+        live_chat_id
+    } else if live_chat_id.is_empty() {
+        // video_idが同じで、live_chat_idが空の場合は既存値を維持
+        existing.as_ref().map(|e| e.live_chat_id.clone()).unwrap_or_default()
+    } else {
+        live_chat_id
+    };
+
+    let merged_use_bundled_key = use_bundled_key.or_else(|| {
+        existing.as_ref().and_then(|e| e.use_bundled_key)
+    });
+
     // JSON形式でウィザード設定を保存
     let settings_data = serde_json::json!({
-        "video_id": video_id,
-        "live_chat_id": live_chat_id,
+        "video_id": merged_video_id,
+        "live_chat_id": merged_live_chat_id,
+        "use_bundled_key": merged_use_bundled_key,
         "saved_at": now
     });
     let settings_str =
@@ -520,7 +562,10 @@ pub async fn save_wizard_settings(
     .await
     .map_err(|e| format!("DB error: {}", e))?;
 
-    log::info!("Saved wizard settings: video_id={}, live_chat_id={}", video_id, live_chat_id);
+    log::info!(
+        "Saved wizard settings: video_id={}, live_chat_id={}, use_bundled_key={:?}",
+        merged_video_id, merged_live_chat_id, merged_use_bundled_key
+    );
     Ok(())
 }
 
@@ -553,6 +598,9 @@ pub struct WizardSettingsData {
     pub video_id: String,
     pub live_chat_id: String,
     pub saved_at: String,
+    /// 同梱APIキー使用フラグ（後方互換性のためOption）
+    #[serde(default)]
+    pub use_bundled_key: Option<bool>,
 }
 
 // ================================

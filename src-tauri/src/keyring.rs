@@ -18,9 +18,6 @@ const SERVICE_NAME: &str = "com.vtuber-overlay-suite.desktop";
 /// YouTube APIキー用のエントリ名
 const YOUTUBE_API_KEY_ENTRY: &str = "youtube_api_key";
 
-/// 天気APIキー用のエントリ名
-const WEATHER_API_KEY_ENTRY: &str = "weather_api_key";
-
 #[derive(Debug, Error)]
 pub enum KeyringError {
     #[error("Keyring error: {0}")]
@@ -88,65 +85,6 @@ pub fn has_api_key() -> Result<bool, KeyringError> {
         }
         Err(e) => {
             log::error!("has_api_key: error - {:?}", e);
-            Err(e)
-        }
-    }
-}
-
-// =============================================================================
-// 天気APIキー操作
-// =============================================================================
-
-/// 天気APIキーをOSのセキュアストレージに保存
-pub fn save_weather_api_key(api_key: &str) -> Result<(), KeyringError> {
-    let entry = Entry::new(SERVICE_NAME, WEATHER_API_KEY_ENTRY)?;
-    entry.set_password(api_key)?;
-    log::info!("Weather API key saved to secure storage");
-    Ok(())
-}
-
-/// 天気APIキーをセキュアストレージから取得
-pub fn get_weather_api_key() -> Result<String, KeyringError> {
-    let entry = Entry::new(SERVICE_NAME, WEATHER_API_KEY_ENTRY)?;
-    match entry.get_password() {
-        Ok(password) => {
-            log::debug!("Weather API key retrieved from secure storage");
-            Ok(password)
-        }
-        Err(keyring::Error::NoEntry) => Err(KeyringError::NotFound),
-        Err(e) => Err(KeyringError::KeyringError(e)),
-    }
-}
-
-/// 天気APIキーをセキュアストレージから削除
-pub fn delete_weather_api_key() -> Result<(), KeyringError> {
-    let entry = Entry::new(SERVICE_NAME, WEATHER_API_KEY_ENTRY)?;
-    match entry.delete_credential() {
-        Ok(()) => {
-            log::info!("Weather API key deleted from secure storage");
-            Ok(())
-        }
-        Err(keyring::Error::NoEntry) => {
-            log::warn!("Attempted to delete non-existent Weather API key");
-            Ok(())
-        }
-        Err(e) => Err(KeyringError::KeyringError(e)),
-    }
-}
-
-/// 天気APIキーが保存されているかチェック
-pub fn has_weather_api_key() -> Result<bool, KeyringError> {
-    match get_weather_api_key() {
-        Ok(_) => {
-            log::debug!("has_weather_api_key: true (Weather API key found in keyring)");
-            Ok(true)
-        }
-        Err(KeyringError::NotFound) => {
-            log::debug!("has_weather_api_key: false (Weather API key not found in keyring)");
-            Ok(false)
-        }
-        Err(e) => {
-            log::error!("has_weather_api_key: error - {:?}", e);
             Err(e)
         }
     }

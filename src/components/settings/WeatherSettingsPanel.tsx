@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  hasWeatherApiKey,
-  setWeatherApiKey,
   getWeatherCity,
   setWeatherCity,
   getWeather,
@@ -16,25 +14,17 @@ interface WeatherSettingsPanelProps {
 }
 
 export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelProps) {
-  const [apiKey, setApiKeyValue] = useState('');
-  const [hasKey, setHasKey] = useState(false);
-  const [isEditingKey, setIsEditingKey] = useState(false); // 編集モード状態を分離
   const [city, setCityValue] = useState('Tokyo');
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [cacheTtl, setCacheTtl] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
 
   // 初期化
   useEffect(() => {
     const init = async () => {
       try {
-        const [hasApiKey, currentCity] = await Promise.all([
-          hasWeatherApiKey(),
-          getWeatherCity(),
-        ]);
-        setHasKey(hasApiKey);
+        const currentCity = await getWeatherCity();
         setCityValue(currentCity);
       } catch (err) {
         console.error('Failed to initialize weather settings:', err);
@@ -56,39 +46,6 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
     updateTtl();
     const interval = setInterval(updateTtl, 10000);
     return () => clearInterval(interval);
-  }, []);
-
-  // APIキー保存
-  const handleSaveApiKey = useCallback(async () => {
-    if (!apiKey.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      await setWeatherApiKey(apiKey.trim());
-      // バックエンド状態を再取得して反映
-      const hasApiKey = await hasWeatherApiKey();
-      setHasKey(hasApiKey);
-      setApiKeyValue('');
-      setIsEditingKey(false);
-    } catch (err) {
-      setError('APIキーの保存に失敗しました');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [apiKey]);
-
-  // APIキー編集キャンセル
-  const handleCancelEditKey = useCallback(async () => {
-    setIsEditingKey(false);
-    setApiKeyValue('');
-    // バックエンド状態を再取得
-    try {
-      const hasApiKey = await hasWeatherApiKey();
-      setHasKey(hasApiKey);
-    } catch {
-      // ignore
-    }
   }, []);
 
   // 都市名保存
@@ -150,7 +107,7 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
     }
   }, []);
 
-  // 強制更新＋ブロードキャスト（都市/APIキー変更後に使用）
+  // 強制更新＋ブロードキャスト（都市変更後に使用）
   const handleForceRefreshAndBroadcast = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -186,74 +143,6 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
         </div>
       )}
 
-      {/* APIキー設定 */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          OpenWeatherMap APIキー
-        </label>
-        {hasKey && !isEditingKey ? (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-green-600">設定済み</span>
-            <button
-              type="button"
-              onClick={() => setIsEditingKey(true)}
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              変更
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  type={showApiKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKeyValue(e.target.value)}
-                  placeholder="APIキーを入力"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showApiKey ? '隠す' : '表示'}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={handleSaveApiKey}
-                disabled={loading || !apiKey.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                保存
-              </button>
-            </div>
-            {isEditingKey && (
-              <button
-                type="button"
-                onClick={handleCancelEditKey}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                キャンセル
-              </button>
-            )}
-          </div>
-        )}
-        <p className="text-xs text-gray-500">
-          <a
-            href="https://openweathermap.org/api"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-          >
-            OpenWeatherMap
-          </a>
-          で無料APIキーを取得できます
-        </p>
-      </div>
-
       {/* 都市名設定 */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">都市名</label>
@@ -275,72 +164,70 @@ export function WeatherSettingsPanel({ className = '' }: WeatherSettingsPanelPro
           </button>
         </div>
         <p className="text-xs text-gray-500">
-          英語で都市名を入力（例: Tokyo, Osaka, New York）
+          都市名を入力してください（例: Tokyo, Osaka, New York）。APIキーは不要です。
         </p>
       </div>
 
       {/* 天気プレビュー */}
-      {hasKey && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">天気プレビュー</span>
-            <span className="text-xs text-gray-500">キャッシュ残り: {formatTtl(cacheTtl)}</span>
-          </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700">天気プレビュー</span>
+          <span className="text-xs text-gray-500">キャッシュ残り: {formatTtl(cacheTtl)}</span>
+        </div>
 
-          {weather ? (
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-4">
-                <span className="text-4xl">{weather.icon}</span>
-                <div>
-                  <p className="text-2xl font-bold">{weather.temp.toFixed(1)}°C</p>
-                  <p className="text-sm text-gray-600">{weather.description}</p>
-                  <p className="text-xs text-gray-500">{weather.location}</p>
-                </div>
+        {weather ? (
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">{weather.icon}</span>
+              <div>
+                <p className="text-2xl font-bold">{weather.temp.toFixed(1)}°C</p>
+                <p className="text-sm text-gray-600">{weather.description}</p>
+                <p className="text-xs text-gray-500">{weather.location}</p>
               </div>
             </div>
-          ) : (
-            <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-500">
-              天気情報なし
-            </div>
-          )}
-
-          <div className="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleFetchWeather}
-              disabled={loading}
-              className="flex-1 min-w-[80px] px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
-            >
-              取得
-            </button>
-            <button
-              type="button"
-              onClick={handleForceRefresh}
-              disabled={loading}
-              className="flex-1 min-w-[80px] px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50"
-            >
-              強制更新
-            </button>
-            <button
-              type="button"
-              onClick={handleBroadcast}
-              disabled={loading || !weather}
-              className="flex-1 min-w-[80px] px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
-            >
-              配信
-            </button>
-            <button
-              type="button"
-              onClick={handleForceRefreshAndBroadcast}
-              disabled={loading}
-              className="flex-1 min-w-[80px] px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50"
-              title="キャッシュを無視して最新データを取得・配信"
-            >
-              強制配信
-            </button>
           </div>
+        ) : (
+          <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-500">
+            天気情報なし（「取得」ボタンを押してください）
+          </div>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleFetchWeather}
+            disabled={loading}
+            className="flex-1 min-w-[80px] px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+          >
+            取得
+          </button>
+          <button
+            type="button"
+            onClick={handleForceRefresh}
+            disabled={loading}
+            className="flex-1 min-w-[80px] px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50"
+          >
+            強制更新
+          </button>
+          <button
+            type="button"
+            onClick={handleBroadcast}
+            disabled={loading || !weather}
+            className="flex-1 min-w-[80px] px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
+          >
+            配信
+          </button>
+          <button
+            type="button"
+            onClick={handleForceRefreshAndBroadcast}
+            disabled={loading}
+            className="flex-1 min-w-[80px] px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50"
+            title="キャッシュを無視して最新データを取得・配信"
+          >
+            強制配信
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

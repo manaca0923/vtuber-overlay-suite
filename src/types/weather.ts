@@ -18,14 +18,7 @@ export interface LiveStreamStats {
   viewCount: number | null;
 }
 
-// Tauri Commands - 天気API
-// 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
-export const setWeatherApiKey = (apiKey: string) =>
-  invoke<void>('set_weather_api_key', { api_key: apiKey });
-
-export const hasWeatherApiKey = () =>
-  invoke<boolean>('has_weather_api_key');
-
+// Tauri Commands - 天気API（Open-Meteo - APIキー不要）
 export const setWeatherCity = (city: string) =>
   invoke<void>('set_weather_city', { city });
 
@@ -49,7 +42,7 @@ export const getWeatherCacheTtl = () =>
 
 // Tauri Commands - KPI/視聴者数
 export const getLiveStreamStats = (videoId: string, useBundledKey: boolean) =>
-  invoke<LiveStreamStats>('get_live_stream_stats', { video_id: videoId, use_bundled_key: useBundledKey });
+  invoke<LiveStreamStats>('get_live_stream_stats', { videoId: videoId, useBundledKey: useBundledKey });
 
 export const broadcastKpiUpdate = (
   main: number | null,

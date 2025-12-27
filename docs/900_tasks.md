@@ -849,6 +849,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src/components/CommentControlPanel.tsx`
   - 優先度: 低
 
+- [ ] **コメントキューの即時/バッファモード分離** (PR#59)
+  - 現在: `displayQueue`と`isProcessingQueue`が即時モードとバッファモードで共有
+  - 問題: 即時処理中に`flushBuffer()`が走るとバッファモードコメントも`INSTANT_DISPLAY_INTERVAL`で処理される可能性
+  - 対応: `instantQueue`と`bufferQueue`を分離し、それぞれ独立して処理
+  - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
+  - 優先度: 低（現状、公式APIモードとgRPC/InnerTubeモードは排他的に使用されるため実害なし）
+
 ### パフォーマンス
 
 - [x] **コメントDB保存のバッチ処理最適化** (PR#53) ✅ 対応済み（2025-12-26）
@@ -942,6 +949,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト
   - Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
+- [ ] **コメント即時/バッファモード混在テスト** (PR#59)
+  - `instant=true`と`instant=false`が同時に到着するケースで、公式API由来コメントが5秒均等表示のまま維持されることの確認
+  - `instant=true`連打時のスロットリング（`INSTANT_DISPLAY_INTERVAL`）が効いて重複が抑止されることの確認
+  - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
+  - 優先度: 低（現状、モードは排他的使用のため）
+
+- [ ] **天気ウィジェット設定フォールバックテスト** (PR#59)
+  - `settings.weather.position`が未知値/欠落のとき、`combined-v2.html`で安全にデフォルトへフォールバックすることの確認
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
   - 優先度: 低
 
 - [x] **SQLITE_BUSY並行書き込みテスト** (PR#55, PR#56で対応済み)

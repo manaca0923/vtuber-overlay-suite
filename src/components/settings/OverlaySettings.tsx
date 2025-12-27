@@ -33,10 +33,16 @@ export function OverlaySettings() {
       try {
         const saved = await loadOverlaySettings();
         if (saved) {
+          // 旧レイアウトプリセット（streaming/talk/music/gaming）を新プリセットにマイグレーション
+          const validLayouts: LayoutPreset[] = ['custom', 'three-column'];
+          const migratedLayout: LayoutPreset = validLayouts.includes(saved.layout as LayoutPreset)
+            ? (saved.layout as LayoutPreset)
+            : 'three-column'; // 旧プリセットはthree-columnにフォールバック
+
           // 古い設定と新しいデフォルト値をマージ（マイグレーション対応）
           const merged: Settings = {
             theme: saved.theme ?? DEFAULT_OVERLAY_SETTINGS.theme,
-            layout: saved.layout ?? DEFAULT_OVERLAY_SETTINGS.layout,
+            layout: migratedLayout,
             common: {
               ...DEFAULT_OVERLAY_SETTINGS.common,
               ...saved.common,

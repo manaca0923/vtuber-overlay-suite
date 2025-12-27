@@ -50,7 +50,8 @@ function App() {
   // コメント取得開始ハンドラ
   const handleStartPolling = useCallback(async (videoId: string) => {
     try {
-      await invoke('start_polling_innertube', { videoId: videoId });
+      // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
+      await invoke('start_polling_innertube', { video_id: videoId });
       setIsPolling(true);
       showStatus('success', 'コメント取得を開始しました');
     } catch (e) {

@@ -45,7 +45,8 @@ export function ApiKeySettingsPanel() {
       });
 
       if (isValid) {
-        await invoke('save_api_key', { apiKey: apiKey.trim() });
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
+        await invoke('save_api_key', { api_key: apiKey.trim() });
         setIsLoaded(true);
         setSuccess('APIキーを保存しました');
         setTimeout(() => setSuccess(''), 3000);

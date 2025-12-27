@@ -4,9 +4,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env_path = std::path::Path::new("../.env");
     if env_path.exists() {
         dotenvy::from_path(env_path).ok();
-        // Re-run build if .env changes
-        println!("cargo:rerun-if-changed=../.env");
     }
+    // Re-run build if .env changes (always output, even if file doesn't exist yet)
+    // This ensures newly created .env files trigger a rebuild
+    println!("cargo:rerun-if-changed=../.env");
 
     // Tauri build
     tauri_build::build();

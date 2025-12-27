@@ -49,7 +49,8 @@ export default function WizardStep1({
 
       if (isValid) {
         // APIキーを保存
-        await invoke('save_api_key', { apiKey: apiKey });
+        // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
+        await invoke('save_api_key', { api_key: apiKey });
         if (!isMountedRef.current) return;
         setSuccess('APIキーが有効です。保存しました。');
         onValidationChange(true);

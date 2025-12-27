@@ -105,6 +105,7 @@
   <!-- 共通スクリプト -->
   <script src="shared/slots.js"></script>
   <script src="shared/comment-renderer.js?v=2"></script>
+  <script src="shared/overlay-core.js?v=1"></script>
 
   <!-- パフォーマンス最適化モジュール（T24） -->
   <script src="shared/clamp-constants.js"></script>
@@ -136,15 +137,19 @@
       CommentQueueManager
     } = window.CommentRenderer;
 
+    const {
+      WS_URL,
+      API_BASE_URL,
+      SETTINGS_FETCH_TIMEOUT,
+      updateSetlistDisplay,
+      fetchLatestSetlist
+    } = window.OverlayCore;
+
     // ===== 設定 =====
     let showAvatar = true;
     let showArtist = true;
     let commentEnabled = true;
     let setlistEnabled = true;
-
-    const WS_URL = 'ws://localhost:19801/ws';
-    const API_BASE_URL = 'http://localhost:19800/api';
-    const SETTINGS_FETCH_TIMEOUT = 3000;
 
     let ws = null;
     let reconnectDelay = 1000;
@@ -341,48 +346,16 @@
     // ===== セットリスト機能 =====
     let currentSetlist = { songs: [], currentIndex: -1 };
 
+    // セットリスト要素のキャッシュ
+    const setlistElements = {
+      prevEl: document.getElementById('song-prev'),
+      currentEl: document.getElementById('song-current'),
+      nextEl: document.getElementById('song-next')
+    };
+
     function updateSetlist(data) {
       currentSetlist = data;
-      const songs = data.songs || [];
-      const currentIndex = data.currentIndex ?? -1;
-
-      const prevEl = document.getElementById('song-prev');
-      const currentEl = document.getElementById('song-current');
-      const nextEl = document.getElementById('song-next');
-
-      if (currentIndex > 0) {
-        const prevSong = songs[currentIndex - 1];
-        prevEl.querySelector('.song-number').textContent = currentIndex;
-        prevEl.querySelector('.song-title').textContent = prevSong.title;
-        prevEl.querySelector('.song-artist').textContent = prevSong.artist || '';
-        prevEl.style.display = 'flex';
-      } else {
-        prevEl.style.display = 'none';
-      }
-
-      if (currentIndex >= 0 && currentIndex < songs.length) {
-        const currentSong = songs[currentIndex];
-        currentEl.querySelector('.song-number').textContent = currentIndex + 1;
-        currentEl.querySelector('.song-title').textContent = currentSong.title;
-        currentEl.querySelector('.song-artist').textContent = currentSong.artist || '';
-        currentEl.style.display = 'flex';
-      } else {
-        currentEl.querySelector('.song-number').textContent = '-';
-        currentEl.querySelector('.song-title').textContent = '待機中...';
-        currentEl.querySelector('.song-artist').textContent = '';
-      }
-
-      if (currentIndex >= 0 && currentIndex < songs.length - 1) {
-        const nextSong = songs[currentIndex + 1];
-        nextEl.querySelector('.song-number').textContent = currentIndex + 2;
-        nextEl.querySelector('.song-title').textContent = nextSong.title;
-        nextEl.querySelector('.song-artist').textContent = nextSong.artist || '';
-        nextEl.style.display = 'flex';
-      } else {
-        nextEl.style.display = 'none';
-      }
-
-      updateArtistVisibility();
+      updateSetlistDisplay(data, setlistElements, updateArtistVisibility);
     }
 
     // ===== WebSocket接続 =====
@@ -415,23 +388,6 @@
       }
     }
 
-    async function fetchLatestSetlist() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/setlist/latest`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.songs) {
-            updateSetlist({
-              songs: data.songs.map(s => ({ title: s.title, artist: s.artist })),
-              currentIndex: data.setlist.currentIndex
-            });
-          }
-        }
-      } catch (e) {
-        console.log('Failed to fetch setlist');
-      }
-    }
-
     function connectWebSocket() {
       // OBSリロード時などでisShuttingDownがtrueのまま呼ばれる場合に備えてリセット
       // ※ connectWebSocket()が呼ばれる = 接続を意図しているため、シャットダウン状態を解除
@@ -451,7 +407,8 @@
         if (!settingsFetchSucceeded) {
           fetchAndApplySettings();
         }
-        fetchLatestSetlist();
+        // 共有モジュールのfetchLatestSetlistを使用
+        fetchLatestSetlist(API_BASE_URL, updateSetlist);
       };
 
       ws.onmessage = (event) => {

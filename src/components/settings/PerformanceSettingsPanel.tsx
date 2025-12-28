@@ -29,7 +29,10 @@ export function PerformanceSettingsPanel({
       {/* 過密検出閾値 */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor="density-threshold"
+            className="block text-sm font-medium text-gray-700"
+          >
             過密検出閾値
           </label>
           <span className="text-sm font-mono text-gray-600">
@@ -39,6 +42,8 @@ export function PerformanceSettingsPanel({
 
         <input
           type="range"
+          id="density-threshold"
+          aria-label="過密検出閾値"
           min={1}
           max={20}
           value={densityThreshold}

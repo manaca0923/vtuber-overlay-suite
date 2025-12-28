@@ -963,14 +963,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: Vitestでユニットテストを追加（14テストケース）
   - 対象ファイル: `src/types/template.test.ts`
 
-- [ ] **UpdateBatcher/DensityManagerのユニットテスト** (PR#54)
+- [x] **UpdateBatcher/DensityManagerのユニットテスト** (PR#54) ✅ 対応済み（2025-12-28）
   - パフォーマンス最適化モジュールのテストカバレッジ追加
-  - テスト対象:
-    - バッチタイミング（150ms間隔でまとめられるか）
-    - 閾値判定のエッジケース（5回の更新でdensity:highが発火するか）
-    - 復元動作（density:normalで設定が戻るか）
-  - 対象ファイル: `src-tauri/overlays/shared/update-batcher.js`, `density-manager.js`
-  - 優先度: 低
+  - 対応済み: Vitestでユニットテストを追加
+    - UpdateBatcher: 17テスト（queue上書き、forceFlush、clear、setBatchIntervalクランプ、destroy）
+    - DensityManager: 25テスト（recordUpdate、閾値判定、forceDegraded/forceNormal、setThresholdクランプ、destroy）
+  - 対象ファイル: `src/utils/update-batcher.test.ts`, `src/utils/density-manager.test.ts`
 
 - [ ] **天気API（Open-Meteo）Geocodingエラーケースのテスト** (PR#58)
   - `geocode_city`が`results: None`または空配列のとき`WeatherError::CityNotFound`になるケースのテスト
@@ -985,10 +983,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
   - 優先度: 低（現状、モードは排他的使用のため）
 
-- [ ] **天気ウィジェット設定フォールバックテスト** (PR#59)
-  - `settings.weather.position`が未知値/欠落のとき、`combined-v2.html`で安全にデフォルトへフォールバックすることの確認
-  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
-  - 優先度: 低
+- [x] **天気ウィジェット設定フォールバックテスト** (PR#59) ✅ 対応済み（2025-12-28）
+  - `settings.weather.position`が未知値/欠落のとき、安全にデフォルトへフォールバックすることの確認
+  - 対応済み: Vitestでユニットテストを追加（21テスト）
+    - デフォルト値フォールバック（style未指定時）
+    - style.temp=0がデフォルト値にならないこと
+    - update()でのnull/undefined処理
+    - getIconForCode()のマッピングとフォールバック
+  - 対象ファイル: `src/utils/weather-widget.test.ts`
 
 - [x] **SQLITE_BUSY並行書き込みテスト** (PR#55, PR#56で対応済み)
   - ~~2接続で同時書き込みし、busy_timeoutが正しく動作するかを検証~~
@@ -1057,16 +1059,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/commands/weather.rs`
   - 優先度: 中（サーバー/状態のモック化が必要）
 
-- [ ] **bfcache/リロード時のWebSocket再接続テスト** (PR#56)
-  - JSテストハーネスがない場合は手動QA手順を文書化
-  - テスト対象:
-    - pagehide + pageshowのbfcacheフローでcleanup/reconnect idempotencyを検証
-    - cleanup後にオーバーレイがinert状態にならないことを確認
-    - isShuttingDownがpageshow復元時にリセットされる
-    - DensityManager/UpdateBatcherがbfcache復元後も正常に動作する
-    - OBSリロード後にWebSocket再接続が可能
-  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
-  - 優先度: 低（OBSブラウザソースではbfcacheは使用されない）
+- [x] **bfcache/リロード時のWebSocket再接続テスト** (PR#56) ✅ 対応済み（2025-12-28）
+  - 対応済み: Vitestでユニットテストを追加（8テスト）
+    - pagehideイベント（persisted=true/false）のハンドリング
+    - pageshowイベント（persisted=true/false）のハンドリング
+    - WebSocketManager.reinitialize()でのbfcache復元時再接続
+    - SettingsFetcher.reset()後のfetchAndApply()実行可能性
+    - cleanup()後のconnect()で新しい接続が作成されること
+  - 対象ファイル: `src/utils/overlay-core.test.ts`
 
 - [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
   - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止

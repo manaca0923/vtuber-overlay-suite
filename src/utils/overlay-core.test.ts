@@ -619,3 +619,151 @@ describe('fetchLatestSetlist timeout handling', () => {
     expect(abortedSignals[0]).toBe(false);
   });
 });
+
+/**
+ * bfcache対応のテスト
+ * PR#54で指摘されたbfcache/リロード時のWebSocket再接続テストケース
+ */
+describe('bfcache対応 (setupBfcacheHandlers)', () => {
+  let win: ReturnType<typeof loadOverlayCore>;
+  let OverlayCore: OverlayCoreType;
+
+  beforeEach(() => {
+    win = loadOverlayCore();
+    OverlayCore = win.OverlayCore;
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  describe('pagehideイベント', () => {
+    it('event.persisted=falseでonCleanupが呼ばれる', () => {
+      const onCleanup = vi.fn();
+      const onRestore = vi.fn();
+
+      OverlayCore.setupBfcacheHandlers(onCleanup, onRestore);
+
+      // pagehideイベントを発火（persisted=false: 通常のページ離脱）
+      const event = new win.Event('pagehide') as PageTransitionEvent;
+      Object.defineProperty(event, 'persisted', { value: false });
+      win.dispatchEvent(event);
+
+      expect(onCleanup).toHaveBeenCalledTimes(1);
+      expect(onRestore).not.toHaveBeenCalled();
+    });
+
+    it('event.persisted=trueでonCleanupは呼ばれない', () => {
+      const onCleanup = vi.fn();
+      const onRestore = vi.fn();
+
+      OverlayCore.setupBfcacheHandlers(onCleanup, onRestore);
+
+      // pagehideイベントを発火（persisted=true: bfcacheに保存）
+      const event = new win.Event('pagehide') as PageTransitionEvent;
+      Object.defineProperty(event, 'persisted', { value: true });
+      win.dispatchEvent(event);
+
+      expect(onCleanup).not.toHaveBeenCalled();
+      expect(onRestore).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('pageshowイベント', () => {
+    it('event.persisted=trueでonRestoreが呼ばれる', () => {
+      const onCleanup = vi.fn();
+      const onRestore = vi.fn();
+
+      OverlayCore.setupBfcacheHandlers(onCleanup, onRestore);
+
+      // pageshowイベントを発火（persisted=true: bfcacheから復元）
+      const event = new win.Event('pageshow') as PageTransitionEvent;
+      Object.defineProperty(event, 'persisted', { value: true });
+      win.dispatchEvent(event);
+
+      expect(onRestore).toHaveBeenCalledTimes(1);
+      expect(onCleanup).not.toHaveBeenCalled();
+    });
+
+    it('event.persisted=falseでonRestoreは呼ばれない', () => {
+      const onCleanup = vi.fn();
+      const onRestore = vi.fn();
+
+      OverlayCore.setupBfcacheHandlers(onCleanup, onRestore);
+
+      // pageshowイベントを発火（persisted=false: 通常のページ表示）
+      const event = new win.Event('pageshow') as PageTransitionEvent;
+      Object.defineProperty(event, 'persisted', { value: false });
+      win.dispatchEvent(event);
+
+      expect(onRestore).not.toHaveBeenCalled();
+      expect(onCleanup).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('WebSocketManager連携', () => {
+    it('bfcache復元時にreinitialize()でWebSocket再接続される', async () => {
+      const onOpenCallback = vi.fn();
+      const manager = new OverlayCore.WebSocketManager({ onOpen: onOpenCallback });
+
+      // 初回接続
+      manager.connect();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(onOpenCallback).toHaveBeenCalledTimes(1);
+
+      // cleanup()でシャットダウン
+      manager.cleanup();
+      expect(manager.ws).toBeNull();
+      expect(manager.isShuttingDown).toBe(true);
+
+      // bfcache復元をシミュレート: reinitialize()
+      manager.reinitialize();
+      expect(manager.isShuttingDown).toBe(false);
+      expect(manager.reconnectDelay).toBe(1000); // 初期値にリセット
+
+      // 新しい接続が確立される
+      await vi.advanceTimersByTimeAsync(10);
+      expect(manager.ws).not.toBeNull();
+      expect(onOpenCallback).toHaveBeenCalledTimes(2);
+    });
+
+    it('SettingsFetcher.reset()後にfetchAndApply()が実行可能', () => {
+      const fetcher = new OverlayCore.SettingsFetcher();
+
+      // 初回フェッチ完了状態をシミュレート
+      fetcher.fetchSucceeded = true;
+      fetcher.fetchInFlight = true;
+
+      // bfcache復元をシミュレート: reset()
+      fetcher.reset();
+
+      expect(fetcher.fetchSucceeded).toBe(false);
+      expect(fetcher.fetchInFlight).toBe(false);
+      expect(fetcher.hasFetched()).toBe(false);
+    });
+  });
+
+  describe('リロード時の再接続', () => {
+    it('cleanup()後のconnect()で新しい接続が作成される', async () => {
+      const onOpenCallback = vi.fn();
+      const manager = new OverlayCore.WebSocketManager({ onOpen: onOpenCallback });
+
+      // 初回接続
+      manager.connect();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(onOpenCallback).toHaveBeenCalledTimes(1);
+
+      // リロードをシミュレート: cleanup() → connect()
+      manager.cleanup();
+      manager.isShuttingDown = false; // リロード後は再度有効化
+
+      manager.connect();
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(manager.ws).not.toBeNull();
+      expect(onOpenCallback).toHaveBeenCalledTimes(2);
+    });
+  });
+});

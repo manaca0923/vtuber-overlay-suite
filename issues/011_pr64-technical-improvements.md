@@ -450,3 +450,24 @@ serde属性から特定の引数を抽出する際:
 
 ### 第7回レビュー対応
 - [x] serde(rename = "foo", ...)形式に対応（追加引数やrenameの位置に関わらずマッチ）
+
+## 第8回レビュー指摘事項
+
+### 中: jsdomがdependenciesに入っている (Codex Review) → 確認済み
+
+**指摘内容**:
+`package.json`の`dependencies`に`jsdom`が入っているため、ビルド・配布物への不要な依存混入が起きる可能性。
+
+**確認結果**:
+`package.json`を確認したところ、`jsdom`と`@types/jsdom`は既に`devDependencies`に正しく配置されていた。
+Codexレビューの誤検出。
+
+### 既に対応済み: raw string/cfg_attr/process.cwd()依存
+
+第6回レビューで`docs/900_tasks.md`に追記済み:
+- raw string内の`"`対応
+- `cfg_attr`経由の`serde(rename)`対応
+- `process.cwd()`依存の改善
+
+### 第8回レビュー対応
+- [x] jsdomの配置を確認（既にdevDependenciesに正しく配置済み）

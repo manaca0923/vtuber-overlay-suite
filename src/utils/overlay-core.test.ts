@@ -15,9 +15,10 @@ import { JSDOM } from 'jsdom';
 
 // overlay-core.jsを読み込んでwindow.OverlayCoreを取得
 function loadOverlayCore(): typeof window & { OverlayCore: OverlayCoreType } {
+  // process.cwdベースでパス解決（Vitestのjsdom環境で確実に動作）
   const scriptPath = path.join(
-    __dirname,
-    '../../src-tauri/overlays/shared/overlay-core.js'
+    process.cwd(),
+    'src-tauri/overlays/shared/overlay-core.js'
   );
   const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
 
@@ -514,5 +515,88 @@ describe('validateTimeout (間接テスト)', () => {
   it('SettingsFetcherがtimeout=undefinedでもデフォルト値が使用される', () => {
     const fetcher = new OverlayCore.SettingsFetcher({});
     expect(fetcher.timeout).toBe(3000); // SETTINGS_FETCH_TIMEOUT
+  });
+});
+
+/**
+ * fetchLatestSetlistのtimeout引数テスト
+ * PR#62で挙げていたケース: timeout=0/負値/undefinedでAbortが即時発火しないこと
+ */
+describe('fetchLatestSetlist timeout handling', () => {
+  let win: ReturnType<typeof loadOverlayCore>;
+  let OverlayCore: OverlayCoreType;
+  let mockFetch: ReturnType<typeof vi.fn>;
+  let abortedSignals: boolean[];
+
+  beforeEach(() => {
+    win = loadOverlayCore();
+    OverlayCore = win.OverlayCore;
+    abortedSignals = [];
+
+    // fetchモックでAbortの発火タイミングを追跡
+    mockFetch = vi.fn().mockImplementation((_url, options) => {
+      // シグナルの状態を記録
+      abortedSignals.push(options?.signal?.aborted ?? false);
+      return Promise.resolve({
+        ok: false,
+        json: () => Promise.resolve({}),
+      });
+    });
+    (win as unknown as { fetch: typeof fetch }).fetch = mockFetch;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('timeout=0でもAbortが即時発火せずにfetchが実行される', async () => {
+    vi.useFakeTimers();
+
+    // timeout=0で呼び出し（validateTimeoutでデフォルト値にフォールバックされるべき）
+    const promise = OverlayCore.fetchLatestSetlist(
+      'http://localhost:19800/api',
+      () => {},
+      0
+    );
+
+    // fetch呼び出し時点ではAbortされていないこと
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(mockFetch).toHaveBeenCalled();
+    // 呼び出し時点でAbortされていなければ成功
+    expect(abortedSignals[0]).toBe(false);
+  });
+
+  it('timeout=負値でもAbortが即時発火しない', async () => {
+    vi.useFakeTimers();
+
+    const promise = OverlayCore.fetchLatestSetlist(
+      'http://localhost:19800/api',
+      () => {},
+      -1000
+    );
+
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(mockFetch).toHaveBeenCalled();
+    expect(abortedSignals[0]).toBe(false);
+  });
+
+  it('timeout=undefinedでもデフォルト値が適用されてfetchが実行される', async () => {
+    vi.useFakeTimers();
+
+    const promise = OverlayCore.fetchLatestSetlist(
+      'http://localhost:19800/api',
+      () => {},
+      undefined
+    );
+
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(mockFetch).toHaveBeenCalled();
+    expect(abortedSignals[0]).toBe(false);
   });
 });

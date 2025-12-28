@@ -71,38 +71,41 @@ function extractFromRust(): string[] {
 
   const enumContent = match[1];
   const types: string[] = [];
+  const lines = enumContent.split('\n');
 
-  // 各行を解析
-  for (const line of enumContent.split('\n')) {
+  // 状態変数: 直前のserde(rename)値を保持
+  let pendingRename: string | null = null;
+
+  for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
-      // serde(rename = "XXX") の場合はその値を使用
-      const renameMatch = line.match(/#\[serde\(rename\s*=\s*"([^"]+)"\)\]/);
-      if (renameMatch) {
-        // 次の行のバリアントを読むためにスキップしない
-        continue;
-      }
+
+    // 空行やコメント行はスキップ（ただしpendingRenameはリセットしない）
+    if (!trimmed || trimmed.startsWith('//')) {
+      continue;
+    }
+
+    // serde(rename = "XXX") 属性を検出
+    const renameMatch = trimmed.match(/#\[serde\(rename\s*=\s*"([^"]+)"\)\]/);
+    if (renameMatch) {
+      pendingRename = renameMatch[1];
+      continue;
+    }
+
+    // その他の属性行（#[...])はスキップするがpendingRenameは維持
+    if (trimmed.startsWith('#[')) {
       continue;
     }
 
     // バリアント名を抽出（末尾のカンマを除去）
     const variantMatch = trimmed.match(/^(\w+),?$/);
     if (variantMatch) {
-      const variantName = variantMatch[1];
-
-      // 前の行にserde(rename)があるか確認
-      const prevLines = enumContent.split('\n');
-      const currentIndex = prevLines.findIndex((l) => l.includes(variantName));
-      if (currentIndex > 0) {
-        const prevLine = prevLines[currentIndex - 1];
-        const renameMatch = prevLine.match(/#\[serde\(rename\s*=\s*"([^"]+)"\)\]/);
-        if (renameMatch) {
-          types.push(renameMatch[1]);
-          continue;
-        }
+      // pendingRenameがあればその値を使用、なければバリアント名をそのまま使用
+      if (pendingRename) {
+        types.push(pendingRename);
+        pendingRename = null;
+      } else {
+        types.push(variantMatch[1]);
       }
-
-      types.push(variantName);
     }
   }
 

@@ -130,3 +130,47 @@ window.ComponentRegistry = {
 2. JSDOMのタイマーはVitestで制御できないため、内部状態操作でテスト
 3. read-onlyプロパティは `Object.defineProperty` でモック
 4. destroy()などのリソース解放を必ずafterEachで実行
+
+---
+
+## PR#67 追加レビュー指摘（次回以降で可）
+
+PR#67でテストヘルパー共通化を実装した際の追加レビュー指摘事項。
+
+### 1. loadScriptContentのエラーハンドリング改善
+
+**問題**: `fs.readFileSync`が失敗した場合のエラーメッセージが汎用的
+
+**推奨対応**:
+```typescript
+export function loadScriptContent(relativePath: string): string {
+  const scriptPath = resolveOverlayScriptPath(relativePath);
+  try {
+    return fs.readFileSync(scriptPath, 'utf-8');
+  } catch (error) {
+    throw new Error(`Failed to load script: ${scriptPath} (${error instanceof Error ? error.message : error})`);
+  }
+}
+```
+
+**優先度**: 低
+
+### 2. mockPerformanceのperformance.now()精度
+
+**問題**: 現在`Date.now()`を返しているが、`performance.now()`は通常ミリ秒未満の精度を提供
+
+**現状**: テスト目的では問題なし
+
+**将来考慮**: パフォーマンス計測テストを追加する場合は高精度実装が必要
+
+**優先度**: 低
+
+### 3. JSDOMインポートの重複
+
+**問題**: `weather-widget.test.ts`で`JSDOM`を直接インポートしているが、`test-helpers.ts`からもJSDOMが使用されている
+
+**現状**: `JSDOM`型が必要なため問題なし
+
+**将来考慮**: `test-helpers`からの再エクスポートを検討可能
+
+**優先度**: 最低

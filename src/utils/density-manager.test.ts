@@ -11,42 +11,19 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { JSDOM } from 'jsdom';
-
-// スクリプトパスを解決
-function resolveScriptPath(): string {
-  const relativePath = 'src-tauri/overlays/shared/density-manager.js';
-
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const rootDir = path.resolve(__dirname, '../..');
-    const scriptPath = path.join(rootDir, relativePath);
-    if (fs.existsSync(scriptPath)) {
-      return scriptPath;
-    }
-  } catch {
-    // fileURLToPathが失敗した場合はフォールバック
-  }
-
-  return path.join(process.cwd(), relativePath);
-}
+import {
+  loadScriptContent,
+  createTestDOM,
+  executeScript,
+} from './test-helpers';
 
 // DensityManagerを読み込んでwindow.DensityManagerを取得
 function loadDensityManager(): typeof window & {
   DensityManager: DensityManagerClass;
   ComponentRegistry: { dispatch: ReturnType<typeof vi.fn> };
 } {
-  const scriptPath = resolveScriptPath();
-  const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
-
-  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    runScripts: 'dangerously',
-    url: 'http://localhost/',
-  });
+  const scriptContent = loadScriptContent('src-tauri/overlays/shared/density-manager.js');
+  const dom = createTestDOM();
 
   // ComponentRegistryモック
   const mockDispatch = vi.fn();
@@ -55,9 +32,7 @@ function loadDensityManager(): typeof window & {
   };
 
   // スクリプトを実行
-  const script = dom.window.document.createElement('script');
-  script.textContent = scriptContent;
-  dom.window.document.body.appendChild(script);
+  executeScript(dom, scriptContent);
 
   return dom.window as unknown as typeof window & {
     DensityManager: DensityManagerClass;

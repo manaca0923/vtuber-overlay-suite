@@ -8,29 +8,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { JSDOM } from 'jsdom';
-
-// スクリプトパスを解決
-function resolveScriptPath(): string {
-  const relativePath = 'src-tauri/overlays/components/weather-widget.js';
-
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const rootDir = path.resolve(__dirname, '../..');
-    const scriptPath = path.join(rootDir, relativePath);
-    if (fs.existsSync(scriptPath)) {
-      return scriptPath;
-    }
-  } catch {
-    // fileURLToPathが失敗した場合はフォールバック
-  }
-
-  return path.join(process.cwd(), relativePath);
-}
+import {
+  loadScriptContent,
+  createTestDOM,
+  executeScript,
+} from './test-helpers';
 
 // BaseComponentのモックスクリプト
 const baseComponentMock = `
@@ -82,23 +65,14 @@ function loadWeatherWidget(): {
   dom: JSDOM;
   WeatherWidget: WeatherWidgetClass;
 } {
-  const scriptPath = resolveScriptPath();
-  const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
-
-  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    runScripts: 'dangerously',
-    url: 'http://localhost/',
-  });
+  const scriptContent = loadScriptContent('src-tauri/overlays/components/weather-widget.js');
+  const dom = createTestDOM();
 
   // BaseComponentとComponentRegistryをセットアップ
-  const setupScript = dom.window.document.createElement('script');
-  setupScript.textContent = baseComponentMock + componentRegistryMock;
-  dom.window.document.body.appendChild(setupScript);
+  executeScript(dom, baseComponentMock + componentRegistryMock);
 
   // WeatherWidgetスクリプトを実行
-  const script = dom.window.document.createElement('script');
-  script.textContent = scriptContent;
-  dom.window.document.body.appendChild(script);
+  executeScript(dom, scriptContent);
 
   const WeatherWidget = (
     dom.window as unknown as { ComponentRegistry: { get: (name: string) => WeatherWidgetClass } }

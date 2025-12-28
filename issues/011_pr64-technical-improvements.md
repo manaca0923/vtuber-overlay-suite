@@ -471,3 +471,26 @@ Codexレビューの誤検出。
 
 ### 第8回レビュー対応
 - [x] jsdomの配置を確認（既にdevDependenciesに正しく配置済み）
+
+## 第9回レビュー指摘事項
+
+### 中: tsxの依存追加が差分内に見当たらない (Codex Review)
+
+**問題**:
+`package.json`の`validate:types`が`npx tsx`依存だが、`tsx`の依存追加が差分内に見当たらず、ネットワーク制限やCIで`npx`が解決できないとスクリプトが失敗する。
+
+**対応**:
+`tsx`を明示的に`devDependencies`に追加:
+```bash
+npm install tsx --save-dev
+```
+
+これにより、`npm install`後は`npx tsx`が確実に動作する。
+
+### 既に対応済み: 構造体バリアント/process.cwd()依存
+
+- 構造体バリアントの複数行対応は、第6回レビューで`^\s*}`パターンに修正済み
+- `process.cwd()`依存は第6回で`docs/900_tasks.md`に追記済み
+
+### 第9回レビュー対応
+- [x] tsxをdevDependenciesに明示的に追加

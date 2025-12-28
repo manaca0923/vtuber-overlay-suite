@@ -45,7 +45,7 @@ pub enum LayoutType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateLayout {
-    /// レイアウトタイプ（"threeColumn"固定）
+    /// レイアウトタイプ（現在はthreeColumnのみサポート）
     #[serde(rename = "type")]
     pub layout_type: LayoutType,
     /// 左カラム比率（0.18〜0.28）

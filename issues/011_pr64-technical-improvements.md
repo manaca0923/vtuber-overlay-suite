@@ -494,3 +494,26 @@ npm install tsx --save-dev
 
 ### 第9回レビュー対応
 - [x] tsxをdevDependenciesに明示的に追加
+
+## 第10回レビュー指摘事項
+
+### 中: jsdom/tsx がdependenciesに追加されている (Codex Review) → 誤検出
+
+**指摘内容**:
+`jsdom`/`@types/jsdom`/`tsx`が`dependencies`に追加されており、本番配布に不要な依存が取り込まれる。
+
+**確認結果**:
+`package.json`を再確認したところ、すべて`devDependencies`に正しく配置されている:
+- `jsdom`: devDependencies（行46）
+- `@types/jsdom`: devDependencies（行37）
+- `tsx`: devDependencies（行48）
+
+Codexレビューの誤検出。第8回と同様。
+
+### 既に対応済み: その他の指摘
+
+- `cfg_attr`やraw string内`"`の対応は第6回で`docs/900_tasks.md`に追記済み
+- `process.cwd()`依存も第6回で追記済み
+
+### 第10回レビュー対応
+- [x] jsdom/tsx/の配置を再確認（既にdevDependenciesに正しく配置済み）

@@ -284,6 +284,19 @@
       if (settings.weather) {
         applyWeatherSettings(settings.weather);
       }
+
+      // パフォーマンス設定
+      if (settings.performance) {
+        applyPerformanceSettings(settings.performance);
+      }
+    }
+
+    function applyPerformanceSettings(performanceSettings) {
+      const threshold = performanceSettings.densityThreshold;
+      if (typeof threshold === 'number' && densityManager) {
+        densityManager.setThreshold(threshold);
+        console.log(`[Performance] Density threshold set to ${threshold}`);
+      }
     }
 
     function applyWeatherSettings(weatherSettings) {

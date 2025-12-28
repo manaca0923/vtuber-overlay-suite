@@ -98,6 +98,11 @@ export interface WeatherSettings {
   position: WeatherPosition;
 }
 
+// パフォーマンス設定
+export interface PerformanceSettings {
+  densityThreshold: number; // 過密検出閾値（1-20、デフォルト: 5）
+}
+
 // オーバーレイ設定全体
 export interface OverlaySettings {
   theme: ThemeName;
@@ -106,6 +111,7 @@ export interface OverlaySettings {
   comment: CommentSettings;
   setlist: SetlistSettings;
   weather?: WeatherSettings; // オプショナル（後方互換性のため）
+  performance?: PerformanceSettings; // オプショナル（後方互換性のため）
 }
 
 // デフォルト設定
@@ -132,6 +138,9 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   weather: {
     enabled: true,
     position: 'left-top',
+  },
+  performance: {
+    densityThreshold: 5, // デフォルト: 2秒間に5回更新で高負荷と判定
   },
 };
 

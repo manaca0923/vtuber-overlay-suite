@@ -168,7 +168,7 @@ describe('DensityManager', () => {
       const manager = new DensityManager({ threshold: 10 });
       manager.recordUpdate('right.lowerLeft');
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft'].count).toBe(1);
+      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(1);
       manager.destroy();
     });
 
@@ -186,7 +186,7 @@ describe('DensityManager', () => {
       manager.recordUpdate('right.lowerLeft');
       manager.recordUpdate('right.lowerLeft');
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft'].count).toBe(3);
+      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(3);
       manager.destroy();
     });
   });
@@ -253,8 +253,8 @@ describe('DensityManager', () => {
 
       manager.clearHistory();
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft'].count).toBe(0);
-      expect(debugInfo.slots['right.lowerRight'].count).toBe(0);
+      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(0);
+      expect(debugInfo.slots['right.lowerRight']!.count).toBe(0);
       manager.destroy();
     });
 
@@ -283,7 +283,7 @@ describe('DensityManager', () => {
       manager.destroy();
 
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft'].count).toBe(0);
+      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(0);
     });
   });
 
@@ -332,7 +332,7 @@ describe('DensityManager', () => {
       expect(info.isDense).toBe(false);
       expect(info.threshold).toBe(10);
       expect(info.windowMs).toBe(2000);
-      expect(info.slots['right.lowerLeft'].count).toBe(1);
+      expect(info.slots['right.lowerLeft']!.count).toBe(1);
       manager.destroy();
     });
   });
@@ -353,7 +353,7 @@ describe('DensityManager', () => {
       const debugInfo = manager.getDebugInfo();
 
       // 古いエントリは削除され、新しいエントリのみ残る
-      expect(debugInfo.slots['right.lowerLeft'].count).toBe(1);
+      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(1);
       manager.destroy();
     });
 
@@ -372,7 +372,7 @@ describe('DensityManager', () => {
       const debugInfo = manager.getDebugInfo();
 
       // 新しいエントリ + recordUpdateのエントリ = 2つ
-      expect(debugInfo.slots['right.lowerLeft'].count).toBe(2);
+      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(2);
       manager.destroy();
     });
 

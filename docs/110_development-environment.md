@@ -16,7 +16,7 @@
 |--------|-----------|------|
 | **Homebrew** | 5.0.6 | パッケージマネージャ |
 | **Git** | 2.39.3 | バージョン管理 |
-| **Node.js** | 20.19.2 | JavaScript/TypeScriptランタイム |
+| **Node.js** | 20.19.2 | JavaScript/TypeScriptランタイム（**>=20.19.0必須**、jsdom要件） |
 | **npm** | 10.8.2 | Node.jsパッケージマネージャ |
 | **Rust** | 1.86.0 | Rustコンパイラ（Homebrew版） |
 | **Cargo** | 1.86.0 | Rustパッケージマネージャ |
@@ -109,7 +109,7 @@ brew install node
 brew install rust
 
 # バージョン確認
-node --version  # v20.19.2 推奨
+node --version  # v20.19.0以上必須（jsdom依存）
 npm --version   # 10.8.2 推奨
 rustc --version # 1.86.0 推奨
 ```
@@ -182,7 +182,7 @@ Windowsで開発する場合、以下が必要：
 - **ツール**:
   - Visual Studio Build Tools（C++コンパイラ）
   - WebView2（Tauri要件）
-  - Node.js 20.x
+  - Node.js 20.19.0以上（jsdom依存）
   - Rust（rustup経由）
   - Git for Windows
 

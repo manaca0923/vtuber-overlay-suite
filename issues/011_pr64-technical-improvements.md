@@ -264,3 +264,45 @@ CSSを共通ファイルに抽出する際:
 - [x] package.jsonにenginesフィールドを追加（Node >=20.19.0）
 - [x] Rust enum解析の正規表現を非ユニットバリアント対応に拡張
 - [x] combined.htmlにscale(1.05)のオーバーライドを追加
+
+## 第3回レビュー指摘事項
+
+### 中: Node.js要件のドキュメント明記 (Codex Review)
+
+**問題**:
+`package.json`に`engines`フィールドを追加したが、CI/開発環境のドキュメントに明記されていない。
+
+**対応**:
+`docs/110_development-environment.md`を更新:
+- 開発ツールテーブルにNode.js要件（>=20.19.0必須、jsdom要件）を追記
+- セットアップ手順のバージョン確認コマンドに要件を追記
+- Windows環境要件にNode.js 20.19.0以上を追記
+
+### 中: serde(rename)正規表現の拡張 (Codex Review)
+
+**問題**:
+`#[serde(rename = r#"..."#)]`（raw string literal）形式に未対応。
+
+**対応**:
+```javascript
+// 修正前
+const renameMatch = trimmed.match(/#\[serde\(rename\s*=\s*"([^"]+)"\)\]/);
+
+// 修正後
+// 対応形式:
+// - #[serde(rename = "foo")]         - 通常の文字列
+// - #[serde(rename = r#"foo"#)]      - raw string literal
+// - #[serde(rename = r##"foo"##)]    - raw string literal (複数#)
+const renameMatch = trimmed.match(/#\[serde\(rename\s*=\s*(?:r#+")?\"([^"]+)\"(?:#+)?\)\]/);
+```
+
+### 学んだこと: Rustのraw string literal
+
+Rustでは`r#"..."#`形式でraw string literalを記述できる:
+- エスケープ不要で特殊文字を含む文字列を記述可能
+- `#`の数は任意で増やせる（`r##"..."##`など）
+- 正規表現で解析する場合は両形式に対応する必要がある
+
+### 第3回レビュー対応
+- [x] docs/110_development-environment.mdにNode.js要件を明記
+- [x] serde(rename)の正規表現をraw string literal対応に拡張

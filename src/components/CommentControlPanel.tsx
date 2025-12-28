@@ -104,9 +104,10 @@ export function CommentControlPanel({
     };
   }, []);
 
-  // APIモードを読み込み
+  // 初期設定を読み込み（APIモード、useBundledKey）
   useEffect(() => {
-    async function loadApiMode() {
+    async function loadInitialSettings() {
+      // APIモードを読み込み
       try {
         const savedMode = await invoke<ApiMode>('load_api_mode');
         if (isMountedRef.current) {
@@ -115,13 +116,8 @@ export function CommentControlPanel({
       } catch (err) {
         console.error('Failed to load API mode:', err);
       }
-    }
-    loadApiMode();
-  }, []);
 
-  // useBundledKeyを読み込み（wizard_settingsから）
-  useEffect(() => {
-    async function loadUseBundledKey() {
+      // useBundledKeyを読み込み（wizard_settingsから）
       try {
         const settings = await invoke<{
           video_id: string;
@@ -138,7 +134,7 @@ export function CommentControlPanel({
         console.error('Failed to load useBundledKey:', err);
       }
     }
-    loadUseBundledKey();
+    loadInitialSettings();
   }, []);
 
   // InnerTube/gRPC/Officialステータスイベントを監視

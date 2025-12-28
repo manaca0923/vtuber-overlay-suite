@@ -28,6 +28,17 @@ pub enum ComponentType {
     QueueList,
 }
 
+// ===== レイアウトタイプ =====
+
+/// レイアウトタイプ（現在はthreeColumnのみサポート）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum LayoutType {
+    /// 3カラムレイアウト
+    #[default]
+    #[serde(rename = "threeColumn")]
+    ThreeColumn,
+}
+
 // ===== レイアウト設定 =====
 
 /// 3カラムレイアウト設定
@@ -36,7 +47,7 @@ pub enum ComponentType {
 pub struct TemplateLayout {
     /// レイアウトタイプ（"threeColumn"固定）
     #[serde(rename = "type")]
-    pub layout_type: String,
+    pub layout_type: LayoutType,
     /// 左カラム比率（0.18〜0.28）
     pub left_pct: f64,
     /// 中央カラム比率（0.44〜0.64）
@@ -50,7 +61,7 @@ pub struct TemplateLayout {
 impl Default for TemplateLayout {
     fn default() -> Self {
         Self {
-            layout_type: "threeColumn".to_string(),
+            layout_type: LayoutType::ThreeColumn,
             left_pct: 0.22,
             center_pct: 0.56,
             right_pct: 0.22,
@@ -337,8 +348,7 @@ impl Template {
     /// テンプレートをバリデーション＆クランプ
     /// 不正な値はクランプして適用
     pub fn validate_and_clamp(&mut self) {
-        // layout_typeを強制（現在はthreeColumnのみサポート）
-        self.layout.layout_type = "threeColumn".to_string();
+        // layout_typeはenum化により型レベルで検証済み（デシリアライズ時に不正値はエラー）
 
         // layout クランプ
         self.layout.left_pct = clamp::left_pct(self.layout.left_pct);
@@ -474,7 +484,7 @@ mod tests {
     #[test]
     fn test_default_template() {
         let template = Template::default();
-        assert_eq!(template.layout.layout_type, "threeColumn");
+        assert_eq!(template.layout.layout_type, LayoutType::ThreeColumn);
         assert_eq!(template.layout.left_pct, 0.22);
         assert_eq!(template.layout.center_pct, 0.56);
         assert_eq!(template.layout.right_pct, 0.22);
@@ -485,7 +495,7 @@ mod tests {
     fn test_validate_and_clamp() {
         let mut template = Template {
             layout: TemplateLayout {
-                layout_type: "threeColumn".to_string(),
+                layout_type: LayoutType::ThreeColumn,
                 left_pct: 0.1,   // should clamp to 0.18
                 center_pct: 0.8, // should clamp to 0.64
                 right_pct: 0.5,  // should clamp to 0.28
@@ -657,21 +667,21 @@ mod tests {
     }
 
     #[test]
-    fn test_layout_type_forced_to_three_column() {
-        let mut template = Template {
-            layout: TemplateLayout {
-                layout_type: "invalid".to_string(),
-                left_pct: 0.22,
-                center_pct: 0.56,
-                right_pct: 0.22,
-                gutter_px: 24,
-            },
-            safe_area_pct: TemplateSafeArea::default(),
-            theme: None,
-            components: Vec::new(),
-        };
+    fn test_layout_type_serialization() {
+        // LayoutType::ThreeColumn は "threeColumn" としてシリアライズされる
+        let layout_type = LayoutType::ThreeColumn;
+        let json = serde_json::to_string(&layout_type).unwrap();
+        assert_eq!(json, r#""threeColumn""#);
 
-        template.validate_and_clamp();
-        assert_eq!(template.layout.layout_type, "threeColumn");
+        // "threeColumn" はデシリアライズ可能
+        let parsed: LayoutType = serde_json::from_str(r#""threeColumn""#).unwrap();
+        assert_eq!(parsed, LayoutType::ThreeColumn);
+    }
+
+    #[test]
+    fn test_layout_type_invalid_deserialization() {
+        // 不正な値はデシリアライズ時にエラーになる（型レベル検証）
+        let result: Result<LayoutType, _> = serde_json::from_str(r#""invalid""#);
+        assert!(result.is_err());
     }
 }

@@ -747,17 +747,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: `scripts/validate-component-types.ts`を追加し、JSON Schema/TypeScript/Rust間の同期を検証
   - `npm run validate:types`で実行可能
 
-- [ ] **CommentControlPanel設定読み込みの統合** (PR#60)
-  - 現在: `loadApiMode`と`loadUseBundledKey`が別々のuseEffectで実装
-  - 対応: 設定項目が増えた場合、単一の設定読み込みAPIに統合を検討
+- [x] **CommentControlPanel設定読み込みの統合** (PR#60) ✅ 対応済み（PR#65）
+  - ~~現在: `loadApiMode`と`loadUseBundledKey`が別々のuseEffectで実装~~
+  - 対応済み: 2つのuseEffectを単一の`loadInitialSettings`関数に統合
   - 対象ファイル: `src/components/CommentControlPanel.tsx`
-  - 優先度: 低（現時点では2つのuseEffectで問題なし）
 
-- [ ] **layout_type の検証がない** (PR#51)
-  - 現在: `layout_type`は"threeColumn"固定だが、バリデーションで検証されていない
-  - 対応: 将来のレイアウトタイプ拡張を見越してenumにするか検証を追加
+- [x] **layout_type の検証がない** (PR#51) ✅ 対応済み（PR#65）
+  - ~~現在: `layout_type`は"threeColumn"固定だが、バリデーションで検証されていない~~
+  - 対応済み: `LayoutType` enumを追加し、型レベルで検証（デシリアライズ時に不正値はエラー）
   - 対象ファイル: `src-tauri/src/server/template_types.rs`
-  - 優先度: 低
 
 - [x] **コンポーネントIDの一意性チェック** (PR#51) ✅ 既に実装済み
   - ~~現在: slot重複チェックはあるが、コンポーネントIDの重複チェックがない~~
@@ -770,23 +768,20 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/shared/slots.js`, `src/types/slot.ts`
   - `src/types/slot.test.ts`にテストを追加
 
-- [ ] **SLOT定義の単一ソース化** (PR#50)
-  - 現在: slot定義が3箇所（Rust, TypeScript, JavaScript）に分散
-  - 対応: JSONスキーマから各言語のコードを自動生成、またはTypeScriptをsingle source of truthに
-  - 対象ファイル: `src-tauri/src/server/types.rs`, `src/types/slot.ts`, `src-tauri/overlays/shared/slots.js`
-  - 優先度: 低
+- [x] **SLOT定義の単一ソース化** (PR#50) ✅ 対応済み（PR#65）
+  - ~~現在: slot定義が3箇所（Rust, TypeScript, JavaScript）に分散~~
+  - 対応済み: `validate-slot-types.ts`スクリプトを追加し、4箇所（JSON Schema, TypeScript, Rust, JavaScript）の同期を検証
+  - 対象ファイル: `scripts/validate-slot-types.ts`, `package.json`（`validate:slots`スクリプト追加）
 
-- [ ] **validate-component-types.tsのraw string内`"`対応** (PR#64)
+- [x] **validate-component-types.tsのraw string内`"`対応** (PR#64) ✅ スキップ（PR#65）
   - 現在: `r##"foo"bar"##` のように`"`を含むraw stringで途中切れする可能性
-  - 対応: 正規表現を`r#+\"([\\s\\S]*?)\"#+`に変更、または状態機械方式に
+  - 対応: 現時点ではserde(rename = r#"..."#)形式は未使用のため対応不要（コメントに制限事項を明記済み）
   - 対象ファイル: `scripts/validate-component-types.ts`
-  - 優先度: 低（現時点では使用していない）
 
-- [ ] **overlay-core.test.tsのprocess.cwd()依存** (PR#64)
-  - 現在: テスト実行ディレクトリがリポジトリ直下でない場合に読み込み失敗
-  - 対応: `import.meta.url`からの相対解決と`process.cwd()`のフォールバック併用
+- [x] **overlay-core.test.tsのprocess.cwd()依存** (PR#64) ✅ 対応済み（PR#65）
+  - ~~現在: テスト実行ディレクトリがリポジトリ直下でない場合に読み込み失敗~~
+  - 対応済み: `import.meta.url`からの相対解決を優先し、`process.cwd()`をフォールバックに
   - 対象ファイル: `src/utils/overlay-core.test.ts`
-  - 優先度: 低（Vitestの標準実行方法で問題なし）
 
 ### セキュリティ（将来課題）
 

@@ -1,0 +1,200 @@
+/**
+ * コンポーネントタイプの同期検証スクリプト
+ *
+ * JSON Schema, TypeScript, Rust間でComponentTypeの定義が
+ * 一致しているかを検証します。
+ *
+ * 使用方法:
+ *   npx tsx scripts/validate-component-types.ts
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// === ファイルパス ===
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
+const SCHEMA_PATH = path.join(ROOT_DIR, 'src-tauri/schemas/template-mvp-1.0.json');
+const TS_PATH = path.join(ROOT_DIR, 'src/types/template.ts');
+const RUST_PATH = path.join(ROOT_DIR, 'src-tauri/src/server/template_types.rs');
+
+// === 色付き出力 ===
+const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
+const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
+const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
+
+// === JSON Schemaからコンポーネントタイプを抽出 ===
+function extractFromSchema(): string[] {
+  const content = fs.readFileSync(SCHEMA_PATH, 'utf-8');
+  const schema = JSON.parse(content);
+
+  const typeEnum = schema.properties?.components?.items?.properties?.type?.enum;
+  if (!Array.isArray(typeEnum)) {
+    throw new Error('JSON Schema: components.items.properties.type.enum が見つかりません');
+  }
+
+  return typeEnum;
+}
+
+// === TypeScriptからコンポーネントタイプを抽出 ===
+function extractFromTypeScript(): string[] {
+  const content = fs.readFileSync(TS_PATH, 'utf-8');
+
+  // COMPONENT_TYPES = [...] を抽出
+  const match = content.match(/COMPONENT_TYPES\s*=\s*\[([\s\S]*?)\]\s*as\s*const/);
+  if (!match) {
+    throw new Error('TypeScript: COMPONENT_TYPES の定義が見つかりません');
+  }
+
+  const arrayContent = match[1];
+  // 文字列リテラルを抽出
+  const types = [...arrayContent.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+
+  if (types.length === 0) {
+    throw new Error('TypeScript: COMPONENT_TYPES が空です');
+  }
+
+  return types;
+}
+
+// === Rustからコンポーネントタイプを抽出 ===
+function extractFromRust(): string[] {
+  const content = fs.readFileSync(RUST_PATH, 'utf-8');
+
+  // pub enum ComponentType { ... } を抽出
+  const match = content.match(/pub enum ComponentType\s*\{([\s\S]*?)\n\}/);
+  if (!match) {
+    throw new Error('Rust: pub enum ComponentType の定義が見つかりません');
+  }
+
+  const enumContent = match[1];
+  const types: string[] = [];
+
+  // 各行を解析
+  for (const line of enumContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
+      // serde(rename = "XXX") の場合はその値を使用
+      const renameMatch = line.match(/#\[serde\(rename\s*=\s*"([^"]+)"\)\]/);
+      if (renameMatch) {
+        // 次の行のバリアントを読むためにスキップしない
+        continue;
+      }
+      continue;
+    }
+
+    // バリアント名を抽出（末尾のカンマを除去）
+    const variantMatch = trimmed.match(/^(\w+),?$/);
+    if (variantMatch) {
+      const variantName = variantMatch[1];
+
+      // 前の行にserde(rename)があるか確認
+      const prevLines = enumContent.split('\n');
+      const currentIndex = prevLines.findIndex((l) => l.includes(variantName));
+      if (currentIndex > 0) {
+        const prevLine = prevLines[currentIndex - 1];
+        const renameMatch = prevLine.match(/#\[serde\(rename\s*=\s*"([^"]+)"\)\]/);
+        if (renameMatch) {
+          types.push(renameMatch[1]);
+          continue;
+        }
+      }
+
+      types.push(variantName);
+    }
+  }
+
+  if (types.length === 0) {
+    throw new Error('Rust: ComponentType のバリアントが空です');
+  }
+
+  return types;
+}
+
+// === 配列の差分を取得 ===
+function getDiff(expected: string[], actual: string[]): { missing: string[]; extra: string[] } {
+  const expectedSet = new Set(expected);
+  const actualSet = new Set(actual);
+
+  const missing = expected.filter((x) => !actualSet.has(x));
+  const extra = actual.filter((x) => !expectedSet.has(x));
+
+  return { missing, extra };
+}
+
+// === メイン処理 ===
+function main(): number {
+  console.log('ComponentType 同期検証を開始します...\n');
+
+  let hasError = false;
+
+  try {
+    // 各ソースから抽出
+    const schemaTypes = extractFromSchema();
+    const tsTypes = extractFromTypeScript();
+    const rustTypes = extractFromRust();
+
+    console.log(`JSON Schema: ${schemaTypes.length}個のタイプ`);
+    console.log(`TypeScript:  ${tsTypes.length}個のタイプ`);
+    console.log(`Rust:        ${rustTypes.length}個のタイプ`);
+    console.log();
+
+    // JSON Schemaを正とする比較
+    const tsDiff = getDiff(schemaTypes, tsTypes);
+    const rustDiff = getDiff(schemaTypes, rustTypes);
+
+    // TypeScriptの検証
+    if (tsDiff.missing.length > 0 || tsDiff.extra.length > 0) {
+      console.log(red('TypeScript との差分:'));
+      if (tsDiff.missing.length > 0) {
+        console.log(`  ${yellow('不足:')} ${tsDiff.missing.join(', ')}`);
+      }
+      if (tsDiff.extra.length > 0) {
+        console.log(`  ${yellow('余分:')} ${tsDiff.extra.join(', ')}`);
+      }
+      hasError = true;
+    } else {
+      console.log(green('TypeScript: 同期OK'));
+    }
+
+    // Rustの検証
+    if (rustDiff.missing.length > 0 || rustDiff.extra.length > 0) {
+      console.log(red('Rust との差分:'));
+      if (rustDiff.missing.length > 0) {
+        console.log(`  ${yellow('不足:')} ${rustDiff.missing.join(', ')}`);
+      }
+      if (rustDiff.extra.length > 0) {
+        console.log(`  ${yellow('余分:')} ${rustDiff.extra.join(', ')}`);
+      }
+      hasError = true;
+    } else {
+      console.log(green('Rust: 同期OK'));
+    }
+
+    // TypeScriptとRustの順序も確認
+    const tsOrder = tsTypes.join(',');
+    const schemaOrder = schemaTypes.join(',');
+    if (tsOrder !== schemaOrder && !hasError) {
+      console.log(yellow('\n順序の違い（参考情報）:'));
+      console.log(`  Schema: ${schemaTypes.slice(0, 3).join(', ')}...`);
+      console.log(`  TS:     ${tsTypes.slice(0, 3).join(', ')}...`);
+    }
+  } catch (error) {
+    console.error(red(`エラー: ${error instanceof Error ? error.message : error}`));
+    hasError = true;
+  }
+
+  console.log();
+
+  if (hasError) {
+    console.log(red('検証失敗: ComponentType の定義を同期してください'));
+    return 1;
+  }
+
+  console.log(green('検証成功: すべての定義が同期されています'));
+  return 0;
+}
+
+process.exit(main());

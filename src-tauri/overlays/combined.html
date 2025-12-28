@@ -7,6 +7,7 @@
   <title>Combined Overlay</title>
   <!-- 共通スタイル -->
   <link rel="stylesheet" href="shared/overlay-common.css">
+  <link rel="stylesheet" href="shared/setlist-common.css">
   <style>
     /* combined.html固有のスタイル */
     :root {
@@ -105,59 +106,7 @@
       max-width: 100%;
     }
 
-    .setlist-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 0;
-      opacity: 0.5;
-      transition: all 0.3s ease;
-    }
-
-    .setlist-item.current {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-
-    .setlist-item.current .song-title {
-      color: var(--primary-color);
-    }
-
-    .song-number {
-      font-size: 14px;
-      font-weight: bold;
-      min-width: 24px;
-      text-align: center;
-      color: var(--primary-color);
-    }
-
-    .song-info {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-    }
-
-    .song-title {
-      font-size: var(--font-size-setlist);
-      font-weight: bold;
-      text-shadow: var(--text-shadow);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .song-artist {
-      font-size: 14px;
-      opacity: 0.7;
-      text-shadow: var(--text-shadow);
-    }
-
-    .song-status {
-      font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: var(--primary-color);
-    }
+    /* セットリストアイテムスタイルは setlist-common.css に共通化 */
   </style>
 </head>
 

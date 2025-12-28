@@ -727,29 +727,25 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~現在: bfcache復元時にfetchSucceededがリセットされない~~
   - 対応済み: reset()メソッドを追加し、combined-v2.htmlのbfcache復元時に呼び出し
 
-- [ ] **layout-v2.cssのセットリストスタイル重複** (PR#49)
-  - `layout-v2.css:112-166`と`combined.html`のスタイル定義（`.setlist-item`等）が重複
-  - 将来的に`shared/setlist-styles.css`への統合を検討
-  - 優先度: 低
+- [x] **layout-v2.cssのセットリストスタイル重複** (PR#49) ✅ 対応済み（2025-12-28）
+  - ~~`layout-v2.css:112-166`と`combined.html`のスタイル定義（`.setlist-item`等）が重複~~
+  - 対応済み: `shared/setlist-common.css`に共通スタイルを抽出し、両ファイルから参照
 
 ### テスト（推奨）
 
-- [ ] **overlay-core.jsのユニットテスト** (PR#62 Codexレビュー)
-  - `WebSocketManager.reinitialize()`が「再接続タイマー残存」かつ「既存接続がCONNECTING/OPEN」のときに二重接続しないこと
-  - `SettingsFetcher.reset()`後に`fetchAndApply()`が確実に再取得を行うこと（bfcache復元相当）
-  - `fetchLatestSetlist`が`timeout=0/負値/undefined`のときもデフォルト値で動作し、Abortが即時発火しないこと
-  - `updateSetlistDisplay`が`prevEl/currentEl/nextEl`の一部欠落時でも他要素の更新が継続されること
-  - 優先度: 中（将来的にJestまたはPlaywrightでテスト追加）
+- [x] **overlay-core.jsのユニットテスト** (PR#62 Codexレビュー) ✅ 対応済み（2025-12-28）
+  - 対応済み: `src/utils/overlay-core.test.ts`に26個のテストを追加
+  - テスト内容: WebSocketManager.reinitialize()、SettingsFetcher.reset()、updateSetlistDisplay()、validateTimeout()など
 
 - [x] **JSON Schema の `$id` URL更新** (PR#51) ✅ 対応済み（2025-12-26）
   - ~~現在: `https://example.local/...`~~
   - 対応済み: 相対パス（`./template-mvp-1.0.json`）に変更
   - 対象ファイル: `src-tauri/schemas/template-mvp-1.0.json`
 
-- [ ] **コンポーネントタイプの同期維持** (PR#51)
-  - 現在: RustとTypeScriptで`ComponentType`の列挙型が手動で同期
-  - 対応: JSON SchemaからTypeScript型を自動生成、またはビルド時の検証スクリプト追加を検討
-  - 優先度: 低（現時点では手動同期で問題なし）
+- [x] **コンポーネントタイプの同期維持** (PR#51) ✅ 対応済み（2025-12-28）
+  - ~~現在: RustとTypeScriptで`ComponentType`の列挙型が手動で同期~~
+  - 対応済み: `scripts/validate-component-types.ts`を追加し、JSON Schema/TypeScript/Rust間の同期を検証
+  - `npm run validate:types`で実行可能
 
 - [ ] **CommentControlPanel設定読み込みの統合** (PR#60)
   - 現在: `loadApiMode`と`loadUseBundledKey`が別々のuseEffectで実装
@@ -768,12 +764,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: `has_id_duplicates()`が`template_types.rs`に実装済み、`template.rs`で使用
   - テストも追加済み
 
-- [ ] **slotIdの型安全性** (PR#50)
-  - 現在: `toSlotId`/`cssIdToSlotId`の正規表現の意図が曖昧
-  - 問題: 複数のハイフンを含むslot IDの変換が不確実
-  - 対応: 非貪欲マッチ `(.+?)` を使うか、column名を明示的にリストアップ
+- [x] **slotIdの型安全性** (PR#50) ✅ 対応済み（2025-12-28）
+  - ~~現在: `toSlotId`/`cssIdToSlotId`の正規表現の意図が曖昧~~
+  - 対応済み: カラム名（left/center/right）を明示的にチェックする方式に変更
   - 対象ファイル: `src-tauri/overlays/shared/slots.js`, `src/types/slot.ts`
-  - 優先度: 低
+  - `src/types/slot.test.ts`にテストを追加
 
 - [ ] **SLOT定義の単一ソース化** (PR#50)
   - 現在: slot定義が3箇所（Rust, TypeScript, JavaScript）に分散

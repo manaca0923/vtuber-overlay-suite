@@ -124,12 +124,28 @@ export function slotIdToCssId(slotId: SlotId): string {
 /**
  * CSS ID → slotId変換
  * 例: 'slot-left-top' → 'left.top'
+ *
+ * カラム名（left/center/right）を明示的にチェックすることで
+ * 複数ハイフンを含むslot名（例: lowerLeft）も正しく変換
  */
+const COLUMN_NAMES = ['left', 'center', 'right'] as const;
+
 export function cssIdToSlotId(cssId: string): SlotId | null {
-  const match = cssId.match(/^slot-(.+)-(.+)$/);
-  if (!match) return null;
-  const slotId = `${match[1]}.${match[2]}` as SlotId;
-  return SLOT_IDS.includes(slotId) ? slotId : null;
+  const prefix = 'slot-';
+  if (!cssId.startsWith(prefix)) return null;
+
+  const rest = cssId.slice(prefix.length);
+
+  // カラム名を明示的にチェック
+  for (const column of COLUMN_NAMES) {
+    if (rest.startsWith(column + '-')) {
+      const name = rest.slice(column.length + 1);
+      const slotId = `${column}.${name}` as SlotId;
+      return SLOT_IDS.includes(slotId) ? slotId : null;
+    }
+  }
+
+  return null;
 }
 
 /**

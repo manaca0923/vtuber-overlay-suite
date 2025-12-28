@@ -338,4 +338,4 @@ reset() {
 - [x] SettingsFetcherのtimeoutバリデーション
 - [x] validateTimeout()共通関数の追加
 - [x] SettingsFetcher.reset()でfetchInFlightもリセット
-- [ ] combined.htmlへのbfcacheハンドリング追加（低優先度、OBS以外のブラウザ向け）
+- [x] combined.htmlへのbfcacheハンドリング追加（PR#63で対応）

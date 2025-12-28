@@ -86,14 +86,17 @@ function extractFromRust(): string[] {
 
     // serde(rename = "XXX") 属性を検出
     // 対応形式:
-    // - #[serde(rename = "foo")]         - 通常の文字列
-    // - #[serde(rename = r#"foo"#)]      - raw string literal
-    // - #[serde(rename = r##"foo"##)]    - raw string literal (複数#)
+    // - #[serde(rename = "foo")]         - 通常の文字列 → グループ1
+    // - #[serde(rename = r#"foo"#)]      - raw string literal → グループ2
+    // - #[serde(rename = r##"foo"##)]    - raw string literal (複数#) → グループ2
     // 非対応（現時点では使用していないため）:
     // - #[cfg_attr(..., serde(rename = "foo"))]
-    const renameMatch = trimmed.match(/#\[serde\(rename\s*=\s*(?:r#+")?\"([^"]+)\"(?:#+)?\)\]/);
-    if (renameMatch) {
-      pendingRename = renameMatch[1];
+    const renameMatch = trimmed.match(
+      /#\[serde\(rename\s*=\s*(?:"([^"]+)"|r#+"([^"]+)"#+)\)\]/
+    );
+    const renameValue = renameMatch?.[1] ?? renameMatch?.[2];
+    if (renameValue) {
+      pendingRename = renameValue;
       continue;
     }
 

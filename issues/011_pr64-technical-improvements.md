@@ -306,3 +306,41 @@ Rustでは`r#"..."#`形式でraw string literalを記述できる:
 ### 第3回レビュー対応
 - [x] docs/110_development-environment.mdにNode.js要件を明記
 - [x] serde(rename)の正規表現をraw string literal対応に拡張
+
+## 第4回レビュー指摘事項
+
+### 中: serde(rename)正規表現がraw stringにマッチしない (Codex Review)
+
+**問題**:
+第3回で追加した正規表現 `(?:r#+")?\"([^\"]+)\"(?:#+)?` は、raw string literal `r#"foo"#` に実際はマッチしない構造になっていた。
+
+```javascript
+// 問題のある正規表現
+/#\[serde\(rename\s*=\s*(?:r#+")?\"([^"]+)\"(?:#+)?\)\]/
+// r#" の後に \" を期待するが、raw stringでは " のみ
+```
+
+**対応**:
+通常の文字列とraw stringを別パターンで分岐し、どちらかを取得する形に修正:
+
+```javascript
+// 修正後: 通常文字列(グループ1)とraw string(グループ2)を別パターンで分岐
+const renameMatch = trimmed.match(
+  /#\[serde\(rename\s*=\s*(?:"([^"]+)"|r#+"([^"]+)"#+)\)\]/
+);
+const renameValue = renameMatch?.[1] ?? renameMatch?.[2];
+if (renameValue) {
+  pendingRename = renameValue;
+  continue;
+}
+```
+
+### 学んだこと: 正規表現での複数形式対応
+
+複数の文字列形式（通常/raw string）に対応する正規表現を書く際:
+- オプショナルグループ `(?:...)?` で両方をカバーしようとすると、実際にはマッチしないケースがある
+- 代わりに、alternation `(?:...|...)` で明確に分岐し、別々のキャプチャグループで取得する
+- `??`（nullish coalescing）で最初にマッチしたグループを選択
+
+### 第4回レビュー対応
+- [x] serde(rename)正規表現を通常文字列/raw string別パターン分岐に修正

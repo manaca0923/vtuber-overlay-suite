@@ -96,16 +96,24 @@ function extractFromRust(): string[] {
       continue;
     }
 
-    // バリアント名を抽出（末尾のカンマを除去）
-    const variantMatch = trimmed.match(/^(\w+),?$/);
+    // バリアント名を抽出
+    // ユニットバリアント: `Variant,` または `Variant`
+    // タプルバリアント: `Variant(Type),`
+    // 構造体バリアント: `Variant { field: Type },`
+    // 判別子付き: `Variant = 1,`
+    const variantMatch = trimmed.match(/^(\w+)(?:\s*[({=]|,|$)/);
     if (variantMatch) {
+      const variantName = variantMatch[1];
       // pendingRenameがあればその値を使用、なければバリアント名をそのまま使用
       if (pendingRename) {
         types.push(pendingRename);
         pendingRename = null;
       } else {
-        types.push(variantMatch[1]);
+        types.push(variantName);
       }
+    } else {
+      // バリアント名を抽出できなかった場合はpendingRenameをリセット（誤適用防止）
+      pendingRename = null;
     }
   }
 

@@ -52,8 +52,8 @@ pub fn get_default_template() -> Template {
 mod tests {
     use super::*;
     use crate::server::template_types::{
-        ComponentRules, ComponentTuning, ComponentType, TemplateComponent, TemplateLayout,
-        TemplateSafeArea,
+        ComponentRules, ComponentTuning, ComponentType, LayoutType, TemplateComponent,
+        TemplateLayout, TemplateSafeArea,
     };
     use crate::server::types::SlotId;
 
@@ -90,7 +90,7 @@ mod tests {
     fn test_validate_template_clamps_values() {
         let template = Template {
             layout: TemplateLayout {
-                layout_type: "threeColumn".to_string(),
+                layout_type: LayoutType::ThreeColumn,
                 left_pct: 0.1,   // should clamp to 0.18
                 center_pct: 0.8, // should clamp to 0.64
                 right_pct: 0.1,  // should clamp to 0.18
@@ -210,37 +210,13 @@ mod tests {
         assert!(result.unwrap_err().contains("コンポーネントIDが重複"));
     }
 
-    #[test]
-    fn test_validate_template_forces_layout_type() {
-        let template = Template {
-            layout: TemplateLayout {
-                layout_type: "invalid".to_string(), // should be forced to threeColumn
-                left_pct: 0.22,
-                center_pct: 0.56,
-                right_pct: 0.22,
-                gutter_px: 24,
-            },
-            safe_area_pct: TemplateSafeArea::default(),
-            theme: None,
-            components: vec![TemplateComponent {
-                id: "test".to_string(),
-                component_type: ComponentType::ChatLog,
-                slot: SlotId::LeftMiddle,
-                enabled: true,
-                style: None,
-                rules: None,
-                tuning: None,
-            }],
-        };
-
-        let result = validate_template(template).unwrap();
-        assert_eq!(result.layout.layout_type, "threeColumn");
-    }
+    // 注: test_validate_template_forces_layout_type は削除
+    // LayoutType がenum化されたため、不正な値はコンパイル時に検出される
 
     #[test]
     fn test_get_default_template() {
         let template = get_default_template();
-        assert_eq!(template.layout.layout_type, "threeColumn");
+        assert_eq!(template.layout.layout_type, LayoutType::ThreeColumn);
         assert_eq!(template.layout.left_pct, 0.22);
         assert_eq!(template.layout.center_pct, 0.56);
         assert_eq!(template.layout.right_pct, 0.22);

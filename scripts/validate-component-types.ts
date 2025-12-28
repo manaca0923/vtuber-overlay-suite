@@ -65,8 +65,8 @@ function extractFromRust(): string[] {
 
   // pub enum ComponentType { ... } を抽出
   // 構造体バリアント `Variant { field: Type },` の `},` に誤マッチしないよう、
-  // 行頭の `}` にのみマッチするパターンを使用
-  const match = content.match(/pub enum ComponentType\s*\{([\s\S]*?)^\}/m);
+  // 行頭（インデント許容）の `}` にのみマッチするパターンを使用
+  const match = content.match(/pub enum ComponentType\s*\{([\s\S]*?)^\s*\}/m);
   if (!match) {
     throw new Error('Rust: pub enum ComponentType の定義が見つかりません');
   }

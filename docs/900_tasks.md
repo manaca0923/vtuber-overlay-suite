@@ -776,6 +776,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/server/types.rs`, `src/types/slot.ts`, `src-tauri/overlays/shared/slots.js`
   - 優先度: 低
 
+- [ ] **validate-component-types.tsのraw string内`"`対応** (PR#64)
+  - 現在: `r##"foo"bar"##` のように`"`を含むraw stringで途中切れする可能性
+  - 対応: 正規表現を`r#+\"([\\s\\S]*?)\"#+`に変更、または状態機械方式に
+  - 対象ファイル: `scripts/validate-component-types.ts`
+  - 優先度: 低（現時点では使用していない）
+
+- [ ] **overlay-core.test.tsのprocess.cwd()依存** (PR#64)
+  - 現在: テスト実行ディレクトリがリポジトリ直下でない場合に読み込み失敗
+  - 対応: `import.meta.url`からの相対解決と`process.cwd()`のフォールバック併用
+  - 対象ファイル: `src/utils/overlay-core.test.ts`
+  - 優先度: 低（Vitestの標準実行方法で問題なし）
+
 ### セキュリティ（将来課題）
 
 - [ ] **テンプレートstyleフィールドのXSS考慮** (PR#51)

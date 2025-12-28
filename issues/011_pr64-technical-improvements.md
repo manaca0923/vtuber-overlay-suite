@@ -517,3 +517,28 @@ Codexレビューの誤検出。第8回と同様。
 
 ### 第10回レビュー対応
 - [x] jsdom/tsx/の配置を再確認（既にdevDependenciesに正しく配置済み）
+
+## 第11回レビュー指摘事項
+
+### 中: testスクリプトとドキュメント更新がない (Codex Review)
+
+**指摘内容**:
+テストランナー追加にも関わらず`test`系スクリプトとドキュメント更新がない。
+
+**確認結果**:
+- `package.json`には`test`と`test:watch`スクリプトが既に存在
+- ただし、`docs/110_development-environment.md`にテスト実行方法が記載されていなかった
+
+**対応**:
+`docs/110_development-environment.md`にテスト実行方法を追記:
+- `npm run test` - テスト実行
+- `npm run test:watch` - テストウォッチモード
+- `npm run validate:types` - コンポーネントタイプ同期検証
+
+### 中: jsdom/tsx がdependenciesに追加されている (Codex Review) → 誤検出
+
+第8回、第10回と同様の誤検出。`package.json`を確認済み、すべて`devDependencies`に正しく配置。
+
+### 第11回レビュー対応
+- [x] docs/110_development-environment.mdにテスト実行方法を追記
+- [x] jsdom/tsx配置の誤検出を再確認

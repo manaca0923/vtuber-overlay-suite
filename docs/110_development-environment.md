@@ -143,7 +143,20 @@ npm run tauri:dev
 npm run dev
 ```
 
-### 5. ビルド
+### 5. テスト
+
+```bash
+# テスト実行
+npm run test
+
+# テストウォッチモード
+npm run test:watch
+
+# コンポーネントタイプ同期検証
+npm run validate:types
+```
+
+### 6. ビルド
 
 ```bash
 # 型チェック

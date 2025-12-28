@@ -10,53 +10,27 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { JSDOM } from 'jsdom';
-
-// スクリプトパスを解決
-function resolveScriptPath(): string {
-  const relativePath = 'src-tauri/overlays/shared/update-batcher.js';
-
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const rootDir = path.resolve(__dirname, '../..');
-    const scriptPath = path.join(rootDir, relativePath);
-    if (fs.existsSync(scriptPath)) {
-      return scriptPath;
-    }
-  } catch {
-    // fileURLToPathが失敗した場合はフォールバック
-  }
-
-  return path.join(process.cwd(), relativePath);
-}
+import {
+  loadScriptContent,
+  createTestDOM,
+  mockPerformance,
+  mockRequestAnimationFrame,
+  executeScript,
+} from './test-helpers';
 
 // UpdateBatcherを読み込んでwindow.UpdateBatcherを取得
-function loadUpdateBatcher(): typeof window & { UpdateBatcher: UpdateBatcherClass } {
-  const scriptPath = resolveScriptPath();
-  const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
-
-  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    runScripts: 'dangerously',
-    url: 'http://localhost/',
-  });
+function loadUpdateBatcher(): {
+  win: typeof window & { UpdateBatcher: UpdateBatcherClass };
+  mockBroadcast: ReturnType<typeof vi.fn>;
+} {
+  const scriptContent = loadScriptContent('src-tauri/overlays/shared/update-batcher.js');
+  const dom = createTestDOM();
 
   // performanceモック（read-onlyプロパティなのでObject.definePropertyを使用）
-  Object.defineProperty(dom.window, 'performance', {
-    value: {
-      now: () => Date.now(),
-    },
-    writable: true,
-    configurable: true,
-  });
+  mockPerformance(dom.window);
 
   // requestAnimationFrameモック
-  (dom.window as unknown as { requestAnimationFrame: (cb: () => void) => number }).requestAnimationFrame = (cb) => {
-    return setTimeout(cb, 0) as unknown as number;
-  };
+  mockRequestAnimationFrame(dom.window);
 
   // ComponentRegistryモック
   const mockBroadcast = vi.fn();
@@ -65,11 +39,12 @@ function loadUpdateBatcher(): typeof window & { UpdateBatcher: UpdateBatcherClas
   };
 
   // スクリプトを実行
-  const script = dom.window.document.createElement('script');
-  script.textContent = scriptContent;
-  dom.window.document.body.appendChild(script);
+  executeScript(dom, scriptContent);
 
-  return dom.window as unknown as typeof window & { UpdateBatcher: UpdateBatcherClass };
+  return {
+    win: dom.window as unknown as typeof window & { UpdateBatcher: UpdateBatcherClass },
+    mockBroadcast,
+  };
 }
 
 // 型定義
@@ -94,12 +69,15 @@ interface UpdateBatcherInstance {
 }
 
 describe('UpdateBatcher', () => {
-  let win: ReturnType<typeof loadUpdateBatcher>;
+  let win: ReturnType<typeof loadUpdateBatcher>['win'];
   let UpdateBatcher: UpdateBatcherClass;
+  let mockBroadcast: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    win = loadUpdateBatcher();
+    const loaded = loadUpdateBatcher();
+    win = loaded.win;
     UpdateBatcher = win.UpdateBatcher;
+    mockBroadcast = loaded.mockBroadcast;
     vi.useFakeTimers();
   });
 
@@ -237,6 +215,51 @@ describe('UpdateBatcher', () => {
       const batcher = new UpdateBatcher();
       batcher.destroy();
       expect(batcher.isDestroyed()).toBe(true);
+    });
+  });
+
+  describe('flush() / forceFlush() のbroadcast呼び出し', () => {
+    it('forceFlush()後にComponentRegistry.broadcast()が呼ばれる', () => {
+      const batcher = new UpdateBatcher();
+      batcher.queue('KPIBlock', { main: 1234 });
+      batcher.queue('QueueList', { items: ['a', 'b'] });
+
+      batcher.forceFlush();
+
+      // 各タイプについてbroadcastが呼ばれる
+      expect(mockBroadcast).toHaveBeenCalledWith('KPIBlock', { main: 1234 });
+      expect(mockBroadcast).toHaveBeenCalledWith('QueueList', { items: ['a', 'b'] });
+      expect(mockBroadcast).toHaveBeenCalledTimes(2);
+    });
+
+    it('forceFlush()後にpendingUpdatesがクリアされる', () => {
+      const batcher = new UpdateBatcher();
+      batcher.queue('KPIBlock', { main: 1234 });
+
+      batcher.forceFlush();
+
+      expect(batcher.getPendingCount()).toBe(0);
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    });
+
+    it('空のキューでforceFlush()してもbroadcastは呼ばれない', () => {
+      const batcher = new UpdateBatcher();
+      batcher.forceFlush();
+
+      expect(mockBroadcast).not.toHaveBeenCalled();
+    });
+
+    it('同一タイプを複数回queueしても最新のデータのみbroadcast', () => {
+      const batcher = new UpdateBatcher();
+      batcher.queue('KPIBlock', { main: 100 });
+      batcher.queue('KPIBlock', { main: 200 });
+      batcher.queue('KPIBlock', { main: 300 });
+
+      batcher.forceFlush();
+
+      // 最新の値のみがbroadcastされる
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+      expect(mockBroadcast).toHaveBeenCalledWith('KPIBlock', { main: 300 });
     });
   });
 });

@@ -9,42 +9,16 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { JSDOM } from 'jsdom';
-
-// スクリプトパスを解決（import.meta.urlベースを優先、process.cwdをフォールバック）
-function resolveScriptPath(): string {
-  const relativePath = 'src-tauri/overlays/shared/overlay-core.js';
-
-  // import.meta.urlからの相対解決を試行（Vitestのjsdom環境でも動作）
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    // src/utils/overlay-core.test.ts → ルートディレクトリへ
-    const rootDir = path.resolve(__dirname, '../..');
-    const scriptPath = path.join(rootDir, relativePath);
-    if (fs.existsSync(scriptPath)) {
-      return scriptPath;
-    }
-  } catch {
-    // fileURLToPathが失敗した場合はフォールバック
-  }
-
-  // フォールバック: process.cwdベース
-  return path.join(process.cwd(), relativePath);
-}
+import {
+  loadScriptContent,
+  createTestDOM,
+  executeScript,
+} from './test-helpers';
 
 // overlay-core.jsを読み込んでwindow.OverlayCoreを取得
 function loadOverlayCore(): typeof window & { OverlayCore: OverlayCoreType } {
-  const scriptPath = resolveScriptPath();
-  const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
-
-  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    runScripts: 'dangerously',
-    url: 'http://localhost/',
-  });
+  const scriptContent = loadScriptContent('src-tauri/overlays/shared/overlay-core.js');
+  const dom = createTestDOM();
 
   // WebSocketモック
   class MockWebSocket {
@@ -88,9 +62,7 @@ function loadOverlayCore(): typeof window & { OverlayCore: OverlayCoreType } {
   ).AbortController = AbortController;
 
   // スクリプトを実行
-  const script = dom.window.document.createElement('script');
-  script.textContent = scriptContent;
-  dom.window.document.body.appendChild(script);
+  executeScript(dom, scriptContent);
 
   return dom.window as unknown as typeof window & { OverlayCore: OverlayCoreType };
 }

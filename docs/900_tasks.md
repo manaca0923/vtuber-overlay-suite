@@ -1068,6 +1068,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - cleanup()後のconnect()で新しい接続が作成されること
   - 対象ファイル: `src/utils/overlay-core.test.ts`
 
+- [ ] **テストヘルパー関数の共通化** (PR#66)
+  - `resolveScriptPath()`が4つのテストファイルで重複
+  - 対応案: `src/utils/test-helpers.ts`に共通モジュールとして抽出
+  - 対象ファイル: `update-batcher.test.ts`, `density-manager.test.ts`, `weather-widget.test.ts`, `overlay-core.test.ts`
+  - 優先度: 低（機能に影響なし）
+
+- [ ] **UpdateBatcherのflush()後broadcast呼び出し確認テスト** (PR#66)
+  - `forceFlush()`後に`ComponentRegistry.broadcast()`が正しく呼び出されることを確認するテスト追加
+  - 対象ファイル: `src/utils/update-batcher.test.ts`
+  - 優先度: 低
+
 - [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
   - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止
   - 問題: 一時的なBUSYエラーの場合、リトライすべきでは

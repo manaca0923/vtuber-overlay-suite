@@ -1032,11 +1032,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - レイテンシテスト: 50絵文字×100回、平均173μs/call
   - 対象ファイル: `src-tauri/src/youtube/innertube/parser.rs`
 
-- [ ] **pool.acquire()タイムアウト時のスキップログテスト** (PR#56)
-  - 単一接続プールで接続を保持した状態でacquireタイムアウトを発生させ、スキップログが出力されることを検証
-  - テスト対象: `save_chunk_with_transaction_and_timeout`でTransactionResult::Busy返却時のログ出力
+- [x] **pool.acquire()タイムアウト時のスキップログテスト** (PR#56, PR#79)
+  - `test_pool_acquire_timeout_returns_busy`: 単一接続保持状態でacquireタイムアウト→Busy返却を検証
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 低
 
 - [x] **天気API keyringフォールバックのテスト** (PR#57) → **不要化** (PR#58)
   - Open-Meteo移行によりAPIキー不要化、テスト対象が削除されたため不要

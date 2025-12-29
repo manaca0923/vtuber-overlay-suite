@@ -1878,4 +1878,101 @@ mod tests {
         drop(pool);
         let _ = std::fs::remove_file(&db_path);
     }
+
+    /// pool.acquire()タイムアウト時のスキップ動作テスト
+    ///
+    /// 単一接続プールで接続を保持した状態でsave_chunk_with_retryを呼び出し、
+    /// acquire待ちがタイムアウトしてスキップ（TransactionResult::Busy）されることを確認。
+    /// これにより、接続プールが枯渇した状況でも適切にフォールバックすることを検証。
+    #[tokio::test]
+    async fn test_pool_acquire_timeout_returns_busy() {
+        use sqlx::sqlite::SqliteConnectOptions;
+        use tokio::sync::oneshot;
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!(
+            "acquire_timeout_test_{}.db",
+            std::process::id()
+        ));
+
+        // 単一接続プールを作成（acquire_timeoutは短め）
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .busy_timeout(std::time::Duration::from_millis(100));
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1) // 単一接続: acquireは1つしか成功しない
+            .acquire_timeout(std::time::Duration::from_millis(100)) // 短いacquireタイムアウト
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        // 接続を保持するタスクと同期するためのチャネル
+        let (tx_hold, rx_hold) = oneshot::channel::<()>();
+        let (tx_release, rx_release) = oneshot::channel::<()>();
+
+        let pool_clone = pool.clone();
+
+        // 接続を保持するタスクを起動
+        let hold_task = tokio::spawn(async move {
+            // 唯一の接続を取得して保持
+            let _conn = pool_clone.acquire().await.unwrap();
+
+            // 接続を取得したことを通知
+            let _ = tx_hold.send(());
+
+            // 解放シグナルを待つ
+            let _ = rx_release.await;
+
+            // _conn はここでドロップされ、プールに戻る
+        });
+
+        // 接続が保持されるのを待つ
+        rx_hold.await.unwrap();
+
+        // 接続が保持されている間にsave_chunk_with_retryを呼び出す
+        let messages = vec![create_test_message("acquire_timeout1", "Message 1")];
+
+        let start = Instant::now();
+
+        // 短い予算で呼び出す（acquireタイムアウトを発生させるため）
+        // 予算は200msだが、接続が保持されているためacquireでタイムアウトする
+        let result = save_chunk_with_retry(&pool, &messages, Duration::from_millis(200)).await;
+
+        let elapsed = start.elapsed();
+
+        // acquireタイムアウトによりfalseが返される（スキップ）
+        assert!(
+            !result,
+            "save_chunk_with_retry should fail due to acquire timeout"
+        );
+
+        // 予算+余裕時間内に完了すること（長時間ブロックしていない）
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "Should complete within reasonable time, took {}ms",
+            elapsed.as_millis()
+        );
+
+        // 保持タスクに解放シグナルを送る
+        let _ = tx_release.send(());
+        hold_task.await.unwrap();
+
+        // データは保存されていないこと
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            count.0, 0,
+            "No messages should be saved when acquire timed out"
+        );
+
+        // クリーンアップ
+        drop(pool);
+        let _ = std::fs::remove_file(&db_path);
+    }
 }

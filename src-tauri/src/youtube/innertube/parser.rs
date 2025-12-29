@@ -1588,5 +1588,204 @@ mod tests {
         // クリーンアップ
         clear_emoji_cache();
     }
+
+    // =========================================================================
+    // ストレステスト/ベンチマーク
+    // =========================================================================
+
+    /// 並行アクセスによるロック競合テスト
+    ///
+    /// 複数スレッドから同時にconvert_text_with_emoji_cacheを呼び出し、
+    /// ロック競合によるパフォーマンス劣化を検出する。
+    #[test]
+    fn test_concurrent_emoji_cache_access() {
+        use std::sync::Arc;
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュをクリアして初期化
+        clear_emoji_cache();
+
+        // テスト用の絵文字を複数登録
+        for i in 0..10 {
+            let shortcut = format!(":_test{}:", i);
+            let emoji_info = EmojiInfo {
+                emoji_id: format!("test_{}", i),
+                shortcuts: vec![shortcut.clone()],
+                image: EmojiImage {
+                    thumbnails: vec![EmojiThumbnail {
+                        url: format!("https://example.com/test{}.png", i),
+                        width: 24,
+                        height: 24,
+                    }],
+                },
+                is_custom_emoji: true,
+            };
+            if let Ok(mut cache) = EMOJI_CACHE.lock() {
+                cache.put(shortcut, emoji_info);
+            }
+        }
+
+        // 並行スレッド数と各スレッドの呼び出し回数
+        let num_threads = 8;
+        let iterations_per_thread = 100;
+
+        // スレッドの待機用
+        let barrier = Arc::new(std::sync::Barrier::new(num_threads));
+
+        let handles: Vec<_> = (0..num_threads)
+            .map(|thread_id| {
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    // 全スレッドが揃うまで待機（同時実行を保証）
+                    barrier.wait();
+
+                    let start = Instant::now();
+                    let mut success_count = 0;
+
+                    for i in 0..iterations_per_thread {
+                        // 様々なパターンのテキストを変換
+                        let text = format!(
+                            "Thread {} iter {}: こんにちは:_test{}:世界:_test{}:テスト",
+                            thread_id,
+                            i,
+                            i % 10,
+                            (i + 1) % 10
+                        );
+                        let result = convert_text_with_emoji_cache(&text);
+
+                        // 結果が期待通りか確認（5パーツ: Text, Emoji, Text, Emoji, Text）
+                        if result.len() == 5 {
+                            success_count += 1;
+                        }
+                    }
+
+                    let elapsed = start.elapsed();
+                    (thread_id, success_count, elapsed)
+                })
+            })
+            .collect();
+
+        // 結果を収集
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+
+        // すべてのスレッドが正常に完了したか確認
+        for (thread_id, success_count, elapsed) in &results {
+            assert_eq!(
+                *success_count, iterations_per_thread,
+                "Thread {} failed: only {} of {} succeeded",
+                thread_id, success_count, iterations_per_thread
+            );
+
+            // 各スレッドの処理時間が妥当か確認（1秒以内）
+            assert!(
+                *elapsed < Duration::from_secs(1),
+                "Thread {} took too long: {:?}",
+                thread_id,
+                elapsed
+            );
+        }
+
+        // 全体の統計
+        let total_elapsed: Duration = results.iter().map(|(_, _, e)| *e).sum();
+        let avg_elapsed = total_elapsed / num_threads as u32;
+        let total_calls = num_threads * iterations_per_thread;
+
+        // 平均処理時間をログ出力（ベンチマーク情報）
+        println!(
+            "Concurrent stress test: {} threads × {} iterations = {} total calls",
+            num_threads, iterations_per_thread, total_calls
+        );
+        println!("Average elapsed per thread: {:?}", avg_elapsed);
+        println!(
+            "Throughput: {:.0} calls/sec",
+            total_calls as f64 / avg_elapsed.as_secs_f64()
+        );
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
+
+    /// 多数の絵文字マッチ時のレイテンシテスト
+    ///
+    /// 1つのテキストに多数の絵文字ショートカットが含まれる場合の
+    /// 処理時間を測定し、レイテンシが許容範囲内か確認する。
+    #[test]
+    fn test_many_emoji_matches_latency() {
+        use std::time::Instant;
+
+        // グローバルキャッシュを変更するテストは直列化
+        let _lock = lock_cache_test_mutex();
+
+        // キャッシュをクリアして初期化
+        clear_emoji_cache();
+
+        // テスト用の絵文字を50個登録
+        let emoji_count = 50;
+        for i in 0..emoji_count {
+            let shortcut = format!(":_emoji{}:", i);
+            let emoji_info = EmojiInfo {
+                emoji_id: format!("emoji_{}", i),
+                shortcuts: vec![shortcut.clone()],
+                image: EmojiImage {
+                    thumbnails: vec![EmojiThumbnail {
+                        url: format!("https://example.com/emoji{}.png", i),
+                        width: 24,
+                        height: 24,
+                    }],
+                },
+                is_custom_emoji: true,
+            };
+            if let Ok(mut cache) = EMOJI_CACHE.lock() {
+                cache.put(shortcut, emoji_info);
+            }
+        }
+
+        // 多数の絵文字を含むテキストを生成
+        let mut text_parts: Vec<String> = Vec::new();
+        for i in 0..emoji_count {
+            text_parts.push(format!("text{}:_emoji{}:", i, i));
+        }
+        let long_text = text_parts.join("");
+
+        // 処理時間を測定（複数回実行して平均を取る）
+        let iterations = 100;
+        let start = Instant::now();
+
+        for _ in 0..iterations {
+            let result = convert_text_with_emoji_cache(&long_text);
+            // 結果が期待通りか確認（各絵文字の前にテキストがあるので、emoji_count * 2パーツ）
+            assert_eq!(
+                result.len(),
+                emoji_count * 2,
+                "Expected {} runs, got {}",
+                emoji_count * 2,
+                result.len()
+            );
+        }
+
+        let elapsed = start.elapsed();
+        let avg_latency = elapsed / iterations as u32;
+
+        println!(
+            "Many emoji matches test: {} emojis × {} iterations",
+            emoji_count, iterations
+        );
+        println!("Total elapsed: {:?}", elapsed);
+        println!("Average latency per call: {:?}", avg_latency);
+
+        // レイテンシが許容範囲内か確認（1回あたり10ms以内）
+        assert!(
+            avg_latency < std::time::Duration::from_millis(10),
+            "Average latency ({:?}) exceeds threshold (10ms)",
+            avg_latency
+        );
+
+        // クリーンアップ
+        clear_emoji_cache();
+    }
 }
 

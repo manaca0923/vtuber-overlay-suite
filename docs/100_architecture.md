@@ -10,7 +10,7 @@
 | Overlay | HTML/CSS + Canvas/WebGL | OBSブラウザソース用 |
 | Database | SQLite | ローカル永続化 |
 | Realtime | WebSocket | localhost通信 |
-| HTTP Server | Actix-web / Axum | Rust製 |
+| HTTP Server | Axum | Rust製 |
 | YouTube API | gRPC Streaming (メイン) | InnerTube=バックアップ, REST=互換 |
 | Updater | Tauri Updater | 起動時チェック |
 
@@ -241,7 +241,7 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 axum = "0.7"
 tokio-tungstenite = "0.24"
 keyring = "3"              # セキュアストレージ
@@ -256,20 +256,19 @@ tracing-subscriber = "0.3"
 ```json
 {
   "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-updater": "^2",
-    "react": "^18",
-    "react-dom": "^18",
-    "@dnd-kit/core": "^6",      // ドラッグ&ドロップ
-    "@dnd-kit/sortable": "^8",
-    "zustand": "^5"             // 状態管理
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-updater": "^2.9.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@dnd-kit/core": "^6.3.1",      // ドラッグ&ドロップ
+    "@dnd-kit/sortable": "^10.0.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
-    "typescript": "^5",
-    "vite": "^6",
-    "@vitejs/plugin-react": "^4",
-    "tailwindcss": "^3"
+    "@tauri-apps/cli": "^2.9.6",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "@vitejs/plugin-react": "^5.1.1",
+    "tailwindcss": "^4.1.18"
   }
 }
 ```

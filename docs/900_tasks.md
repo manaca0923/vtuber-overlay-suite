@@ -810,6 +810,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
   - 優先度: 低
 
+- [ ] **HTTPモックテストのエラーメッセージ検証強化** (PR#84)
+  - 現在: `assert!(msg.contains("サーバーエラー"))`のように部分一致で検証
+  - 提案: 正確なエラーメッセージフォーマットを検証してより堅牢なテストに
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 - [x] **テンプレートstyleフィールドのXSS考慮** (PR#51, 調査完了)

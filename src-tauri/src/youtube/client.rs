@@ -154,9 +154,23 @@ impl YouTubeClient {
                 log::warn!("Video not found: {}", video_id);
                 return Err(YouTubeError::VideoNotFound);
             }
+            status if status.is_server_error() => {
+                // 5xx サーバーエラー: 一時的な障害の可能性
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("YouTube API server error ({}): {}", status, error_text);
+                return Err(YouTubeError::ApiError(format!(
+                    "サーバーエラー ({}): 一時的な障害の可能性があります",
+                    status
+                )));
+            }
             status => {
-                log::warn!("Failed to fetch live chat ID: status {}", status);
-                return Err(YouTubeError::VideoNotFound);
+                // その他の予期しないステータス
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                return Err(YouTubeError::ApiError(format!(
+                    "予期しないエラー ({})",
+                    status
+                )));
             }
         }
 
@@ -263,16 +277,22 @@ impl YouTubeClient {
                 log::warn!("Live chat not found - stream may have ended");
                 Err(YouTubeError::LiveChatNotFound)
             }
-            status => {
+            status if status.is_server_error() => {
+                // 5xx サーバーエラー: 一時的な障害の可能性
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!(
-                    "Unexpected API response - status: {}, body: {}",
-                    status,
-                    error_text
-                );
-                Err(YouTubeError::ParseError(format!(
-                    "Unexpected status: {} - {}",
-                    status, error_text
+                log::error!("YouTube API server error ({}): {}", status, error_text);
+                Err(YouTubeError::ApiError(format!(
+                    "サーバーエラー ({}): 一時的な障害の可能性があります",
+                    status
+                )))
+            }
+            status => {
+                // その他の予期しないステータス
+                let error_text = response.text().await.unwrap_or_default();
+                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                Err(YouTubeError::ApiError(format!(
+                    "予期しないエラー ({})",
+                    status
                 )))
             }
         }
@@ -1107,8 +1127,35 @@ mod tests {
         );
 
         let result = client.get_live_chat_id("test_video").await;
-        // 予期しないステータスはVideoNotFoundになる（現在の実装）
-        assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
+        // 5xxサーバーエラーはApiErrorにマッピング
+        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
+        if let Err(YouTubeError::ApiError(msg)) = result {
+            assert!(msg.contains("サーバーエラー"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_live_chat_id_unexpected_status() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(418) // I'm a teapot
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_chat_id("test_video").await;
+        // 予期しないステータスはApiErrorにマッピング
+        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
+        if let Err(YouTubeError::ApiError(msg)) = result {
+            assert!(msg.contains("予期しないエラー"));
+        }
     }
 
     // =============================================================================
@@ -1400,11 +1447,10 @@ mod tests {
         );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
-        match result {
-            Err(YouTubeError::ParseError(msg)) => {
-                assert!(msg.contains("500"));
-            }
-            _ => panic!("Expected ParseError, got {:?}", result),
+        // 5xxサーバーエラーはApiErrorにマッピング
+        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
+        if let Err(YouTubeError::ApiError(msg)) = result {
+            assert!(msg.contains("サーバーエラー"));
         }
     }
 
@@ -1428,5 +1474,29 @@ mod tests {
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::ParseError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_chat_messages_unexpected_status() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/liveChat/messages")
+            .match_query(mockito::Matcher::Any)
+            .with_status(418) // I'm a teapot
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_chat_messages("test_chat_id", None).await;
+        // 予期しないステータスはApiErrorにマッピング
+        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
+        if let Err(YouTubeError::ApiError(msg)) = result {
+            assert!(msg.contains("予期しないエラー"));
+        }
     }
 }

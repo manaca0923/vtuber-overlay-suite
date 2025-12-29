@@ -193,6 +193,45 @@ if let Some(caps) = re.captures(html) { ... }
 
 ---
 
+## 7. リトライループのドキュメント明確化
+
+### 指摘内容 (PR#81)
+`for attempt in 0..=RESTORE_BUSY_TIMEOUT_MAX_RETRIES` で `RESTORE_BUSY_TIMEOUT_MAX_RETRIES = 3` の場合、ドキュメントに「最大3回リトライ」と記載すると誤解を招く。実際は `0..=3` で4回ループ（0, 1, 2, 3）するため、「初回試行 + 3回リトライ = 4回試行」となる。
+
+### 解決方法
+```rust
+/// ## リトライ戦略
+/// - 初回試行 + 最大3回リトライ = 最大4回試行
+/// - リトライ間隔: 20ms → 40ms → 80ms（exponential backoff）
+const RESTORE_BUSY_TIMEOUT_MAX_RETRIES: u32 = 3;
+
+async fn restore_busy_timeout_with_retry(
+    conn: &mut SqliteConnection,
+    original_timeout: u64,
+) -> bool {
+    for attempt in 0..=RESTORE_BUSY_TIMEOUT_MAX_RETRIES {
+        // 0..=3 は 4回ループ: 初回(0) + リトライ(1,2,3)
+        match set_busy_timeout(conn, original_timeout).await {
+            Ok(()) => return true,
+            Err(e) => {
+                if attempt >= RESTORE_BUSY_TIMEOUT_MAX_RETRIES {
+                    return false; // 最後のリトライも失敗
+                }
+                // リトライを試みる
+            }
+        }
+    }
+    false
+}
+```
+
+### 今後の対策
+- ループ回数を表す定数名は `MAX_RETRIES`（リトライ回数）と `MAX_ATTEMPTS`（試行回数）を使い分ける
+- ドキュメントには「初回試行 + 最大N回リトライ = 最大N+1回試行」と明記
+- `0..=N` は N+1 回ループする点をコメントで補足
+
+---
+
 ## チェックリスト（Tauri/Rust実装時）
 
 - [ ] invokeパラメータの命名規則は正しいか（フロントエンドもsnake_case）
@@ -201,3 +240,4 @@ if let Some(caps) = re.captures(html) { ... }
 - [ ] ログにAPIキーが出力されないか
 - [ ] グローバル状態は適切に管理されているか
 - [ ] 正規表現はシングルトン化されているか
+- [ ] リトライループのドキュメントは明確か（試行回数 vs リトライ回数）

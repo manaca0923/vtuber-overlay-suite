@@ -45,10 +45,17 @@ export function resolveOverlayScriptPath(relativePath: string): string {
  *
  * @param relativePath - プロジェクトルートからの相対パス
  * @returns スクリプトの内容
+ * @throws ファイルが見つからない、または読み込めない場合
  */
 export function loadScriptContent(relativePath: string): string {
   const scriptPath = resolveOverlayScriptPath(relativePath);
-  return fs.readFileSync(scriptPath, 'utf-8');
+  try {
+    return fs.readFileSync(scriptPath, 'utf-8');
+  } catch (error) {
+    throw new Error(
+      `Failed to load script: ${scriptPath} (${error instanceof Error ? error.message : String(error)})`
+    );
+  }
 }
 
 /**

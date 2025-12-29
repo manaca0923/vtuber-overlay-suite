@@ -827,6 +827,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/client.rs`
   - テスト追加: 2テスト（unexpected_status）、テスト更新: 2テスト（500_server_error）
 
+- [ ] **5xxエラーのログレベル検討** (PR#86)
+  - 現在: 5xxサーバーエラーに`log::error!`を使用
+  - 提案: 一時的な障害の可能性があるため`log::warn!`の方が適切かもしれない
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`
+  - 優先度: 低
+
+- [ ] **ApiErrorのリトライロジック確認** (PR#86)
+  - 確認: `ApiError`が返された場合、上位層でリトライが適切に行われるか
+  - 5xxエラーは一時的な障害の可能性があるためリトライ対象にすべきケースあり
+  - 対象ファイル: `src-tauri/src/youtube/poller.rs`
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 - [x] **テンプレートstyleフィールドのXSS考慮** (PR#51, 調査完了)

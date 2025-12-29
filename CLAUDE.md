@@ -23,10 +23,10 @@ VTuber配信支援ツール - 「わんコメ＋セトリスタ」の上位互�
 
 ```bash
 # 開発サーバー起動
-npm run tauri dev
+npm run tauri:dev
 
 # ビルド
-npm run tauri build
+npm run tauri:build
 
 # フロントエンドのみ
 npm run dev

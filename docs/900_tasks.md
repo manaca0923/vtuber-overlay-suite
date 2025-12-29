@@ -1143,10 +1143,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（プール設定でbusy_timeout=0を使うケースは稀）
   - 備考: 現在の実装は「リトライを優先する」設計判断に基づく
 
-- [ ] **busy_timeout=0のfail-fast動作テスト追加** (PR#56)
+- [x] **busy_timeout=0のfail-fast動作テスト追加** (PR#56, PR#80で対応)
   - `busy_timeout=0`設定時にリトライパスが即座にBUSYを返す（または現在の動作を明示的に検証）
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低
+  - ✅ `test_busy_timeout_zero_fail_fast`テスト追加済み
 
 ### ドキュメント
 

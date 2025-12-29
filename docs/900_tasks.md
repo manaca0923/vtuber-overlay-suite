@@ -1154,6 +1154,19 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低
   - ✅ `test_busy_timeout_zero_fail_fast`テスト追加済み
 
+- [ ] **既存テストのtempfileパターン統一** (PR#81レビュー)
+  - 現在: 新規テストはtempfile使用、既存テストは手動削除パターン
+  - 対応案: 既存テストもtempfileパターンに統一し、テスト中断時のファイル残存を完全に防止
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低
+
+- [ ] **TransactionResult::DeadlineExceeded専用バリアント検討** (PR#81レビュー)
+  - 現在: デッドライン超過時は`TransactionResult::Busy`を返す
+  - 問題: デッドライン超過は「リトライしても同じ結果になる可能性が高い」ケース
+  - 対応案: 専用の`TransactionResult::DeadlineExceeded`を追加して明示的に区別
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（現状でも上位で予算チェックされるため実害なし）
+
 ### ドキュメント
 
 - [x] **README更新** (2025-12-22対応済み)

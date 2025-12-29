@@ -786,6 +786,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: `import.meta.url`からの相対解決を優先し、`process.cwd()`をフォールバックに
   - 対象ファイル: `src/utils/overlay-core.test.ts`
 
+- [ ] **Weather APIテストのヘルパー関数抽出** (PR#84)
+  - 現在: Geocodingレスポンスのモック設定が各テストで重複
+  - 提案: `mock_geocoding_success()`などのヘルパー関数に抽出して可読性向上
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
+- [ ] **YouTubeクライアントの他メソッドへのHTTPモックテスト拡張** (PR#84)
+  - 現在: `get_live_stream_stats`のみHTTPモックテスト対応
+  - 提案: `validate_api_key`, `get_live_chat_id`, `get_live_chat_messages`にも同様のテストを追加
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`
+  - 優先度: 中
+
+- [ ] **ネットワークタイムアウトのテスト** (PR#84)
+  - 現在: mockitoの制約により実際のタイムアウトテストは除外
+  - 提案: mockitoの`with_delay`を使用したタイムアウトテストの追加
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 - [x] **テンプレートstyleフィールドのXSS考慮** (PR#51, 調査完了)

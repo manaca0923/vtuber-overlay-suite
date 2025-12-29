@@ -1,8 +1,11 @@
-# PR#84 HTTPモックテストパターン
+# PR#84/85 HTTPモックテストパターン
 
 ## 概要
 
-PR#84でYouTube APIとWeather APIのHTTPモックテストを追加した際の実装パターンとレビュー指摘事項。
+PR#84/85でYouTube APIとWeather APIのHTTPモックテストを追加した際の実装パターンとレビュー指摘事項。
+
+- PR#84: `get_live_stream_stats`のテスト追加
+- PR#85: `validate_api_key`, `get_live_chat_id`, `get_live_chat_messages`のテスト追加（30テスト追加、合計43テスト）
 
 ## 使用ライブラリ
 
@@ -145,9 +148,11 @@ async fn test_weather_api_500_error() {
 
 ### 2. ヘルパー関数の抽出（優先度: 低）
 
-**問題**: Geocodingレスポンスのモック設定が各テストで重複。
+**問題**:
+- Weather API: Geocodingレスポンスのモック設定が各テストで重複
+- YouTube API: セットアップコード（`Server::new_async().await`, `YouTubeClient::new_with_base_url`）が重複
 
-**推奨対応**:
+**推奨対応（Weather API）**:
 ```rust
 async fn mock_geocoding_success(server: &mut Server) -> mockito::Mock {
     server
@@ -161,6 +166,18 @@ async fn mock_geocoding_success(server: &mut Server) -> mockito::Mock {
 }
 ```
 
+**推奨対応（YouTube API）** (PR#85):
+```rust
+async fn setup_test_client() -> (Server, YouTubeClient) {
+    let server = Server::new_async().await;
+    let client = YouTubeClient::new_with_base_url(
+        "test_api_key".to_string(),
+        server.url(),
+    );
+    (server, client)
+}
+```
+
 ### 3. タイムアウトテスト（優先度: 低）
 
 mockitoの`with_delay`を使用してタイムアウトテストが可能:
@@ -170,6 +187,21 @@ mockitoの`with_delay`を使用してタイムアウトテストが可能:
 ```
 
 ただし、HTTPクライアントのタイムアウト設定（10秒）とテスト実行時間のトレードオフがある。
+
+### 4. 5xxエラーハンドリングの一貫性（優先度: 低） (PR#85)
+
+**問題**: `get_live_chat_id`で500エラーが`VideoNotFound`にマッピングされる（`client.rs:157-160`）。これは`get_live_stream_stats`（`ApiError`を使用）と一貫性がない。
+
+**現状の実装**:
+```rust
+// get_live_chat_id - 予期しないステータスはVideoNotFound
+status => Err(YouTubeError::VideoNotFound(video_id.to_string())),
+
+// get_live_stream_stats - 予期しないステータスはApiError
+status => Err(YouTubeError::ApiError(format!("予期しないHTTPステータス: {}", status))),
+```
+
+**推奨対応**: 5xxエラーには`ApiError`を使用して一貫性を保つ。
 
 ## 注意点
 

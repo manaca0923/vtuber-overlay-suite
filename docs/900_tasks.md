@@ -976,11 +976,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
   - 優先度: 低
 
-- [ ] **コメント即時/バッファモード混在テスト** (PR#59)
-  - `instant=true`と`instant=false`が同時に到着するケースで、公式API由来コメントが5秒均等表示のまま維持されることの確認
-  - `instant=true`連打時のスロットリング（`INSTANT_DISPLAY_INTERVAL`）が効いて重複が抑止されることの確認
-  - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
-  - 優先度: 低（現状、モードは排他的使用のため）
+- [x] **コメント即時/バッファモード混在テスト** (PR#59 → PR#68で対応済み)
+  - ~~`instant=true`と`instant=false`が同時に到着するケースで、公式API由来コメントが5秒均等表示のまま維持されることの確認~~
+  - ~~`instant=true`連打時のスロットリング（`INSTANT_DISPLAY_INTERVAL`）が効いて重複が抑止されることの確認~~
+  - 対応済み: CommentQueueManagerのユニットテスト17件追加
+  - 対象ファイル: `src/utils/comment-queue-manager.test.ts`
 
 - [x] **天気ウィジェット設定フォールバックテスト** (PR#59) ✅ 対応済み（2025-12-28）
   - `settings.weather.position`が未知値/欠落のとき、安全にデフォルトへフォールバックすることの確認

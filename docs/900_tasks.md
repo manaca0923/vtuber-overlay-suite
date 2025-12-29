@@ -1022,15 +1022,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 中（本番運用後にフィードバックを収集）
 
-- [ ] **busy_timeoutのタイムアウト保証に関するドキュメント明確化** (PR#56)
-  - 現在: `busy_timeout`はロック待ち時間のみ制限、遅いI/Oは制限しない
-  - 問題: 遅いディスクI/Oで2秒を超える可能性がある（リアルタイム保証が破れる）
-  - 対応案:
-    - ドキュメントコメントで「ロック待ちのみ制限」を明記
-    - または `spawn_blocking` + `timeout` でキャンセル可能にし、タイムアウト時に`conn.detach()`
-    - SQLite interrupt/progress handlerの使用を検討
+- [x] **busy_timeoutのタイムアウト保証に関するドキュメント明確化** (PR#56, PR#77)
+  - 対応: ドキュメントコメントで「ロック待ちのみ制限」を明記
+  - `RETRY_TOTAL_TIMEOUT_MS`定数と`set_busy_timeout`関数に制限範囲の説明を追加
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（遅いディスクI/Oは稀なケース）
 
 - [ ] **絵文字キャッシュのストレステスト/ベンチマーク** (PR#55)
   - 高スループット時のロック競合によるレイテンシ悪化を検出

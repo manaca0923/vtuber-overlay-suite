@@ -192,6 +192,27 @@ describe('UpdateBatcher', () => {
       batcher.setBatchInterval(1000);
       expect(batcher.batchInterval).toBe(500);
     });
+
+    it('非数値は無視される（型ガード）', () => {
+      const batcher = new UpdateBatcher();
+      const originalInterval = batcher.batchInterval;
+      batcher.setBatchInterval('invalid' as unknown as number);
+      expect(batcher.batchInterval).toBe(originalInterval);
+    });
+
+    it('NaNは無視される（型ガード）', () => {
+      const batcher = new UpdateBatcher();
+      const originalInterval = batcher.batchInterval;
+      batcher.setBatchInterval(NaN);
+      expect(batcher.batchInterval).toBe(originalInterval);
+    });
+
+    it('undefinedは無視される（型ガード）', () => {
+      const batcher = new UpdateBatcher();
+      const originalInterval = batcher.batchInterval;
+      batcher.setBatchInterval(undefined as unknown as number);
+      expect(batcher.batchInterval).toBe(originalInterval);
+    });
   });
 
   describe('destroy()', () => {

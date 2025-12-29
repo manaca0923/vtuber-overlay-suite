@@ -283,6 +283,22 @@ describe('DensityManager', () => {
       expect(manager.highDensityThreshold).toBe(20);
       manager.destroy();
     });
+
+    it('非数値は無視される（型ガード）', () => {
+      const manager = new DensityManager();
+      const original = manager.highDensityThreshold;
+      manager.setThreshold('invalid' as unknown as number);
+      expect(manager.highDensityThreshold).toBe(original);
+      manager.destroy();
+    });
+
+    it('NaNは無視される（型ガード）', () => {
+      const manager = new DensityManager();
+      const original = manager.highDensityThreshold;
+      manager.setThreshold(NaN);
+      expect(manager.highDensityThreshold).toBe(original);
+      manager.destroy();
+    });
   });
 
   describe('setDegradedSettings()', () => {
@@ -294,6 +310,25 @@ describe('DensityManager', () => {
       expect(mockDispatch).toHaveBeenCalledWith('density:high', expect.objectContaining({
         updateThrottle: 5000,
       }));
+      manager.destroy();
+    });
+
+    it('nullは無視される（型ガード）', () => {
+      const manager = new DensityManager();
+      const original = { ...manager.getDebugInfo() };
+      manager.setDegradedSettings(null as unknown as Record<string, unknown>);
+      // エラーが発生しないことを確認
+      expect(manager.getDebugInfo().threshold).toBe(original.threshold);
+      manager.destroy();
+    });
+
+    it('非オブジェクトは無視される（型ガード）', () => {
+      const manager = new DensityManager();
+      manager.setDegradedSettings('invalid' as unknown as Record<string, unknown>);
+      manager.setDegradedSettings(123 as unknown as Record<string, unknown>);
+      // エラーが発生しないことを確認
+      manager.forceDegraded();
+      expect(mockDispatch).toHaveBeenCalled();
       manager.destroy();
     });
   });

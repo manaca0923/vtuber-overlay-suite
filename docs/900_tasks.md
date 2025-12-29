@@ -980,6 +980,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - [x] `geocode_city`が`results: None`または空配列のとき`WeatherError::CityNotFound`になるケースのテスト
   - [ ] Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト（HTTPモック必要）
   - [ ] Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト（HTTPモック必要）
+  - [ ] CityNotFound判定ロジックテストをHTTPモック導入時に統合テストに置き換え（PR#73レビュー）
   - 追加テスト: WeatherErrorフォーマット、GeocodingResponseパース（5件）、CityNotFound判定ロジック（3件）
   - 対象ファイル: `src-tauri/src/weather/mod.rs`, `src-tauri/src/weather/types.rs`
 

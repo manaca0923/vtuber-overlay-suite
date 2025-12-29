@@ -203,6 +203,7 @@
      * @param {object} settings - 新しい縮退設定
      */
     setDegradedSettings(settings) {
+      if (!settings || typeof settings !== 'object') return;
       Object.assign(this.degradedSettings, settings);
     }
 

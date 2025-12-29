@@ -114,6 +114,7 @@
      * @param {number} ms - 新しいバッチ間隔（ms）
      */
     setBatchInterval(ms) {
+      if (typeof ms !== 'number' || isNaN(ms)) return;
       this.batchInterval = Math.max(50, Math.min(500, ms)); // 50-500msの範囲
     }
 

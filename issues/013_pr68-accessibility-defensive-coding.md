@@ -66,4 +66,21 @@ setThreshold(threshold) {
 
 1. [ ] 外部から呼ばれる関数は入力値の型チェックを行う
 2. [ ] `typeof`と`isNaN`で数値型をチェック
-3. [ ] 不正な入力の場合は早期リターンまたはデフォルト値を使用
+3. [ ] オブジェクト型は `!value || typeof value !== 'object'` でチェック
+4. [ ] 不正な入力の場合は早期リターンまたはデフォルト値を使用
+
+**数値型の型ガード例**:
+```javascript
+setThreshold(threshold) {
+  if (typeof threshold !== 'number' || isNaN(threshold)) return;
+  this.threshold = Math.max(1, Math.min(20, threshold));
+}
+```
+
+**オブジェクト型の型ガード例**:
+```javascript
+setSettings(settings) {
+  if (!settings || typeof settings !== 'object') return;
+  Object.assign(this.settings, settings);
+}
+```

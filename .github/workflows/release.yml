@@ -66,18 +66,28 @@ jobs:
           fi
 
           # Conventional Commits形式でパースして分類
+          BREAKING=""
           FEATURES=""
           FIXES=""
+          PERF=""
           OTHERS=""
 
           while IFS= read -r commit; do
             [ -z "$commit" ] && continue
-            if [[ "$commit" =~ ^feat(\(.+\))?:\ (.+) ]]; then
+            # Breaking Changes: feat!: または fix!: (スコープあり/なし)
+            if [[ "$commit" =~ ^(feat|fix)(\(.+\))?!:\ (.+) ]]; then
+              BREAKING="${BREAKING}- ${BASH_REMATCH[3]}\n"
+            # 新機能: feat:
+            elif [[ "$commit" =~ ^feat(\(.+\))?:\ (.+) ]]; then
               FEATURES="${FEATURES}- ${BASH_REMATCH[2]}\n"
+            # バグ修正: fix:
             elif [[ "$commit" =~ ^fix(\(.+\))?:\ (.+) ]]; then
               FIXES="${FIXES}- ${BASH_REMATCH[2]}\n"
-            elif [[ "$commit" =~ ^docs:\ |^chore:\ |^ci:\ |^test:\ |^refactor:\ ]]; then
-              # ドキュメント・CI・テスト等はスキップ
+            # パフォーマンス改善: perf:
+            elif [[ "$commit" =~ ^perf(\(.+\))?:\ (.+) ]]; then
+              PERF="${PERF}- ${BASH_REMATCH[2]}\n"
+            # スキップ: docs, chore, ci, test, refactor, style
+            elif [[ "$commit" =~ ^(docs|chore|ci|test|refactor|style):\ ]]; then
               continue
             else
               # その他の変更
@@ -87,11 +97,17 @@ jobs:
 
           # リリースノート生成
           NOTES=""
+          if [ -n "$BREAKING" ]; then
+            NOTES="${NOTES}## ⚠️ 破壊的変更\n${BREAKING}\n"
+          fi
           if [ -n "$FEATURES" ]; then
             NOTES="${NOTES}## ✨ 新機能\n${FEATURES}\n"
           fi
           if [ -n "$FIXES" ]; then
             NOTES="${NOTES}## 🐛 バグ修正\n${FIXES}\n"
+          fi
+          if [ -n "$PERF" ]; then
+            NOTES="${NOTES}## ⚡ パフォーマンス改善\n${PERF}\n"
           fi
           if [ -n "$OTHERS" ]; then
             NOTES="${NOTES}## 📝 その他の変更\n${OTHERS}\n"

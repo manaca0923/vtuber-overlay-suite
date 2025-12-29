@@ -76,6 +76,12 @@ pub struct WeatherClient {
     city: Arc<RwLock<String>>,
     /// 緯度経度キャッシュ
     coords_cache: Arc<RwLock<Option<CoordsCache>>>,
+    /// テスト用: GeocodingベースURL
+    #[cfg(test)]
+    geocoding_base_url: String,
+    /// テスト用: WeatherベースURL
+    #[cfg(test)]
+    weather_base_url: String,
 }
 
 impl WeatherClient {
@@ -92,6 +98,54 @@ impl WeatherClient {
             cache: WeatherCache::new(),
             city: Arc::new(RwLock::new("Tokyo".to_string())),
             coords_cache: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            geocoding_base_url: GEOCODING_API_URL.to_string(),
+            #[cfg(test)]
+            weather_base_url: WEATHER_API_URL.to_string(),
+        }
+    }
+
+    /// テスト用: カスタムベースURLで天気クライアントを作成
+    #[cfg(test)]
+    pub fn new_with_base_urls(geocoding_base_url: String, weather_base_url: String) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .build()
+            .expect("Failed to build HTTP client with timeout");
+
+        Self {
+            client,
+            cache: WeatherCache::new(),
+            city: Arc::new(RwLock::new("Tokyo".to_string())),
+            coords_cache: Arc::new(RwLock::new(None)),
+            geocoding_base_url,
+            weather_base_url,
+        }
+    }
+
+    /// GeocodingベースURLを取得
+    #[inline]
+    fn get_geocoding_base_url(&self) -> &str {
+        #[cfg(test)]
+        {
+            &self.geocoding_base_url
+        }
+        #[cfg(not(test))]
+        {
+            GEOCODING_API_URL
+        }
+    }
+
+    /// WeatherベースURLを取得
+    #[inline]
+    fn get_weather_base_url(&self) -> &str {
+        #[cfg(test)]
+        {
+            &self.weather_base_url
+        }
+        #[cfg(not(test))]
+        {
+            WEATHER_API_URL
         }
     }
 
@@ -162,7 +216,7 @@ impl WeatherClient {
 
         let response = self
             .client
-            .get(GEOCODING_API_URL)
+            .get(self.get_geocoding_base_url())
             .query(&[("name", city), ("count", "1"), ("language", "ja")])
             .send()
             .await
@@ -262,7 +316,7 @@ impl WeatherClient {
 
         let response = self
             .client
-            .get(WEATHER_API_URL)
+            .get(self.get_weather_base_url())
             .query(&[
                 ("latitude", lat.to_string()),
                 ("longitude", lon.to_string()),
@@ -512,5 +566,245 @@ mod tests {
         let geo_result = result.unwrap();
         assert_eq!(geo_result.name, "Tokyo");
         assert_eq!(geo_result.latitude, 35.6895);
+    }
+
+    // =========================================================================
+    // HTTPモックテスト（mockito使用）
+    // =========================================================================
+
+    use mockito::Server;
+
+    #[tokio::test]
+    async fn test_geocoding_api_500_error() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(500)
+            .with_body("Internal Server Error")
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("Tokyo".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        match result {
+            Err(WeatherError::ApiError { status, .. }) => {
+                assert_eq!(status, 500);
+            }
+            _ => panic!("Expected ApiError with status 500, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_geocoding_api_400_error() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(400)
+            .with_body("Bad Request")
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("InvalidCity!@#".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        match result {
+            Err(WeatherError::ApiError { status, .. }) => {
+                assert_eq!(status, 400);
+            }
+            _ => panic!("Expected ApiError with status 400, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_geocoding_city_not_found() {
+        let mut server = Server::new_async().await;
+
+        // Geocoding APIは成功するが、結果が空
+        let _mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"results": []}"#)
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("NonexistentCity123".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        assert!(matches!(result, Err(WeatherError::CityNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_weather_api_500_error() {
+        let mut server = Server::new_async().await;
+
+        // Geocoding APIは成功
+        let _geocoding_mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"results": [{"id": 1, "name": "Tokyo", "latitude": 35.6895, "longitude": 139.6917, "country": "Japan", "admin1": "Tokyo"}]}"#)
+            .create_async()
+            .await;
+
+        // Weather APIは500エラー
+        let _weather_mock = server
+            .mock("GET", "/v1/forecast")
+            .match_query(mockito::Matcher::Any)
+            .with_status(500)
+            .with_body("Internal Server Error")
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("Tokyo".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        match result {
+            Err(WeatherError::ApiError { status, .. }) => {
+                assert_eq!(status, 500);
+            }
+            _ => panic!("Expected ApiError with status 500, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_weather_api_503_service_unavailable() {
+        let mut server = Server::new_async().await;
+
+        // Geocoding APIは成功
+        let _geocoding_mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"results": [{"id": 1, "name": "Tokyo", "latitude": 35.6895, "longitude": 139.6917, "country": "Japan", "admin1": "Tokyo"}]}"#)
+            .create_async()
+            .await;
+
+        // Weather APIは503エラー
+        let _weather_mock = server
+            .mock("GET", "/v1/forecast")
+            .match_query(mockito::Matcher::Any)
+            .with_status(503)
+            .with_body("Service Unavailable")
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("Tokyo".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        match result {
+            Err(WeatherError::ApiError { status, .. }) => {
+                assert_eq!(status, 503);
+            }
+            _ => panic!("Expected ApiError with status 503, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_weather_fetch_success() {
+        let mut server = Server::new_async().await;
+
+        // Geocoding APIは成功
+        let _geocoding_mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"results": [{"id": 1, "name": "Tokyo", "latitude": 35.6895, "longitude": 139.6917, "country": "Japan", "admin1": "Tokyo"}]}"#)
+            .create_async()
+            .await;
+
+        // Weather APIも成功
+        let _weather_mock = server
+            .mock("GET", "/v1/forecast")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{
+                "current": {
+                    "temperature_2m": 25.5,
+                    "relative_humidity_2m": 60,
+                    "weather_code": 0,
+                    "is_day": 1
+                }
+            }"#)
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("Tokyo".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        assert!(result.is_ok());
+
+        let weather = result.unwrap();
+        assert_eq!(weather.temp, 25.5);
+        assert_eq!(weather.humidity, 60);
+        assert_eq!(weather.location, "Tokyo, Japan");
+    }
+
+    #[tokio::test]
+    async fn test_weather_api_invalid_json() {
+        let mut server = Server::new_async().await;
+
+        // Geocoding APIは成功
+        let _geocoding_mock = server
+            .mock("GET", "/v1/search")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"results": [{"id": 1, "name": "Tokyo", "latitude": 35.6895, "longitude": 139.6917, "country": "Japan", "admin1": "Tokyo"}]}"#)
+            .create_async()
+            .await;
+
+        // Weather APIは不正なJSON
+        let _weather_mock = server
+            .mock("GET", "/v1/forecast")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("not valid json")
+            .create_async()
+            .await;
+
+        let client = WeatherClient::new_with_base_urls(
+            format!("{}/v1/search", server.url()),
+            format!("{}/v1/forecast", server.url()),
+        );
+        client.set_city("Tokyo".to_string()).await;
+
+        let result = client.fetch_weather().await;
+        assert!(matches!(result, Err(WeatherError::ParseError(_))));
     }
 }

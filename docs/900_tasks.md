@@ -786,6 +786,36 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: `import.meta.url`からの相対解決を優先し、`process.cwd()`をフォールバックに
   - 対象ファイル: `src/utils/overlay-core.test.ts`
 
+- [ ] **Weather APIテストのヘルパー関数抽出** (PR#84)
+  - 現在: Geocodingレスポンスのモック設定が各テストで重複
+  - 提案: `mock_geocoding_success()`などのヘルパー関数に抽出して可読性向上
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
+- [ ] **YouTubeクライアントの他メソッドへのHTTPモックテスト拡張** (PR#84)
+  - 現在: `get_live_stream_stats`のみHTTPモックテスト対応
+  - 提案: `validate_api_key`, `get_live_chat_id`, `get_live_chat_messages`にも同様のテストを追加
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`
+  - 優先度: 中
+
+- [ ] **ネットワークタイムアウトのテスト** (PR#84)
+  - 現在: mockitoの制約により実際のタイムアウトテストは除外
+  - 提案: mockitoの`with_delay`を使用したタイムアウトテストの追加
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
+- [ ] **HTTPモックのクエリパラメータ検証強化** (PR#84)
+  - 現在: `Matcher::Any`を使用してクエリパラメータを無視
+  - 提案: 重要なパラメータ（APIキー、ID等）を`Matcher::AllOf`で明示的に検証
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
+- [ ] **HTTPモックテストのエラーメッセージ検証強化** (PR#84)
+  - 現在: `assert!(msg.contains("サーバーエラー"))`のように部分一致で検証
+  - 提案: 正確なエラーメッセージフォーマットを検証してより堅牢なテストに
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 - [x] **テンプレートstyleフィールドのXSS考慮** (PR#51, 調査完了)
@@ -977,12 +1007,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - DensityManager: 25テスト（recordUpdate、閾値判定、forceDegraded/forceNormal、setThresholdクランプ、destroy）
   - 対象ファイル: `src/utils/update-batcher.test.ts`, `src/utils/density-manager.test.ts`
 
-- [x] **天気API（Open-Meteo）Geocodingエラーケースのテスト** (PR#58, PR#73で部分対応)
+- [x] **天気API（Open-Meteo）Geocodingエラーケースのテスト** (PR#58, PR#73で部分対応, PR#84で完了)
   - [x] `geocode_city`が`results: None`または空配列のとき`WeatherError::CityNotFound`になるケースのテスト
-  - [ ] Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト（HTTPモック必要）
-  - [ ] Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト（HTTPモック必要）
-  - [ ] CityNotFound判定ロジックテストをHTTPモック導入時に統合テストに置き換え（PR#73レビュー）
-  - 追加テスト: WeatherErrorフォーマット、GeocodingResponseパース（5件）、CityNotFound判定ロジック（3件）
+  - [x] Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト（mockitoでHTTPモック実装）
+  - [x] Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト（構造上タイムアウトテストは除外、Timeout型テストのみ）
+  - [x] CityNotFound判定ロジックテストをHTTPモック導入時に統合テストに置き換え（PR#84でmockitoベース統合テスト追加）
+  - 追加テスト: WeatherErrorフォーマット、GeocodingResponseパース（5件）、CityNotFound判定ロジック（3件）、HTTPモックテスト（7件）
   - 対象ファイル: `src-tauri/src/weather/mod.rs`, `src-tauri/src/weather/types.rs`
 
 - [x] **コメント即時/バッファモード混在テスト** (PR#59 → PR#68で対応済み)
@@ -1039,15 +1069,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] **天気API keyringフォールバックのテスト** (PR#57) → **不要化** (PR#58)
   - Open-Meteo移行によりAPIキー不要化、テスト対象が削除されたため不要
 
-- [ ] **YouTube `get_live_stream_stats` のHTTPステータスマッピングテスト** (PR#57)
+- [x] **YouTube `get_live_stream_stats` のHTTPステータスマッピングテスト** (PR#57 → PR#84で完了)
   - 404/400/5xxエラー時のYouTubeErrorマッピングを検証
   - テスト対象:
     - 403 quota exceeded → QuotaExceeded
+    - 403 rate limit → RateLimitExceeded
     - 401 → InvalidApiKey
     - 404 → VideoNotFound
-    - 5xx → ApiError（一時的障害メッセージ）
+    - 400 → VideoNotFound
+    - 5xx (500/502/503) → ApiError（一時的障害メッセージ）
+    - その他ステータス (418など) → ApiError（予期しないエラー）
+  - 対応済み: mockitoでHTTPモック実装（13テスト追加）
   - 対象ファイル: `src-tauri/src/youtube/client.rs`
-  - 優先度: 中（HTTPクライアントのモック化が必要）
 
 - [ ] **`broadcast_weather_update(force_refresh=true)` のテスト** (PR#57)
   - キャッシュクリア→新規取得→ブロードキャストの動作を検証

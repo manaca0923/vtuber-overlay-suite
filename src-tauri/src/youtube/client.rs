@@ -10,6 +10,9 @@ const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
 pub struct YouTubeClient {
     client: Client,
     api_key: String,
+    /// テスト用: APIのベースURL（デフォルトはAPI_BASE）
+    #[cfg(test)]
+    base_url: String,
 }
 
 impl fmt::Debug for YouTubeClient {
@@ -26,6 +29,31 @@ impl YouTubeClient {
         Self {
             client: Client::new(),
             api_key,
+            #[cfg(test)]
+            base_url: API_BASE.to_string(),
+        }
+    }
+
+    /// テスト用: カスタムベースURLでクライアントを作成
+    #[cfg(test)]
+    pub fn new_with_base_url(api_key: String, base_url: String) -> Self {
+        Self {
+            client: Client::new(),
+            api_key,
+            base_url,
+        }
+    }
+
+    /// APIのベースURLを取得（テスト時はbase_url、本番時はAPI_BASE）
+    #[inline]
+    fn get_base_url(&self) -> &str {
+        #[cfg(test)]
+        {
+            &self.base_url
+        }
+        #[cfg(not(test))]
+        {
+            API_BASE
         }
     }
 
@@ -33,7 +61,7 @@ impl YouTubeClient {
     pub async fn validate_api_key(&self) -> Result<bool, YouTubeError> {
         log::info!("Validating API key (quota cost: 1 unit)");
 
-        let url = format!("{}/videos", API_BASE);
+        let url = format!("{}/videos", self.get_base_url());
 
         let response = self
             .client
@@ -77,7 +105,7 @@ impl YouTubeClient {
             video_id
         );
 
-        let url = format!("{}/videos", API_BASE);
+        let url = format!("{}/videos", self.get_base_url());
 
         let response = self
             .client
@@ -156,7 +184,7 @@ impl YouTubeClient {
             live_chat_id
         );
 
-        let url = format!("{}/liveChat/messages", API_BASE);
+        let url = format!("{}/liveChat/messages", self.get_base_url());
 
         let mut query_params = vec![
             ("liveChatId", live_chat_id),
@@ -260,7 +288,7 @@ impl YouTubeClient {
             video_id
         );
 
-        let url = format!("{}/videos", API_BASE);
+        let url = format!("{}/videos", self.get_base_url());
 
         let response = self
             .client
@@ -347,5 +375,348 @@ impl YouTubeClient {
             like_count,
             view_count,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::Server;
+
+    // =============================================================================
+    // get_live_stream_stats HTTPステータスマッピングテスト
+    // =============================================================================
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_success() {
+        let mut server = Server::new_async().await;
+
+        // 正常なレスポンス
+        let response_body = serde_json::json!({
+            "items": [{
+                "statistics": {
+                    "viewCount": "1000",
+                    "likeCount": "100"
+                },
+                "liveStreamingDetails": {
+                    "concurrentViewers": "50"
+                }
+            }]
+        });
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("id".into(), "test_video".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(response_body.to_string())
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(result.is_ok());
+
+        let stats = result.unwrap();
+        assert_eq!(stats.view_count, Some(1000));
+        assert_eq!(stats.like_count, Some(100));
+        assert_eq!(stats.concurrent_viewers, Some(50));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_empty_items() {
+        let mut server = Server::new_async().await;
+
+        // items配列が空
+        let response_body = serde_json::json!({
+            "items": []
+        });
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(response_body.to_string())
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("nonexistent").await;
+        assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_403_quota_exceeded() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(403)
+            .with_body(r#"{"error": {"errors": [{"reason": "quotaExceeded"}]}}"#)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_403_rate_limit() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(403)
+            .with_body(r#"{"error": {"errors": [{"reason": "rateLimitExceeded"}]}}"#)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_403_other() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(403)
+            .with_body(r#"{"error": {"message": "Forbidden"}}"#)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_401_unauthorized() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(401)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_404_not_found() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_400_bad_request() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(400)
+            .with_body("Invalid video ID")
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("invalid!id").await;
+        assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_500_server_error() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(500)
+            .with_body("Internal Server Error")
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert!(msg.contains("サーバーエラー"));
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_502_bad_gateway() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(502)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert!(msg.contains("サーバーエラー"));
+                assert!(msg.contains("502"));
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_503_service_unavailable() {
+        let mut server = Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(503)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert!(msg.contains("サーバーエラー"));
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_unexpected_status() {
+        let mut server = Server::new_async().await;
+
+        // 418 I'm a teapot - 予期しないステータス
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(418)
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert!(msg.contains("予期しないエラー"));
+                assert!(msg.contains("418"));
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_live_stream_stats_partial_data() {
+        let mut server = Server::new_async().await;
+
+        // viewCountのみ存在（likeCount, concurrentViewersなし）
+        let response_body = serde_json::json!({
+            "items": [{
+                "statistics": {
+                    "viewCount": "5000"
+                }
+            }]
+        });
+
+        let _mock = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(response_body.to_string())
+            .create_async()
+            .await;
+
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+
+        let result = client.get_live_stream_stats("test_video").await;
+        assert!(result.is_ok());
+
+        let stats = result.unwrap();
+        assert_eq!(stats.view_count, Some(5000));
+        assert_eq!(stats.like_count, None);
+        assert_eq!(stats.concurrent_viewers, None);
     }
 }

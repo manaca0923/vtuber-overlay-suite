@@ -804,6 +804,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
   - 優先度: 低
 
+- [ ] **HTTPモックのクエリパラメータ検証強化** (PR#84)
+  - 現在: `Matcher::Any`を使用してクエリパラメータを無視
+  - 提案: 重要なパラメータ（APIキー、ID等）を`Matcher::AllOf`で明示的に検証
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 - [x] **テンプレートstyleフィールドのXSS考慮** (PR#51, 調査完了)

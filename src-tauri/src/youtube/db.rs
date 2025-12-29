@@ -2005,7 +2005,8 @@ mod tests {
 
         create_test_table(&pool).await;
 
-        // 最初のメッセージを挿入（テスト用）
+        // 実データが存在する状態でのfail-fast動作を検証するため、初期データを挿入
+        // 空テーブルでもEXCLUSIVEロックは取得可能だが、本番環境に近い状態でテスト
         let initial_msg = create_test_message("fail_fast_initial", "Initial message");
         sqlx::query(
             r#"INSERT INTO comment_logs
@@ -2059,9 +2060,10 @@ mod tests {
         rx_locked.await.unwrap();
 
         // 接続2で書き込みを試みる（busy_timeout=0なので即座に失敗するはず）
-        let start = Instant::now();
-
         let mut conn2 = pool.acquire().await.unwrap();
+
+        // 計測はacquire後から開始（INSERT実行時間のみを計測）
+        let start = Instant::now();
 
         // busy_timeout=0を明示的に設定（プール設定が反映されていることを確認）
         let timeout_check: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
@@ -2110,6 +2112,7 @@ mod tests {
 
         // 即座に失敗すること（100ms以内 = 待機していない）
         // busy_timeout=0なのでロック待機せずに即座にエラーが返されるはず
+        // 閾値100msはCI環境でも十分なマージンを持った値（通常は数ms以内で完了）
         assert!(
             elapsed.as_millis() < 100,
             "busy_timeout=0 should fail immediately without waiting, took {}ms",

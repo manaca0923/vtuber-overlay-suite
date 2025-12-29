@@ -53,7 +53,8 @@ npm run test
 | `200_youtube-api.md` | YouTube API仕様・クォータ管理 |
 | `300_overlay-specs.md` | オーバーレイ・WebSocket仕様 |
 | `400_data-models.md` | SQLiteスキーマ・型定義 |
-| `900_tasks.md` | タスク分解・チェックリスト |
+| `900_tasks.md` | タスク分解・チェックリスト（未完了のみ） |
+| `901_tasks_archived.md` | 完了済みタスクアーカイブ |
 
 docs/ファイルは番号プレフィックスで分類:
 - 0xx: 概要・要件
@@ -94,11 +95,25 @@ gh api repos/manaca0923/vtuber-overlay-suite/pulls/2/comments | jq -r '.[] | "[\
 
 ## タスク管理
 
-`docs/900_tasks.md` のチェックリストで進捗管理:
+### ファイル構成
+
+| ファイル | 内容 |
+|----------|------|
+| `docs/900_tasks.md` | **未完了タスクのみ**（軽量化のため） |
+| `docs/901_tasks_archived.md` | 完了済みタスクの履歴 |
+
+**マーカー**:
 - `- [ ]` 未完了
 - `- [x]` 完了
 
-タスク完了時は必ずチェックを更新すること。
+### タスクファイルのメンテナンス
+
+ファイルが大きくなりすぎた場合は、分割スクリプトを実行:
+```bash
+python3 scripts/split_tasks.py
+```
+- 完了済みセクションを `901_tasks_archived.md` に移動
+- 未完了タスクのみ `900_tasks.md` に残す
 
 ### レビュー指摘事項の後回し対応
 

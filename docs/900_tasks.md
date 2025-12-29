@@ -907,12 +907,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応済み: 定期クリーンアップタイマー（5秒間隔）と`destroy()`メソッドを実装
   - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
 
-- [ ] **DensityManager閾値の設定可能化** (PR#54)
-  - 現在: `highDensityThreshold: 5`（2秒間に5回）がハードコード
-  - 問題: 低スペック環境では閾値を下げたい場合がある
-  - 対応: テンプレート設定またはURLパラメータで動的変更可能に
-  - 対象ファイル: `src-tauri/overlays/shared/density-manager.js`
-  - 優先度: 低
+- [x] **DensityManager閾値の設定可能化** (PR#54, PR#68で対応済み)
+  - ~~現在: `highDensityThreshold: 5`（2秒間に5回）がハードコード~~
+  - ~~問題: 低スペック環境では閾値を下げたい場合がある~~
+  - 対応済み: 設定画面「詳細」タブでスライダー調整可能（1-20）
+  - 対象ファイル: `src/components/settings/PerformanceSettingsPanel.tsx`
 
 - [x] **DensityManager destroy()呼び出しの追加** (PR#56)
   - ~~現在: `destroy()`メソッドは実装済みだが、呼び出し箇所がない~~

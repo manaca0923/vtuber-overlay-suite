@@ -188,26 +188,43 @@ mockitoの`with_delay`を使用してタイムアウトテストが可能:
 
 ただし、HTTPクライアントのタイムアウト設定（10秒）とテスト実行時間のトレードオフがある。
 
-### 4. 5xxエラーハンドリングの一貫性（優先度: 低） (PR#85)
+### 4. 5xxエラーハンドリングの一貫性 ✅ (PR#86で対応済み)
 
-**問題**: `get_live_chat_id`で500エラーが`VideoNotFound`にマッピングされる（`client.rs:157-160`）。これは`get_live_stream_stats`（`ApiError`を使用）と一貫性がない。
+**問題**: `get_live_chat_id`と`get_live_chat_messages`で5xxエラーが不適切なエラー型にマッピングされていた。
 
-**現状の実装**:
+**修正内容** (PR#86):
+- `get_live_chat_id`: 5xxエラーと予期しないステータスを`ApiError`にマッピング
+- `get_live_chat_messages`: 同様に`ApiError`にマッピング（以前は`ParseError`）
+- `get_live_stream_stats`との一貫性を確保
+
+**修正後のパターン**:
 ```rust
-// get_live_chat_id - 予期しないステータスはVideoNotFound
-status => Err(YouTubeError::VideoNotFound(video_id.to_string())),
-
-// get_live_stream_stats - 予期しないステータスはApiError
-status => Err(YouTubeError::ApiError(format!("予期しないHTTPステータス: {}", status))),
+// 5xxサーバーエラー
+status if status.is_server_error() => {
+    Err(YouTubeError::ApiError(format!(
+        "サーバーエラー ({}): 一時的な障害の可能性があります",
+        status
+    )))
+}
+// その他の予期しないステータス
+status => {
+    Err(YouTubeError::ApiError(format!(
+        "予期しないエラー ({})",
+        status
+    )))
+}
 ```
-
-**推奨対応**: 5xxエラーには`ApiError`を使用して一貫性を保つ。
 
 ## 注意点
 
 1. **mockitoの501エラー**: 未マッチリクエストに501を返すため、必ず適切なマッチャーを設定
 2. **非同期テスト**: `Server::new_async()`と`.create_async()`を使用
 3. **モック変数**: `_mock`として保持し、テスト終了までドロップされないようにする
+
+## 将来の検討事項 (PR#86レビュー)
+
+1. **5xxエラーのログレベル**: 現在`log::error!`だが、一時的障害の可能性があるため`log::warn!`の方が適切かもしれない
+2. **ApiErrorのリトライ**: 5xxエラーは一時的な障害の可能性があるため、上位層でリトライ対象とすべきか確認が必要
 
 ## 対象ファイル
 

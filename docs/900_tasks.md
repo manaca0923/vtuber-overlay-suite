@@ -821,10 +821,22 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/client.rs`
   - 優先度: 低
 
-- [ ] **get_live_chat_idの5xxエラーハンドリング改善** (PR#85)
-  - 現在: 500エラーが`VideoNotFound`にマッピングされる（`client.rs:157-160`）
-  - 提案: 5xxエラーには`ApiError`を使用（`get_live_stream_stats`との一貫性）
+- [x] **get_live_chat_id/get_live_chat_messagesの5xxエラーハンドリング改善** (PR#85, PR#86)
+  - 完了: 5xxサーバーエラーと予期しないステータスを`ApiError`にマッピング
+  - `get_live_stream_stats`との一貫性を確保
   - 対象ファイル: `src-tauri/src/youtube/client.rs`
+  - テスト追加: 2テスト（unexpected_status）、テスト更新: 2テスト（500_server_error）
+
+- [ ] **5xxエラーのログレベル検討** (PR#86)
+  - 現在: 5xxサーバーエラーに`log::error!`を使用
+  - 提案: 一時的な障害の可能性があるため`log::warn!`の方が適切かもしれない
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`
+  - 優先度: 低
+
+- [ ] **ApiErrorのリトライロジック確認** (PR#86)
+  - 確認: `ApiError`が返された場合、上位層でリトライが適切に行われるか
+  - 5xxエラーは一時的な障害の可能性があるためリトライ対象にすべきケースあり
+  - 対象ファイル: `src-tauri/src/youtube/poller.rs`
   - 優先度: 低
 
 ### セキュリティ（将来課題）

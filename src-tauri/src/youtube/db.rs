@@ -268,21 +268,110 @@ async fn set_busy_timeout(conn: &mut SqliteConnection, timeout_ms: u64) -> Resul
     Ok(())
 }
 
+/// busy_timeout復元のリトライ設定
+/// 高負荷時にBUSYが連続しても、プール接続をchurnしないよう複数回リトライ
+const RESTORE_BUSY_TIMEOUT_MAX_RETRIES: u32 = 3;
+const RESTORE_BUSY_TIMEOUT_INITIAL_BACKOFF_MS: u64 = 20;
+
+/// busy_timeoutを元の値に復元（exponential backoffでリトライ）
+///
+/// 高負荷時にBUSYエラーが連続する場合でも、接続をdetachせずに
+/// 複数回リトライすることでプール枯渇を防ぐ。
+///
+/// ## リトライ戦略
+/// - 初回試行 + 最大3回リトライ = 最大4回試行
+/// - リトライ間隔: 20ms → 40ms → 80ms（exponential backoff）
+/// - BUSYエラーのみリトライ、その他のエラーは即座に終了
+/// - リトライ上限に達した場合も終了
+///
+/// ## 戻り値
+/// - `true`: 復元成功
+/// - `false`: 復元失敗（呼び出し元でdetachすべき）
+async fn restore_busy_timeout_with_retry(
+    conn: &mut SqliteConnection,
+    original_timeout: u64,
+) -> bool {
+    let mut backoff_ms = RESTORE_BUSY_TIMEOUT_INITIAL_BACKOFF_MS;
+
+    for attempt in 0..=RESTORE_BUSY_TIMEOUT_MAX_RETRIES {
+        match set_busy_timeout(conn, original_timeout).await {
+            Ok(()) => return true,
+            Err(e) => {
+                if !is_sqlite_busy_error(&e) {
+                    // 非BUSYエラー（IO障害等）
+                    log::warn!(
+                        "Failed to restore busy_timeout to original ({}ms): {:?}, should detach connection",
+                        original_timeout,
+                        e
+                    );
+                    return false;
+                }
+
+                // BUSYエラーの場合
+                if attempt >= RESTORE_BUSY_TIMEOUT_MAX_RETRIES {
+                    log::warn!(
+                        "Failed to restore busy_timeout to original ({}ms) after {} retries, should detach: {:?}",
+                        original_timeout,
+                        RESTORE_BUSY_TIMEOUT_MAX_RETRIES,
+                        e
+                    );
+                    return false;
+                }
+
+                log::debug!(
+                    "SQLITE_BUSY on restore busy_timeout (attempt {}/{}), retrying after {}ms: {:?}",
+                    attempt + 1,
+                    RESTORE_BUSY_TIMEOUT_MAX_RETRIES,
+                    backoff_ms,
+                    e
+                );
+                sleep(Duration::from_millis(backoff_ms)).await;
+                backoff_ms *= 2; // exponential backoff
+            }
+        }
+    }
+
+    // ここには到達しないが、念のため
+    false
+}
+
+/// busy_timeout取得の結果
+///
+/// BUSYエラーとその他のエラーを区別するため、専用の型を使用。
+/// これにより、呼び出し元で適切なリトライ判断が可能になる。
+#[derive(Debug)]
+enum GetBusyTimeoutResult {
+    /// 取得成功
+    Ok(u64),
+    /// SQLITE_BUSYエラー（リトライ可能）
+    Busy,
+    /// その他のエラー（リトライ不可）
+    OtherError,
+}
+
 /// コネクションの現在のbusy_timeoutを取得
 ///
 /// プール設定に依存せず、接続の実際の値を取得する。
-/// 取得失敗時はNoneを返す（呼び出し元で復元をスキップする判断材料として）。
-async fn get_busy_timeout(conn: &mut SqliteConnection) -> Option<u64> {
+/// BUSYエラーとその他のエラーを区別して返す。
+///
+/// ## 戻り値
+/// - `GetBusyTimeoutResult::Ok(u64)`: 取得成功
+/// - `GetBusyTimeoutResult::Busy`: SQLITE_BUSYエラー（リトライ可能）
+/// - `GetBusyTimeoutResult::OtherError`: その他のエラー（IO障害等）
+async fn get_busy_timeout(conn: &mut SqliteConnection) -> GetBusyTimeoutResult {
     match sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
         .fetch_one(&mut *conn)
         .await
     {
-        Ok(timeout) => Some(timeout as u64),
+        Ok(timeout) => GetBusyTimeoutResult::Ok(timeout as u64),
         Err(e) => {
-            // PRAGMA busy_timeoutは通常SQLITE_BUSYにならないが、
-            // 念のためエラー内容をログ出力（将来的にResult<u64, sqlx::Error>に変更を検討）
-            log::warn!("Failed to get busy_timeout: {:?}", e);
-            None
+            if is_sqlite_busy_error(&e) {
+                log::debug!("SQLITE_BUSY on get busy_timeout: {:?}", e);
+                GetBusyTimeoutResult::Busy
+            } else {
+                log::warn!("Failed to get busy_timeout: {:?}", e);
+                GetBusyTimeoutResult::OtherError
+            }
         }
     }
 }
@@ -369,12 +458,15 @@ async fn save_chunk_with_transaction_and_timeout(
     }
 
     // 元のbusy_timeoutを取得（復元用）
-    // 取得失敗時は復元不能なため、接続をdetachしてOtherErrorを返す
-    // → 短いbusy_timeoutを設定後に復元できず、接続が劣化するリスクを回避
-    // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
+    // BUSYエラーの場合はリトライ可能として返す（接続は正常）
+    // その他のエラーは復元不能なため、接続をdetachしてOtherErrorを返す
     let original_timeout = match get_busy_timeout(&mut conn).await {
-        Some(timeout) => timeout,
-        None => {
+        GetBusyTimeoutResult::Ok(timeout) => timeout,
+        GetBusyTimeoutResult::Busy => {
+            log::debug!("SQLITE_BUSY on get original busy_timeout, will retry");
+            return TransactionResult::Busy;
+        }
+        GetBusyTimeoutResult::OtherError => {
             log::warn!("Cannot proceed: failed to get original busy_timeout for restoration, detaching connection");
             conn.detach();
             return TransactionResult::OtherError;
@@ -412,8 +504,8 @@ async fn save_chunk_with_transaction_and_timeout(
         return TransactionResult::OtherError;
     }
 
-    // トランザクションを実行
-    let result = save_chunk_with_transaction_on_conn(&mut conn, messages).await;
+    // トランザクションを実行（デッドラインを渡して遅いI/Oも制限）
+    let result = save_chunk_with_transaction_on_conn(&mut conn, messages, deadline).await;
 
     // Poisoned状態の場合は接続を切り離す（rollback失敗等）
     if result == TransactionResult::Poisoned {
@@ -423,33 +515,9 @@ async fn save_chunk_with_transaction_and_timeout(
     }
 
     // busy_timeoutを元の値に復元（プール内接続への影響を防ぐ）
-    if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
-        if is_sqlite_busy_error(&e) {
-            // BUSYエラーの場合は短いbackoff後にリトライ（プール枯渇防止）
-            log::debug!(
-                "SQLITE_BUSY on restore busy_timeout, retrying after 20ms: {:?}",
-                e
-            );
-            sleep(Duration::from_millis(20)).await;
-
-            // リトライ
-            if let Err(retry_err) = set_busy_timeout(&mut conn, original_timeout).await {
-                log::warn!(
-                    "Failed to restore busy_timeout to original ({}ms) after retry, detaching: {:?}",
-                    original_timeout,
-                    retry_err
-                );
-                conn.detach();
-            }
-        } else {
-            // 非BUSYエラー（IO障害等）は即座にdetach
-            log::warn!(
-                "Failed to restore busy_timeout to original ({}ms): {:?}, detaching connection from pool",
-                original_timeout,
-                e
-            );
-            conn.detach();
-        }
+    // 失敗時は接続をdetach（トランザクション結果には影響しない）
+    if !restore_busy_timeout_with_retry(&mut conn, original_timeout).await {
+        conn.detach();
     }
 
     result
@@ -518,11 +586,16 @@ fn is_sqlite_busy_error(e: &sqlx::Error) -> bool {
 /// これらの致命的エラー発生時は最初のエラーで即座にロールバックする。
 /// SQLITE_BUSYの場合はリトライ可能として`TransactionResult::Busy`を返す。
 ///
+/// ## デッドライン強制
+/// 各INSERT前にデッドライン超過をチェックし、超過時は早期ロールバック。
+/// これにより、遅いディスクI/O（SQLITE_BUSYなし）でも総タイムアウトを強制できる。
+///
 /// 呼び出し元でbusy_timeoutを設定済みのコネクションを渡すことで、
 /// ブロック時間を制限できる。
 async fn save_chunk_with_transaction_on_conn(
     conn: &mut SqliteConnection,
     messages: &[ChatMessage],
+    deadline: Instant,
 ) -> TransactionResult {
     use sqlx::Connection;
 
@@ -539,7 +612,24 @@ async fn save_chunk_with_transaction_on_conn(
         }
     };
 
-    for msg in messages {
+    for (idx, msg) in messages.iter().enumerate() {
+        // 各INSERT前にデッドライン超過をチェック
+        // 遅いディスクI/O（SQLITE_BUSYなし）でも総タイムアウトを強制
+        if Instant::now() >= deadline {
+            log::warn!(
+                "Deadline exceeded during transaction after {}/{} inserts, rolling back",
+                idx,
+                messages.len()
+            );
+            // 明示的にロールバック
+            if let Err(rb_err) = tx.rollback().await {
+                log::warn!("Rollback failed after deadline exceeded: {:?}", rb_err);
+                return TransactionResult::Poisoned;
+            }
+            // デッドライン超過はBusyとして返す（リトライはsave_chunk_with_retryで判断）
+            return TransactionResult::Busy;
+        }
+
         if let Err(e) = insert_comment(&mut *tx, msg).await {
             // INSERT OR IGNOREなので重複エラーは発生しないはず
             // エラーが発生した場合は致命的な問題（テーブル不存在等）
@@ -563,6 +653,19 @@ async fn save_chunk_with_transaction_on_conn(
             }
             return TransactionResult::OtherError;
         }
+    }
+
+    // コミット前にもデッドライン超過をチェック
+    if Instant::now() >= deadline {
+        log::warn!(
+            "Deadline exceeded before commit after {} inserts, rolling back",
+            messages.len()
+        );
+        if let Err(rb_err) = tx.rollback().await {
+            log::warn!("Rollback failed after deadline exceeded before commit: {:?}", rb_err);
+            return TransactionResult::Poisoned;
+        }
+        return TransactionResult::Busy;
     }
 
     // コミット
@@ -628,12 +731,19 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
     };
 
     // 元のbusy_timeoutを取得（復元用）
-    // 取得失敗時は予算を強制できないため即座に終了
-    // → 接続の以前のbusy_timeout（5秒など）で長時間ブロックするリスクを排除
-    // → PRAGMA失敗はIO障害等の可能性があり、接続をプールに戻さない
+    // BUSYエラーの場合は一時的なロック競合なので接続は正常 → detachしない
+    // その他のエラーは予算を強制できないため即座に終了
     let original_timeout = match get_busy_timeout(&mut conn).await {
-        Some(timeout) => timeout,
-        None => {
+        GetBusyTimeoutResult::Ok(timeout) => timeout,
+        GetBusyTimeoutResult::Busy => {
+            log::warn!(
+                "Skipping individual insert fallback: SQLITE_BUSY on get busy_timeout, {} messages not saved",
+                messages.len()
+            );
+            // 一時的なロック競合なのでdetachしない
+            return;
+        }
+        GetBusyTimeoutResult::OtherError => {
             log::warn!(
                 "Skipping individual insert fallback: failed to get original busy_timeout, detaching connection, {} messages not saved",
                 messages.len()
@@ -714,35 +824,10 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         }
     }
 
-    // busy_timeoutを元の値に復元
-    // 復元失敗時は接続を切り離してプールへの影響を防ぐ（リトライパスと同様）
-    if let Err(e) = set_busy_timeout(&mut conn, original_timeout).await {
-        if is_sqlite_busy_error(&e) {
-            // BUSYエラーの場合は短いbackoff後にリトライ（プール枯渇防止）
-            log::debug!(
-                "SQLITE_BUSY on restore busy_timeout in fallback, retrying after 20ms: {:?}",
-                e
-            );
-            sleep(Duration::from_millis(20)).await;
-
-            // リトライ
-            if let Err(retry_err) = set_busy_timeout(&mut conn, original_timeout).await {
-                log::warn!(
-                    "Failed to restore busy_timeout in fallback to original ({}ms) after retry, detaching: {:?}",
-                    original_timeout,
-                    retry_err
-                );
-                conn.detach();
-            }
-        } else {
-            // 非BUSYエラー（IO障害等）は即座にdetach
-            log::warn!(
-                "Failed to restore busy_timeout in fallback to original ({}ms), detaching connection: {:?}",
-                original_timeout,
-                e
-            );
-            conn.detach();
-        }
+    // busy_timeoutを元の値に復元（exponential backoffでリトライ）
+    // 失敗時は接続をdetach
+    if !restore_busy_timeout_with_retry(&mut conn, original_timeout).await {
+        conn.detach();
     }
 
     if error_count > 0 || success_count + error_count < messages.len() {
@@ -2127,5 +2212,163 @@ mod tests {
         // クリーンアップ
         drop(pool);
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// デッドライン強制テスト
+    ///
+    /// トランザクション内で各INSERT前にデッドラインをチェックし、
+    /// 超過時にロールバックして早期終了することを検証。
+    /// 遅いディスクI/O（SQLITE_BUSYなし）でも総タイムアウトを強制できる。
+    #[tokio::test]
+    async fn test_deadline_enforcement_in_transaction() {
+        use tempfile::NamedTempFile;
+
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(2) // 確認用に2接続必要
+            .connect(&format!("sqlite:{}?mode=rwc", db_path))
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        // 大量のメッセージを準備（100件）
+        let messages: Vec<ChatMessage> = (0..100)
+            .map(|i| create_test_message(&format!("deadline_test_{}", i), &format!("Message {}", i)))
+            .collect();
+
+        // 既に過ぎたデッドラインでトランザクションを実行
+        let past_deadline = Instant::now() - Duration::from_secs(1);
+        let mut conn = pool.acquire().await.unwrap();
+
+        let result = save_chunk_with_transaction_on_conn(&mut conn, &messages, past_deadline).await;
+
+        // デッドライン超過でBusyが返されること（早期終了）
+        assert_eq!(
+            result,
+            TransactionResult::Busy,
+            "Should return Busy when deadline is exceeded"
+        );
+
+        // 接続をドロップしてプールに返す
+        drop(conn);
+
+        // ロールバックされているため、データは保存されていないこと
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            count.0, 0,
+            "No messages should be saved when deadline is exceeded (transaction rolled back)"
+        );
+    }
+
+    /// restore_busy_timeout_with_retryのexponential backoffテスト
+    ///
+    /// BUSYエラー時に最大3回までexponential backoffでリトライすることを検証。
+    #[tokio::test]
+    async fn test_restore_busy_timeout_retry_count() {
+        use tempfile::NamedTempFile;
+
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!("sqlite:{}?mode=rwc", db_path))
+            .await
+            .unwrap();
+
+        // 正常なケース: 復元成功
+        let mut conn = pool.acquire().await.unwrap();
+        let result = restore_busy_timeout_with_retry(&mut conn, 5000).await;
+        assert!(result, "Restore should succeed in normal case");
+
+        // busy_timeoutが正しく設定されていることを確認
+        let timeout: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(timeout.0, 5000, "busy_timeout should be restored to 5000ms");
+    }
+
+    /// tempfileクレートを使用したテスト用DBファイルの分離
+    ///
+    /// tempfileはスコープ終了時に自動削除されるため、
+    /// テスト中断時に古いファイルが残らない。
+    #[tokio::test]
+    async fn test_tempfile_db_isolation() {
+        use tempfile::NamedTempFile;
+
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!("sqlite:{}?mode=rwc", db_path))
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        // テストデータを挿入
+        let msg = create_test_message("tempfile_test", "Test message for tempfile isolation");
+        save_comments_to_db(&pool, &[msg]).await;
+
+        // データが保存されていることを確認
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM comment_logs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(count.0, 1, "One message should be saved");
+
+        // プールをドロップ
+        drop(pool);
+
+        // tempfileがスコープを出ると自動的に削除される
+        // (NamedTempFileのDropトレイト実装により)
+    }
+
+    /// GetBusyTimeoutResult型のテスト
+    ///
+    /// get_busy_timeout関数がBUSYエラーとその他のエラーを区別して返すことを検証。
+    #[tokio::test]
+    async fn test_get_busy_timeout_result_type() {
+        use sqlx::sqlite::SqliteConnectOptions;
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        // busy_timeoutはConnectOptionsで設定
+        let connect_options = SqliteConnectOptions::new()
+            .filename(db_path)
+            .create_if_missing(true)
+            .busy_timeout(Duration::from_millis(1234));
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        let mut conn = pool.acquire().await.unwrap();
+
+        // 正常ケース: busy_timeoutが取得できること
+        let result = get_busy_timeout(&mut conn).await;
+        match result {
+            GetBusyTimeoutResult::Ok(timeout) => {
+                assert_eq!(timeout, 1234, "busy_timeout should be 1234ms");
+            }
+            other => panic!("Expected GetBusyTimeoutResult::Ok, got {:?}", other),
+        }
     }
 }

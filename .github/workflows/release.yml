@@ -49,7 +49,13 @@ jobs:
         id: release_notes
         run: |
           # 前回のタグを取得
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          # workflow_dispatch時はHEADに新タグがないため、直近のタグを取得
+          # タグプッシュ時はHEAD^から前回タグを取得
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          else
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          fi
 
           if [ -z "$PREV_TAG" ]; then
             # 初回リリースの場合
@@ -99,10 +105,10 @@ jobs:
           # ダウンロードセクション追加
           NOTES="${NOTES}## 📥 ダウンロード\nお使いのOSに合わせてダウンロードしてください：\n- Windows: \`.msi\` または \`.exe\` ファイル\n- macOS: \`.dmg\` ファイル"
 
-          # 出力（複数行対応）
-          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          # 出力（複数行対応、一意なデリミタを使用）
+          echo "NOTES<<RELEASE_NOTES_EOF" >> $GITHUB_OUTPUT
           echo -e "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "RELEASE_NOTES_EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release

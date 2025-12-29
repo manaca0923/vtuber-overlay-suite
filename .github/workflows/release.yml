@@ -75,8 +75,8 @@ jobs:
 
           while IFS= read -r commit; do
             [ -z "$commit" ] && continue
-            # Breaking Changes: feat!: / fix!: / perf!: (スコープあり/なし)
-            if [[ "$commit" =~ ^(feat|fix|perf)(\(.+\))?!:\ (.+) ]]; then
+            # Breaking Changes: feat!: / fix!: / perf!: / revert!: (スコープあり/なし)
+            if [[ "$commit" =~ ^(feat|fix|perf|revert)(\(.+\))?!:\ (.+) ]]; then
               BREAKING="${BREAKING}- ${BASH_REMATCH[3]}\n"
             # 新機能: feat:
             elif [[ "$commit" =~ ^feat(\(.+\))?:\ (.+) ]]; then
@@ -99,7 +99,7 @@ jobs:
             fi
           done <<< "$COMMITS"
 
-          # リリースノート生成
+          # リリースノート生成（重要度順: 破壊的変更 > 新機能 > バグ修正 > パフォーマンス > リバート > その他）
           NOTES=""
           if [ -n "$BREAKING" ]; then
             NOTES="${NOTES}## ⚠️ 破壊的変更\n${BREAKING}\n"

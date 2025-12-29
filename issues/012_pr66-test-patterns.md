@@ -141,19 +141,7 @@ PR#67でテストヘルパー共通化を実装した際の追加レビュー指
 
 **問題**: `fs.readFileSync`が失敗した場合のエラーメッセージが汎用的
 
-**推奨対応**:
-```typescript
-export function loadScriptContent(relativePath: string): string {
-  const scriptPath = resolveOverlayScriptPath(relativePath);
-  try {
-    return fs.readFileSync(scriptPath, 'utf-8');
-  } catch (error) {
-    throw new Error(`Failed to load script: ${scriptPath} (${error instanceof Error ? error.message : error})`);
-  }
-}
-```
-
-**優先度**: 低
+**対応済み** (PR#69): try-catchでラップし、ファイルパスと元のエラーメッセージを含む詳細なエラーを投げるように改善
 
 ### 2. mockPerformanceのperformance.now()精度
 

@@ -1076,10 +1076,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `forceFlush()`後に`ComponentRegistry.broadcast()`が正しく呼び出されることを確認するテスト追加
   - 対象ファイル: `src/utils/update-batcher.test.ts`
 
-- [ ] **loadScriptContentのエラーハンドリング改善** (PR#67)
-  - `fs.readFileSync`が失敗した場合のエラーメッセージに具体的なパスを含める
-  - 対象ファイル: `src/utils/test-helpers.ts`
-  - 優先度: 低
+- [x] **loadScriptContentのエラーハンドリング改善** (PR#67 → PR#69で対応済み)
+  - ~~`fs.readFileSync`が失敗した場合のエラーメッセージに具体的なパスを含める~~
+  - 対応済み: try-catchでラップし、ファイルパスと元のエラーメッセージを含む詳細なエラーを投げるように改善
 
 - [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
   - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止

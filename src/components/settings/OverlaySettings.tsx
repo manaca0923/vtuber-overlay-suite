@@ -4,6 +4,7 @@ import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
 import { SetlistSettingsPanel } from './SetlistSettingsPanel';
 import { WeatherSettingsPanel } from './WeatherSettingsPanel';
+import { PerformanceSettingsPanel } from './PerformanceSettingsPanel';
 import { ApiKeySettingsPanel } from './ApiKeySettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
@@ -25,7 +26,7 @@ export function OverlaySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activePanel, setActivePanel] = useState<'comment' | 'setlist' | 'weather'>('comment');
+  const [activePanel, setActivePanel] = useState<'comment' | 'setlist' | 'weather' | 'performance'>('comment');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
 
   useEffect(() => {
@@ -59,6 +60,10 @@ export function OverlaySettings() {
             weather: saved.weather
               ? { ...DEFAULT_OVERLAY_SETTINGS.weather, ...saved.weather }
               : DEFAULT_OVERLAY_SETTINGS.weather,
+            // saved.performanceがundefinedの場合はデフォルト値を使用
+            performance: saved.performance
+              ? { ...DEFAULT_OVERLAY_SETTINGS.performance, ...saved.performance }
+              : DEFAULT_OVERLAY_SETTINGS.performance,
           };
           setSettings(merged);
         }
@@ -189,6 +194,16 @@ export function OverlaySettings() {
               >
                 天気設定
               </button>
+              <button
+                onClick={() => setActivePanel('performance')}
+                className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
+                  activePanel === 'performance'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                詳細
+              </button>
             </div>
 
             <div className="p-6">
@@ -213,6 +228,14 @@ export function OverlaySettings() {
                   settings={settings.weather}
                   onChange={(weather) => {
                     setSettings((prev) => ({ ...prev, weather }));
+                  }}
+                />
+              )}
+              {activePanel === 'performance' && (
+                <PerformanceSettingsPanel
+                  settings={settings.performance}
+                  onChange={(performance) => {
+                    setSettings((prev) => ({ ...prev, performance }));
                   }}
                 />
               )}
@@ -279,7 +302,7 @@ export function OverlaySettings() {
           <div className="h-[500px]">
             <OverlayPreview
               settings={settings}
-              activePanel={activePanel === 'weather' ? 'comment' : activePanel}
+              activePanel={activePanel === 'weather' || activePanel === 'performance' ? 'comment' : activePanel}
               mode={previewMode}
             />
           </div>

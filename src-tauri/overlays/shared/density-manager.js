@@ -211,6 +211,7 @@
      * @param {number} threshold - 新しい閾値
      */
     setThreshold(threshold) {
+      if (typeof threshold !== 'number' || isNaN(threshold)) return;
       this.highDensityThreshold = Math.max(1, Math.min(20, threshold));
     }
 

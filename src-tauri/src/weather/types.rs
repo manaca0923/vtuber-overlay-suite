@@ -169,6 +169,88 @@ impl WeatherData {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // GeocodingResponse パーステスト
+    // =========================================================================
+
+    #[test]
+    fn test_geocoding_response_with_results() {
+        let json = r#"{
+            "results": [
+                {
+                    "id": 1850147,
+                    "name": "Tokyo",
+                    "latitude": 35.6895,
+                    "longitude": 139.6917,
+                    "country": "Japan",
+                    "admin1": "Tokyo"
+                }
+            ]
+        }"#;
+
+        let response: GeocodingResponse = serde_json::from_str(json).unwrap();
+        assert!(response.results.is_some());
+        let results = response.results.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "Tokyo");
+        assert_eq!(results[0].latitude, 35.6895);
+        assert_eq!(results[0].longitude, 139.6917);
+    }
+
+    #[test]
+    fn test_geocoding_response_empty_results() {
+        // 存在しない都市名の場合、APIは空のresults配列を返す
+        let json = r#"{"results": []}"#;
+
+        let response: GeocodingResponse = serde_json::from_str(json).unwrap();
+        assert!(response.results.is_some());
+        let results = response.results.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_geocoding_response_no_results_field() {
+        // 一致する都市がない場合、APIはresultsフィールド自体を省略することがある
+        let json = r#"{}"#;
+
+        let response: GeocodingResponse = serde_json::from_str(json).unwrap();
+        assert!(response.results.is_none());
+    }
+
+    #[test]
+    fn test_geocoding_response_null_results() {
+        // resultsがnullの場合
+        let json = r#"{"results": null}"#;
+
+        let response: GeocodingResponse = serde_json::from_str(json).unwrap();
+        assert!(response.results.is_none());
+    }
+
+    #[test]
+    fn test_geocoding_result_optional_fields() {
+        // countryとadmin1がオプションの場合
+        let json = r#"{
+            "results": [
+                {
+                    "id": 12345,
+                    "name": "SomePlace",
+                    "latitude": 10.0,
+                    "longitude": 20.0
+                }
+            ]
+        }"#;
+
+        let response: GeocodingResponse = serde_json::from_str(json).unwrap();
+        let results = response.results.unwrap();
+        assert_eq!(results[0].name, "SomePlace");
+        assert!(results[0].country.is_none());
+        assert!(results[0].admin1.is_none());
+    }
+
+    // =========================================================================
+    // WMO Code テスト
+    // =========================================================================
+
     #[test]
     fn test_wmo_code_to_emoji_clear_day() {
         assert_eq!(WeatherData::wmo_code_to_emoji(0, true), "☀️");

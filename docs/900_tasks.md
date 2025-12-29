@@ -976,12 +976,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - DensityManager: 25テスト（recordUpdate、閾値判定、forceDegraded/forceNormal、setThresholdクランプ、destroy）
   - 対象ファイル: `src/utils/update-batcher.test.ts`, `src/utils/density-manager.test.ts`
 
-- [ ] **天気API（Open-Meteo）Geocodingエラーケースのテスト** (PR#58)
-  - `geocode_city`が`results: None`または空配列のとき`WeatherError::CityNotFound`になるケースのテスト
-  - Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト
-  - Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト
-  - 対象ファイル: `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
+- [x] **天気API（Open-Meteo）Geocodingエラーケースのテスト** (PR#58, PR#73で部分対応)
+  - [x] `geocode_city`が`results: None`または空配列のとき`WeatherError::CityNotFound`になるケースのテスト
+  - [ ] Geocoding/Weather APIのHTTP非200時の`ApiError`生成経路のテスト（HTTPモック必要）
+  - [ ] Geocoding APIがタイムアウトした場合に`WeatherError::Timeout`になるテスト（HTTPモック必要）
+  - 追加テスト: WeatherErrorフォーマット、GeocodingResponseパース（5件）、CityNotFound判定ロジック（3件）
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`, `src-tauri/src/weather/types.rs`
 
 - [x] **コメント即時/バッファモード混在テスト** (PR#59 → PR#68で対応済み)
   - ~~`instant=true`と`instant=false`が同時に到着するケースで、公式API由来コメントが5秒均等表示のまま維持されることの確認~~

@@ -422,4 +422,95 @@ mod tests {
         );
         assert_eq!(name, "Tokyo, Japan");
     }
+
+    // =========================================================================
+    // WeatherError テスト
+    // =========================================================================
+
+    #[test]
+    fn test_weather_error_city_not_configured() {
+        let err = WeatherError::CityNotConfigured;
+        assert_eq!(format!("{}", err), "City not configured");
+    }
+
+    #[test]
+    fn test_weather_error_city_not_found() {
+        let err = WeatherError::CityNotFound("UnknownCity".to_string());
+        assert_eq!(format!("{}", err), "City not found: UnknownCity");
+    }
+
+    #[test]
+    fn test_weather_error_api_error() {
+        let err = WeatherError::ApiError {
+            status: 404,
+            message: "Not Found".to_string(),
+        };
+        assert_eq!(format!("{}", err), "API error: 404 - Not Found");
+    }
+
+    #[test]
+    fn test_weather_error_parse_error() {
+        let err = WeatherError::ParseError("Invalid JSON".to_string());
+        assert_eq!(format!("{}", err), "Parse error: Invalid JSON");
+    }
+
+    #[test]
+    fn test_weather_error_timeout() {
+        let err = WeatherError::Timeout;
+        assert_eq!(format!("{}", err), "Request timeout: API応答がありません");
+    }
+
+    // =========================================================================
+    // CityNotFound判定ロジックのテスト
+    // =========================================================================
+
+    #[test]
+    fn test_geocoding_results_none_produces_city_not_found() {
+        // geocode_city内のロジックをシミュレート
+        // results.and_then(|r| r.into_iter().next()).ok_or_else(...)
+        let response = GeocodingResponse { results: None };
+        let result = response
+            .results
+            .and_then(|r| r.into_iter().next())
+            .ok_or_else(|| WeatherError::CityNotFound("TestCity".to_string()));
+
+        assert!(matches!(result, Err(WeatherError::CityNotFound(city)) if city == "TestCity"));
+    }
+
+    #[test]
+    fn test_geocoding_results_empty_produces_city_not_found() {
+        // 空配列の場合
+        let response = GeocodingResponse { results: Some(vec![]) };
+        let result = response
+            .results
+            .and_then(|r| r.into_iter().next())
+            .ok_or_else(|| WeatherError::CityNotFound("EmptyCity".to_string()));
+
+        assert!(matches!(result, Err(WeatherError::CityNotFound(city)) if city == "EmptyCity"));
+    }
+
+    #[test]
+    fn test_geocoding_results_with_data_produces_success() {
+        use types::GeocodingResult;
+
+        let response = GeocodingResponse {
+            results: Some(vec![GeocodingResult {
+                id: 1,
+                name: "Tokyo".to_string(),
+                latitude: 35.6895,
+                longitude: 139.6917,
+                country: Some("Japan".to_string()),
+                admin1: Some("Tokyo".to_string()),
+            }]),
+        };
+        let result = response
+            .results
+            .and_then(|r| r.into_iter().next())
+            .ok_or_else(|| WeatherError::CityNotFound("TestCity".to_string()));
+
+        assert!(result.is_ok());
+        let geo_result = result.unwrap();
+        assert_eq!(geo_result.name, "Tokyo");
+        assert_eq!(geo_result.latitude, 35.6895);
+    }
 }

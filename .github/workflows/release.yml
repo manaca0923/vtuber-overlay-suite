@@ -70,12 +70,13 @@ jobs:
           FEATURES=""
           FIXES=""
           PERF=""
+          REVERT=""
           OTHERS=""
 
           while IFS= read -r commit; do
             [ -z "$commit" ] && continue
-            # Breaking Changes: feat!: または fix!: (スコープあり/なし)
-            if [[ "$commit" =~ ^(feat|fix)(\(.+\))?!:\ (.+) ]]; then
+            # Breaking Changes: feat!: / fix!: / perf!: (スコープあり/なし)
+            if [[ "$commit" =~ ^(feat|fix|perf)(\(.+\))?!:\ (.+) ]]; then
               BREAKING="${BREAKING}- ${BASH_REMATCH[3]}\n"
             # 新機能: feat:
             elif [[ "$commit" =~ ^feat(\(.+\))?:\ (.+) ]]; then
@@ -86,6 +87,9 @@ jobs:
             # パフォーマンス改善: perf:
             elif [[ "$commit" =~ ^perf(\(.+\))?:\ (.+) ]]; then
               PERF="${PERF}- ${BASH_REMATCH[2]}\n"
+            # リバート: revert:
+            elif [[ "$commit" =~ ^revert(\(.+\))?:\ (.+) ]]; then
+              REVERT="${REVERT}- ${BASH_REMATCH[2]}\n"
             # スキップ: docs, chore, ci, test, refactor, style
             elif [[ "$commit" =~ ^(docs|chore|ci|test|refactor|style):\ ]]; then
               continue
@@ -108,6 +112,9 @@ jobs:
           fi
           if [ -n "$PERF" ]; then
             NOTES="${NOTES}## ⚡ パフォーマンス改善\n${PERF}\n"
+          fi
+          if [ -n "$REVERT" ]; then
+            NOTES="${NOTES}## 🔄 リバート\n${REVERT}\n"
           fi
           if [ -n "$OTHERS" ]; then
             NOTES="${NOTES}## 📝 その他の変更\n${OTHERS}\n"

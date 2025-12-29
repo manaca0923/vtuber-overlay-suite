@@ -1975,4 +1975,157 @@ mod tests {
         drop(pool);
         let _ = std::fs::remove_file(&db_path);
     }
+
+    /// busy_timeout=0でのfail-fast動作テスト
+    ///
+    /// busy_timeout=0はSQLiteに「ロック待機しない」ことを指示する。
+    /// ロック競合時に即座にSQLITE_BUSYエラーが返され、待機しないことを検証。
+    /// これにより、システムがロック競合を迅速に検出してスキップ/リトライできる。
+    #[tokio::test]
+    async fn test_busy_timeout_zero_fail_fast() {
+        use sqlx::sqlite::SqliteConnectOptions;
+        use tokio::sync::oneshot;
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!("fail_fast_test_{}.db", std::process::id()));
+
+        // busy_timeout=0のプールを作成（ロック待機しない設定）
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true)
+            .busy_timeout(std::time::Duration::from_millis(0));
+
+        // 2接続のプールを作成（1つはロック保持用、1つはテスト用）
+        let pool = SqlitePoolOptions::new()
+            .max_connections(2)
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect_with(connect_options)
+            .await
+            .unwrap();
+
+        create_test_table(&pool).await;
+
+        // 実データが存在する状態でのfail-fast動作を検証するため、初期データを挿入
+        // 空テーブルでもEXCLUSIVEロックは取得可能だが、本番環境に近い状態でテスト
+        let initial_msg = create_test_message("fail_fast_initial", "Initial message");
+        sqlx::query(
+            r#"INSERT INTO comment_logs
+            (id, youtube_id, message, author_name, author_channel_id, author_image_url,
+             is_owner, is_moderator, is_member, message_type, message_data, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&initial_msg.id)
+        .bind(&initial_msg.id)
+        .bind(&initial_msg.message)
+        .bind(&initial_msg.author_name)
+        .bind(&initial_msg.author_channel_id)
+        .bind(&initial_msg.author_image_url)
+        .bind(initial_msg.is_owner)
+        .bind(initial_msg.is_moderator)
+        .bind(initial_msg.is_member)
+        .bind("text")
+        .bind::<Option<String>>(None)
+        .bind(initial_msg.published_at.to_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 接続1でEXCLUSIVEトランザクションを開始してロックを保持
+        let (tx_locked, rx_locked) = oneshot::channel::<()>();
+        let (tx_release, rx_release) = oneshot::channel::<()>();
+
+        let pool_clone = pool.clone();
+
+        let lock_task = tokio::spawn(async move {
+            let mut conn = pool_clone.acquire().await.unwrap();
+
+            // EXCLUSIVEトランザクションでテーブルをロック
+            // BEGIN EXCLUSIVEは即座にEXCLUSIVEロックを取得
+            sqlx::query("BEGIN EXCLUSIVE")
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+
+            // ロック取得を通知
+            let _ = tx_locked.send(());
+
+            // 解放シグナルを待つ
+            let _ = rx_release.await;
+
+            // トランザクション終了
+            sqlx::query("COMMIT").execute(&mut *conn).await.unwrap();
+        });
+
+        // ロックが取得されるのを待つ
+        rx_locked.await.unwrap();
+
+        // 接続2で書き込みを試みる（busy_timeout=0なので即座に失敗するはず）
+        let mut conn2 = pool.acquire().await.unwrap();
+
+        // 計測はacquire後から開始（INSERT実行時間のみを計測）
+        let start = Instant::now();
+
+        // busy_timeout=0を明示的に設定（プール設定が反映されていることを確認）
+        let timeout_check: (i64,) = sqlx::query_as("PRAGMA busy_timeout")
+            .fetch_one(&mut *conn2)
+            .await
+            .unwrap();
+        assert_eq!(
+            timeout_check.0, 0,
+            "busy_timeout should be 0 for fail-fast test"
+        );
+
+        // 書き込みを試みる（EXCLUSIVEロック中なので失敗するはず）
+        let result = sqlx::query(
+            r#"INSERT INTO comment_logs
+            (id, youtube_id, message, author_name, author_channel_id, author_image_url,
+             is_owner, is_moderator, is_member, message_type, message_data, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind("fail_fast_attempt")
+        .bind("fail_fast_attempt")
+        .bind("This should fail fast")
+        .bind("TestUser")
+        .bind("UC123")
+        .bind("https://example.com/icon.png")
+        .bind(false)
+        .bind(false)
+        .bind(false)
+        .bind("text")
+        .bind::<Option<String>>(None)
+        .bind(Utc::now().to_rfc3339())
+        .execute(&mut *conn2)
+        .await;
+
+        let elapsed = start.elapsed();
+
+        // エラーが発生すること
+        assert!(result.is_err(), "Write should fail due to lock");
+
+        // SQLITE_BUSYエラーであること
+        let err = result.unwrap_err();
+        assert!(
+            is_sqlite_busy_error(&err),
+            "Error should be SQLITE_BUSY, got: {:?}",
+            err
+        );
+
+        // 即座に失敗すること（100ms以内 = 待機していない）
+        // busy_timeout=0なのでロック待機せずに即座にエラーが返されるはず
+        // 閾値100msはCI環境でも十分なマージンを持った値（通常は数ms以内で完了）
+        assert!(
+            elapsed.as_millis() < 100,
+            "busy_timeout=0 should fail immediately without waiting, took {}ms",
+            elapsed.as_millis()
+        );
+
+        // ロック保持タスクを解放
+        drop(conn2);
+        let _ = tx_release.send(());
+        lock_task.await.unwrap();
+
+        // クリーンアップ
+        drop(pool);
+        let _ = std::fs::remove_file(&db_path);
+    }
 }

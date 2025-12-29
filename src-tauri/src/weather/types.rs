@@ -227,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn test_geocoding_result_optional_fields() {
+    fn test_geocoding_response_optional_fields() {
         // countryとadmin1がオプションの場合
         let json = r#"{
             "results": [

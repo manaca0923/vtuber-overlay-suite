@@ -1446,11 +1446,12 @@ mod tests {
         // 非常に遅いディスク/CI環境では予算超過でスキップが発生しフレーキーになる可能性がある
         // 将来的にはテスト用に予算を注入可能にすることを検討（docs/900_tasks.md参照）
         use std::sync::Arc;
+        use tempfile::NamedTempFile;
         use tokio::sync::Barrier;
 
-        // テンポラリファイルを使用
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("concurrent_test_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // ファイルベースのプールを作成
         let pool = create_file_based_pool(&db_path).await;
@@ -1510,19 +1511,19 @@ mod tests {
             .unwrap();
         assert_eq!(count.0, 60, "All 60 messages should be saved despite concurrency");
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
     async fn test_busy_timeout_is_restored_after_retry() {
         // save_chunk_with_retry後にbusy_timeoutがデフォルト値に復元されることを確認
         // プール内接続への短いタイムアウト漏れを防ぐ
+        use tempfile::NamedTempFile;
 
-        // テンポラリファイルを使用（in-memoryではPRAGMAの検証が難しい）
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("timeout_restore_test_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成（in-memoryではPRAGMAの検証が難しい）
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         let pool = create_file_based_pool(&db_path).await;
         create_test_table(&pool).await;
@@ -1554,21 +1555,22 @@ mod tests {
             timeout.0
         );
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(conn);
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
     async fn test_single_connection_pool_timeout_restoration() {
         // 単一接続プールでbusy_timeout復元を厳密にテスト
         // 同じコネクションが再利用されるため、復元を確実に検証できる
+        use tempfile::NamedTempFile;
 
         use sqlx::sqlite::SqliteConnectOptions;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("single_conn_test_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // プールのデフォルトbusy_timeoutを5000msに設定
         let connect_options = SqliteConnectOptions::new()
@@ -1605,10 +1607,9 @@ mod tests {
             timeout.0
         );
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(conn);
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
@@ -1616,11 +1617,13 @@ mod tests {
         // 非デフォルトbusy_timeout（150ms）でプールを作成し、
         // save_chunk_with_retry後に元の値（150ms）に復元されることを確認
         // 定数5000msではなく、プール設定に依存しない復元を検証
+        use tempfile::NamedTempFile;
 
         use sqlx::sqlite::SqliteConnectOptions;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("non_default_timeout_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // 非デフォルトbusy_timeout（150ms）でプールを作成
         let connect_options = SqliteConnectOptions::new()
@@ -1657,10 +1660,9 @@ mod tests {
             timeout.0
         );
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(conn);
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
@@ -1751,10 +1753,13 @@ mod tests {
         // フォールバックパス（save_chunk_individually）でもbusy_timeoutが復元されることを確認
         // リトライパスの復元テストと同様のカバレッジ
 
+        use tempfile::NamedTempFile;
+
         use sqlx::sqlite::SqliteConnectOptions;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("fallback_restore_test_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // プールのデフォルトbusy_timeoutを3000msに設定
         // 接続タイムアウトも設定（テスト用）
@@ -1801,10 +1806,9 @@ mod tests {
             .unwrap();
         assert_eq!(count.0, 1, "Message should be saved via fallback");
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(conn);
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
@@ -1843,14 +1847,13 @@ mod tests {
     async fn test_fallback_restores_busy_timeout_single_connection() {
         // 単一接続プールでフォールバックパスのbusy_timeout復元を厳密に検証
         // 2接続プールでは同じ接続かどうかが不明確なため、このテストで確実に同一接続を検証
+        use tempfile::NamedTempFile;
 
         use sqlx::sqlite::SqliteConnectOptions;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!(
-            "fallback_restore_single_test_{}.db",
-            std::process::id()
-        ));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // プールのデフォルトbusy_timeoutを2500msに設定（3000msと異なる値で区別）
         let connect_options = SqliteConnectOptions::new()
@@ -1893,21 +1896,22 @@ mod tests {
             .unwrap();
         assert_eq!(count.0, 1, "Message should be saved via fallback");
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(conn);
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
     async fn test_original_timeout_zero_is_clamped() {
         // original_timeout == 0（SQLiteデフォルト: 制限なし）の場合に
         // 無限ブロックせず、MAX_BUSY_TIMEOUT_PER_ATTEMPT_MSでクランプされることを確認
+        use tempfile::NamedTempFile;
 
         use sqlx::sqlite::SqliteConnectOptions;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("zero_timeout_test_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // busy_timeoutを0msに設定（SQLiteデフォルト: 制限なし）
         // SqliteConnectOptionsでbusy_timeout(0)を設定するのは難しいため、
@@ -1959,9 +1963,8 @@ mod tests {
             .unwrap();
         assert_eq!(count.0, 1, "Message should be saved");
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     /// pool.acquire()タイムアウト時のスキップ動作テスト
@@ -1971,14 +1974,14 @@ mod tests {
     /// これにより、接続プールが枯渇した状況でも適切にフォールバックすることを検証。
     #[tokio::test]
     async fn test_pool_acquire_timeout_returns_busy() {
+        use tempfile::NamedTempFile;
+
         use sqlx::sqlite::SqliteConnectOptions;
         use tokio::sync::oneshot;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!(
-            "acquire_timeout_test_{}.db",
-            std::process::id()
-        ));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // 単一接続プールを作成（acquire_timeoutは短め）
         let connect_options = SqliteConnectOptions::new()
@@ -2056,9 +2059,8 @@ mod tests {
             "No messages should be saved when acquire timed out"
         );
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     /// busy_timeout=0でのfail-fast動作テスト
@@ -2068,11 +2070,14 @@ mod tests {
     /// これにより、システムがロック競合を迅速に検出してスキップ/リトライできる。
     #[tokio::test]
     async fn test_busy_timeout_zero_fail_fast() {
+        use tempfile::NamedTempFile;
+
         use sqlx::sqlite::SqliteConnectOptions;
         use tokio::sync::oneshot;
 
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("fail_fast_test_{}.db", std::process::id()));
+        // tempfileで自動削除されるDBファイルを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
 
         // busy_timeout=0のプールを作成（ロック待機しない設定）
         let connect_options = SqliteConnectOptions::new()
@@ -2209,9 +2214,8 @@ mod tests {
         let _ = tx_release.send(());
         lock_task.await.unwrap();
 
-        // クリーンアップ
+        // temp_fileがスコープを抜けると自動削除
         drop(pool);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     /// デッドライン強制テスト

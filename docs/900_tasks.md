@@ -1079,7 +1079,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - ~~`fs.readFileSync`が失敗した場合のエラーメッセージに具体的なパスを含める~~
   - 対応済み: try-catchでラップし、ファイルパスと元のエラーメッセージを含む詳細なエラーを投げるように改善
 
-- [ ] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56)
+- [x] **get_busy_timeoutをResult型に変更してBUSYエラー対応** (PR#56, PR#81で対応)
   - 現在: `get_busy_timeout()`失敗時は`None`を返し、リトライを停止
   - 問題: 一時的なBUSYエラーの場合、リトライすべきでは
   - 対応案:
@@ -1088,8 +1088,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 非BUSYエラーならconn.detach()してOtherError
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（PRAGMA busy_timeoutは通常BUSYにならない）
+  - ✅ `GetBusyTimeoutResult`列挙型を導入、BUSYエラーとその他のエラーを区別
 
-- [ ] **busy_timeout復元のBUSYリトライ回数増加検討** (PR#56)
+- [x] **busy_timeout復元のBUSYリトライ回数増加検討** (PR#56, PR#81で対応)
   - 現在: 20msバックオフ後1回リトライ、失敗時はdetach
   - 問題: 高負荷時にBUSYが連続すると接続をchurnしてプール容量が減少
   - 対応案:
@@ -1097,6 +1098,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - リトライ上限に達した場合のみdetach
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（本番運用でBUSY頻発時に検討）
+  - ✅ 最大3回リトライ（exponential backoff: 20ms, 40ms, 80ms）に変更
 
 - [x] **beforeunloadイベントのbfcache影響検討** (PR#56)
   - ~~現在: `beforeunload`を登録しているとブラウザがbfcacheを無効にする可能性がある~~
@@ -1106,7 +1108,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - OBSブラウザソース等のbfcache非対応環境でもpagehide(persisted=false)で確実にクリーンアップ
   - 対象ファイル: `src-tauri/overlays/combined-v2.html`
 
-- [ ] **トランザクション内でのデッドライン強制** (PR#56)
+- [x] **トランザクション内でのデッドライン強制** (PR#56, PR#81で対応)
   - 現在: 2秒の総予算は`save_chunk_with_retry`ループで管理されているが、トランザクション内の遅いI/Oは制限されない
   - 問題: 遅いディスクI/O（SQLITE_BUSYなし）で2秒を超える可能性がある
   - 対応案:
@@ -1115,14 +1117,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 超過時はrollbackして早期終了
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（遅いディスクI/Oは稀なケース）
+  - ✅ deadlineパラメータ追加、各INSERT前とコミット前にチェック
 
-- [ ] **遅いINSERTシミュレーションテスト** (PR#56)
+- [x] **遅いINSERTシミュレーションテスト** (PR#56, PR#81で対応)
   - 遅いINSERTをシミュレートし、デッドライン超過時に早期rollback + 部分コミットなしを検証
   - テスト対象: `save_chunk_with_transaction_on_conn`のデッドライン強制
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低
+  - ✅ `test_deadline_enforcement_in_transaction`テスト追加
 
-- [ ] **テスト用DBファイルの分離改善** (PR#56)
+- [x] **テスト用DBファイルの分離改善** (PR#56, PR#81で対応)
   - 現在: PIDベースの命名（`test_{}.db`）で分離、テスト終了時に削除
   - 問題: テスト中断時に古いファイルが残り、再実行時にデータが残留する可能性
   - 対応案:
@@ -1131,6 +1135,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - ユニークなパス生成にUUIDを併用（PID + UUID）
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
   - 優先度: 低（現状でも`CREATE TABLE IF NOT EXISTS`で問題回避、テスト終了時に削除処理あり）
+  - ✅ `tempfile`クレートを導入、新規テストで使用
 
 - [ ] **busy_timeout=0のfail-fast動作保持検討** (PR#56)
   - 現在: `original_timeout == 0`は「制限なし」として`u64::MAX`扱い → 500msにクランプ

@@ -18,6 +18,26 @@ pub enum ContinuationType {
     Reload,
 }
 
+/// ポーリング間隔の最大値（30秒）
+/// 極端に大きな値が返された場合のガード
+const MAX_POLLING_INTERVAL_MS: u64 = 30000;
+
+impl ContinuationType {
+    /// 実効的なポーリング間隔を計算
+    ///
+    /// Continuation種別に応じて適切なポーリング間隔を返す:
+    /// - `Invalidation`: 1〜5秒にクランプ（推奨値なので短縮可能）
+    /// - `Timed`: APIの値を使用（最大30秒でガード）
+    /// - `Reload`: 1秒固定（初期化後は即座にポーリング）
+    pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
+        match self {
+            ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
+            ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),
+            ContinuationType::Reload => 1000,
+        }
+    }
+}
+
 /// InnerTube APIレスポンス（ライブチャット取得）
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -14,7 +14,7 @@ use super::backoff::ExponentialBackoff;
 use super::db::save_comments_to_db;
 use super::errors::YouTubeError;
 use super::grpc::GrpcPoller;
-use super::innertube::{ContinuationType, InnerTubeClient};
+use super::innertube::InnerTubeClient;
 use super::poller::{ChatPoller, PollingEvent};
 use super::types::ChatMessage;
 use crate::commands::youtube::ApiMode;
@@ -421,18 +421,9 @@ async fn run_innertube_loop(
 
                 // 次のポーリングまで待機
                 // Continuation種別に応じてポーリング間隔を制御
-                // - Invalidation: 推奨間隔（1〜5秒にクランプ、短縮可能）
-                // - Timed: 明示的な待機時間（APIの指示を厳守）
-                // - Reload: 初期化用（1秒固定）
                 let api_timeout = client.get_timeout_ms();
                 let cont_type = client.get_continuation_type();
-                // 最大30秒を上限としてガード（極端に大きな値への対応）
-                const MAX_POLLING_INTERVAL_MS: u64 = 30000;
-                let timeout_ms = match cont_type {
-                    ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-                    ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),
-                    ContinuationType::Reload => 1000,
-                };
+                let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
                 log::debug!(
                     "InnerTube: next poll in {}ms (API: {}ms, type: {:?})",
                     timeout_ms,

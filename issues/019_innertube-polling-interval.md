@@ -35,19 +35,27 @@ InnerTube APIは3種類のContinuationデータを返す:
 
 ```rust
 // src-tauri/src/youtube/innertube/types.rs
+const MAX_POLLING_INTERVAL_MS: u64 = 30000;
+
 pub enum ContinuationType {
     Invalidation,  // 推奨間隔（短縮可能）
     Timed,         // 明示的待機（厳守）
     Reload,        // 初期化・リプレイ用
 }
 
-// src-tauri/src/youtube/unified_poller.rs
-const MAX_POLLING_INTERVAL_MS: u64 = 30000;  // 最大30秒ガード
-let timeout_ms = match continuation_type {
-    ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-    ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),  // 厳守だが最大値ガード
-    ContinuationType::Reload => 1000,
-};
+impl ContinuationType {
+    /// 実効的なポーリング間隔を計算（ロジック一元化）
+    pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
+        match self {
+            ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
+            ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),
+            ContinuationType::Reload => 1000,
+        }
+    }
+}
+
+// 使用例（unified_poller.rs, youtube.rs）
+let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
 ```
 
 ## 参考実装

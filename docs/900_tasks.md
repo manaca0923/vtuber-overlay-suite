@@ -300,10 +300,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### コード品質
 
-- [ ] **InnerTubeポーリング間隔計算ロジックの重複削減** (PR#99)
-  - 現在: `youtube.rs`と`unified_poller.rs`に同じロジックが存在
-  - 改善案: `InnerTubeClient`に`get_effective_timeout_ms()`メソッドを追加
-  - 優先度: 低（現状でも動作に問題なし）
+- [x] **InnerTubeポーリング間隔計算ロジックの重複削減** (PR#99)
+  - 実装済み: `ContinuationType::effective_timeout_ms()`メソッドを追加
+  - `youtube.rs`と`unified_poller.rs`の重複ロジックを統一
+  - `MAX_POLLING_INTERVAL_MS`定数も`types.rs`に一元化
 
 - [x] **Rust側WidgetVisibilitySettings型の重複削減** (PR#93, PR#94で実装)
   - 実装済み: `types.rs`に共通型`WidgetVisibilitySettings`を定義

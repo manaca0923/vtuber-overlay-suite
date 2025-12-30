@@ -123,6 +123,11 @@ pub fn create_superchat_payload(message: &ChatMessage) -> Option<SuperchatPayloa
 
 /// 金額表示文字列からマイクロ単位の金額を推定
 /// 例: "¥1,000" → 1_000_000_000
+///
+/// ## エッジケース
+/// - 空文字列や通貨記号のみの場合は 0 を返す（Tier 1扱い）
+/// - 複数の通貨記号（例: "A$100.00"）も正しく処理される
+/// - パース失敗時はwarnログを出力して 0 を返す
 fn parse_amount_micros(amount_str: &str) -> u64 {
     // 数字とピリオド、カンマのみを抽出
     let digits: String = amount_str

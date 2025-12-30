@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde_json::json;
 use std::sync::OnceLock;
 
-use super::types::InnerTubeChatResponse;
+use super::types::{ContinuationType, InnerTubeChatResponse};
 use crate::youtube::errors::YouTubeError;
 
 const INNERTUBE_API_URL: &str = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
@@ -112,6 +112,8 @@ pub struct InnerTubeClient {
     api_key: Option<String>,
     /// 動的に取得したクライアントバージョン（取得失敗時はFALLBACK_CLIENT_VERSIONを使用）
     client_version: String,
+    /// 現在のContinuation種別（ポーリング間隔制御に使用）
+    continuation_type: ContinuationType,
 }
 
 impl InnerTubeClient {
@@ -132,6 +134,7 @@ impl InnerTubeClient {
             timeout_ms: 5000,
             api_key: None,
             client_version: FALLBACK_CLIENT_VERSION.to_string(),
+            continuation_type: ContinuationType::Invalidation, // 初期値（最も一般的）
         })
     }
 
@@ -361,10 +364,15 @@ impl InnerTubeClient {
             .map_err(|e| YouTubeError::ParseError(format!("InnerTube parse error: {}", e)))?;
 
         // 次回用のcontinuationを更新
-        if let Some((next_continuation, timeout_ms)) = data.get_next_continuation() {
+        if let Some((next_continuation, timeout_ms, cont_type)) = data.get_next_continuation() {
             self.continuation = Some(next_continuation);
             self.timeout_ms = timeout_ms;
-            log::debug!("Updated continuation, next timeout: {}ms", timeout_ms);
+            self.continuation_type = cont_type;
+            log::debug!(
+                "Updated continuation, next timeout: {}ms, type: {:?}",
+                timeout_ms,
+                cont_type
+            );
         } else {
             log::warn!("No next continuation found in response");
         }
@@ -393,6 +401,16 @@ impl InnerTubeClient {
         self.timeout_ms
     }
 
+    /// 現在のContinuation種別を取得
+    ///
+    /// ポーリング間隔の制御に使用:
+    /// - `Invalidation`: 推奨間隔（短縮可能、1〜5秒にクランプ）
+    /// - `Timed`: 明示的な待機時間（APIの値を厳守）
+    /// - `Reload`: 初期化用（1秒固定）
+    pub fn get_continuation_type(&self) -> ContinuationType {
+        self.continuation_type
+    }
+
     /// 初期化済みかどうか
     pub fn is_initialized(&self) -> bool {
         self.continuation.is_some()
@@ -402,6 +420,7 @@ impl InnerTubeClient {
     pub fn reset(&mut self) {
         self.continuation = None;
         self.timeout_ms = 5000;
+        self.continuation_type = ContinuationType::Invalidation;
     }
 }
 
@@ -411,6 +430,7 @@ impl std::fmt::Debug for InnerTubeClient {
             .field("video_id", &self.video_id)
             .field("initialized", &self.is_initialized())
             .field("timeout_ms", &self.timeout_ms)
+            .field("continuation_type", &self.continuation_type)
             .finish()
     }
 }

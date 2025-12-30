@@ -300,6 +300,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### コード品質
 
+- [x] **InnerTubeポーリング間隔計算ロジックの重複削減** (PR#99)
+  - 実装済み: `ContinuationType::effective_timeout_ms()`メソッドを追加
+  - `youtube.rs`と`unified_poller.rs`の重複ロジックを統一
+  - `MAX_POLLING_INTERVAL_MS`定数も`types.rs`に一元化
+
 - [x] **Rust側WidgetVisibilitySettings型の重複削減** (PR#93, PR#94で実装)
   - 実装済み: `types.rs`に共通型`WidgetVisibilitySettings`を定義
   - `overlay.rs`と`http.rs`から重複定義を削除し、共通型をインポート
@@ -330,6 +335,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 状態初期化ロジックをuseEffect外に移動
     - または正当なパターンの場合はeslint-disableコメントで対応
   - 優先度: 低（動作に問題なし、パフォーマンス影響も軽微）
+
+- [ ] **ContinuationType へのDefaultトレイト実装** (PR#99レビューで提案)
+  - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
+  - `impl Default for ContinuationType { fn default() -> Self { Self::Invalidation } }`
+  - client.rsの初期化コメントが不要になる
+  - 優先度: 低（任意の改善提案）
+
+- [ ] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案)
+  - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
+  - `MAX_POLLING_INTERVAL_MS`, `MIN_POLLING_INTERVAL_MS` になぜこの値を選んだか追記
+  - メンテナンス性向上のため
+  - 優先度: 低（任意の改善提案）
 
 ### テスト（推奨）
 

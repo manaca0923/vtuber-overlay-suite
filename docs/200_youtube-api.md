@@ -135,17 +135,23 @@ POST https://www.youtube.com/youtubei/v1/live_chat/get_live_chat
 
 ### ポーリング間隔
 
-| ソース | 間隔 |
-|--------|------|
-| `timeoutMs`（レスポンス） | 通常 5000ms |
-| 最小間隔（強制） | 3000ms |
-| エラー時 | 指数バックオフ（5s→10s→20s→...→60s） |
+InnerTube APIは3種類のContinuationデータを返し、それぞれポーリング間隔の扱いが異なる。
+
+| Continuation Type | 間隔制御 | 根拠 |
+|------------------|---------|------|
+| `invalidationContinuationData` | 1〜5秒にクランプ | `timeoutMs`はOptional、推奨値なので短縮可能 |
+| `timedContinuationData` | 500ms〜30秒でガード | 明示的な待機指示を尊重しつつ、極端な値から保護 |
+| `reloadContinuationData` | 1秒固定 | 初期化・リプレイ用、すぐに次のポーリングへ |
+
+**エラー時**: 指数バックオフ（5s→10s→20s→...→60s）、ジッタ付き
 
 ```rust
-// 実装例
-let interval = response.timeout_ms.unwrap_or(5000).max(3000);
-tokio::time::sleep(Duration::from_millis(interval as u64)).await;
+// 実装例（ContinuationType::effective_timeout_ms()を使用）
+let timeout_ms = continuation_type.effective_timeout_ms(api_timeout);
+tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
 ```
+
+> **注意**: `timedContinuationData`の`timeoutMs`を短縮するとAPIの仕様違反となるリスクがあるため、基本的にAPIの値を使用する。ただし、極端な値（0や非常に大きな値）への対策としてガードを設けている。
 
 ### エラーハンドリング
 

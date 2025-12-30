@@ -2,6 +2,46 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Continuation種別（ポーリング間隔の制御に使用）
+///
+/// InnerTube APIは3種類のContinuationデータを返す:
+/// - `invalidationContinuationData`: timeout_msはOptional、推奨間隔（短縮可能）
+/// - `timedContinuationData`: timeout_msは必須、明示的な待機時間（厳守）
+/// - `reloadContinuationData/replay`: 初期化・リプレイ用
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContinuationType {
+    /// invalidationContinuationData - 推奨間隔（短縮可能）
+    Invalidation,
+    /// timedContinuationData - 明示的な待機時間（厳守）
+    Timed,
+    /// reloadContinuationData/replay - 初期化・リプレイ用
+    Reload,
+}
+
+/// ポーリング間隔の最大値（30秒）
+/// 極端に大きな値が返された場合のガード
+const MAX_POLLING_INTERVAL_MS: u64 = 30000;
+
+/// ポーリング間隔の最小値（500ms）
+/// 極端に短い値によるサーバー過負荷を防止
+const MIN_POLLING_INTERVAL_MS: u64 = 500;
+
+impl ContinuationType {
+    /// 実効的なポーリング間隔を計算
+    ///
+    /// Continuation種別に応じて適切なポーリング間隔を返す:
+    /// - `Invalidation`: 1〜5秒にクランプ（推奨値なので短縮可能）
+    /// - `Timed`: APIの値を使用（500ms〜30秒でガード）
+    /// - `Reload`: 1秒固定（初期化後は即座にポーリング）
+    pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
+        match self {
+            ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
+            ContinuationType::Timed => api_timeout.clamp(MIN_POLLING_INTERVAL_MS, MAX_POLLING_INTERVAL_MS),
+            ContinuationType::Reload => 1000,
+        }
+    }
+}
+
 /// InnerTube APIレスポンス（ライブチャット取得）
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -243,7 +283,11 @@ pub struct BadgeIcon {
 
 impl InnerTubeChatResponse {
     /// 次回取得用のcontinuationトークンを抽出
-    pub fn get_next_continuation(&self) -> Option<(String, u64)> {
+    ///
+    /// # Returns
+    /// - `(continuation_token, timeout_ms, continuation_type)` のタプル
+    /// - `continuation_type` はポーリング間隔の制御に使用
+    pub fn get_next_continuation(&self) -> Option<(String, u64, ContinuationType)> {
         let continuation = self
             .continuation_contents
             .as_ref()?
@@ -255,18 +299,78 @@ impl InnerTubeChatResponse {
 
         // 優先順位: invalidation > timed > replay
         if let Some(data) = &continuation.invalidation_continuation_data {
-            return Some((data.continuation.clone(), data.timeout_ms.unwrap_or(5000)));
+            return Some((
+                data.continuation.clone(),
+                data.timeout_ms.unwrap_or(5000),
+                ContinuationType::Invalidation,
+            ));
         }
         if let Some(data) = &continuation.timed_continuation_data {
-            return Some((data.continuation.clone(), data.timeout_ms));
+            return Some((
+                data.continuation.clone(),
+                data.timeout_ms,
+                ContinuationType::Timed,
+            ));
         }
         if let Some(data) = &continuation.live_chat_replay_continuation_data {
             return Some((
                 data.continuation.clone(),
                 data.time_until_last_message_msec.unwrap_or(5000),
+                ContinuationType::Reload,
             ));
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effective_timeout_ms_invalidation() {
+        let ct = ContinuationType::Invalidation;
+        // 下限クランプ（1000ms未満は1000msに）
+        assert_eq!(ct.effective_timeout_ms(0), 1000);
+        assert_eq!(ct.effective_timeout_ms(500), 1000);
+        assert_eq!(ct.effective_timeout_ms(999), 1000);
+        // 範囲内（そのまま）
+        assert_eq!(ct.effective_timeout_ms(1000), 1000);
+        assert_eq!(ct.effective_timeout_ms(3000), 3000);
+        assert_eq!(ct.effective_timeout_ms(5000), 5000);
+        // 上限クランプ（5000ms超は5000msに）
+        assert_eq!(ct.effective_timeout_ms(5001), 5000);
+        assert_eq!(ct.effective_timeout_ms(10000), 5000);
+    }
+
+    #[test]
+    fn test_effective_timeout_ms_timed() {
+        let ct = ContinuationType::Timed;
+        // 下限ガード（500ms未満は500msに）
+        assert_eq!(ct.effective_timeout_ms(0), 500);
+        assert_eq!(ct.effective_timeout_ms(100), 500);
+        assert_eq!(ct.effective_timeout_ms(499), 500);
+        // 範囲内はそのまま
+        assert_eq!(ct.effective_timeout_ms(500), 500);
+        assert_eq!(ct.effective_timeout_ms(1000), 1000);
+        assert_eq!(ct.effective_timeout_ms(5000), 5000);
+        assert_eq!(ct.effective_timeout_ms(29999), 29999);
+        // 最大値ガード（30000ms）
+        assert_eq!(ct.effective_timeout_ms(30000), 30000);
+        assert_eq!(ct.effective_timeout_ms(30001), 30000);
+        assert_eq!(ct.effective_timeout_ms(60000), 30000);
+        assert_eq!(ct.effective_timeout_ms(u64::MAX), 30000);
+    }
+
+    #[test]
+    fn test_effective_timeout_ms_reload() {
+        let ct = ContinuationType::Reload;
+        // 常に1000ms固定
+        assert_eq!(ct.effective_timeout_ms(0), 1000);
+        assert_eq!(ct.effective_timeout_ms(1000), 1000);
+        assert_eq!(ct.effective_timeout_ms(5000), 1000);
+        assert_eq!(ct.effective_timeout_ms(99999), 1000);
+        assert_eq!(ct.effective_timeout_ms(u64::MAX), 1000);
     }
 }

@@ -420,7 +420,16 @@ async fn run_innertube_loop(
                 }
 
                 // 次のポーリングまで待機
-                let timeout_ms = client.get_timeout_ms();
+                // Continuation種別に応じてポーリング間隔を制御
+                let api_timeout = client.get_timeout_ms();
+                let cont_type = client.get_continuation_type();
+                let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
+                log::debug!(
+                    "InnerTube: next poll in {}ms (API: {}ms, type: {:?})",
+                    timeout_ms,
+                    api_timeout,
+                    cont_type
+                );
                 tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
             }
             Err(e) => {

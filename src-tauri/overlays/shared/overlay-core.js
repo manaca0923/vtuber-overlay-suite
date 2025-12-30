@@ -16,6 +16,13 @@ const SETTINGS_FETCH_TIMEOUT = 3000;
 const MAX_RECONNECT_DELAY = 30000;
 const INITIAL_RECONNECT_DELAY = 1000;
 
+// issues/020: postMessage用のtrusted origins定数
+const TRUSTED_ORIGINS = [
+  'http://localhost:5173',  // Vite dev server
+  'http://localhost:1420',  // Tauri dev
+  'tauri://localhost'       // Tauri production
+];
+
 // =============================================================================
 // ユーティリティ関数
 // =============================================================================
@@ -281,6 +288,71 @@ class UrlParamsParser {
 }
 
 // =============================================================================
+// PostMessageハンドラ
+// =============================================================================
+
+/**
+ * プレビュー専用のpostMessageハンドラ
+ * issues/010: WebSocketManagerと同様のcleanup()/reinitialize()パターンを適用
+ */
+class PostMessageHandler {
+  constructor(options = {}) {
+    this.trustedOrigins = options.trustedOrigins || TRUSTED_ORIGINS;
+    this.onSettingsUpdate = options.onSettingsUpdate || (() => {});
+    this._handleMessage = this._handleMessage.bind(this);
+    this.isActive = true;
+    window.addEventListener('message', this._handleMessage);
+  }
+
+  _handleMessage(event) {
+    // issues/010: シャットダウン中は処理しない
+    if (!this.isActive) return;
+
+    // issues/002: origin検証（セキュリティ）
+    if (!this.trustedOrigins.includes(event.origin)) {
+      // 開発時のデバッグ用（プロダクションでは削除可能）
+      // console.warn('[PostMessage] Untrusted origin:', event.origin);
+      return;
+    }
+
+    const data = event.data;
+
+    // issues/013: 防御的プログラミング - オブジェクト型のガード
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return;
+    }
+
+    if (data.type === 'preview:settings:update') {
+      // issues/013: payloadの存在チェック
+      if (!data.payload || typeof data.payload !== 'object' || Array.isArray(data.payload)) {
+        console.warn('[PostMessage] Invalid payload');
+        return;
+      }
+      this.onSettingsUpdate(data.payload);
+    }
+  }
+
+  /**
+   * クリーンアップ（ページ遷移時）
+   * issues/010: WebSocketManagerと同様のcleanup()パターン
+   */
+  cleanup() {
+    this.isActive = false;
+    window.removeEventListener('message', this._handleMessage);
+  }
+
+  /**
+   * 再初期化（bfcache復元時）
+   * issues/010: bfcache復元時の再有効化
+   */
+  reinitialize() {
+    if (this.isActive) return; // 既にアクティブならスキップ
+    this.isActive = true;
+    window.addEventListener('message', this._handleMessage);
+  }
+}
+
+// =============================================================================
 // セットリスト更新ヘルパー
 // =============================================================================
 
@@ -414,11 +486,13 @@ window.OverlayCore = {
   WS_URL,
   API_BASE_URL,
   SETTINGS_FETCH_TIMEOUT,
+  TRUSTED_ORIGINS,
 
   // クラス
   WebSocketManager,
   SettingsFetcher,
   UrlParamsParser,
+  PostMessageHandler,
 
   // ヘルパー関数
   updateSetlistDisplay,

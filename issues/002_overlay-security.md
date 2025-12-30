@@ -153,6 +153,32 @@ function escapeHtml(text) {
 
 ---
 
+## 5. postMessageのtargetOrigin明示化
+
+### 指摘内容 (PR#103)
+`postMessage`の第2引数で`'*'`を使用すると、意図しない受信者にメッセージが送られるリスクがある。
+
+### 解決方法
+```typescript
+// NG: '*'はセキュリティ上のリスク
+iframeRef.current.contentWindow.postMessage(message, '*');
+
+// OK: targetOriginを明示
+const PREVIEW_ORIGIN = 'http://localhost:19800';
+iframeRef.current.contentWindow.postMessage(message, PREVIEW_ORIGIN);
+```
+
+### 今後の対策
+- `postMessage`使用時は常にtargetOriginを明示
+- 定数として定義し、送信先を明確化
+- 受信側（オーバーレイ）では`event.origin`を検証（issues/020参照: `TRUSTED_ORIGINS`）
+
+### 関連
+- 受信側のorigin検証: `overlay-core.js`の`PostMessageHandler`クラス
+- 信頼できるオリジンリスト: `TRUSTED_ORIGINS`定数
+
+---
+
 ## チェックリスト（オーバーレイ実装時）
 
 - [ ] URLパラメータはバリデーション済みか
@@ -161,3 +187,4 @@ function escapeHtml(text) {
 - [ ] 画像読み込み失敗時のフォールバックがあるか
 - [ ] `textContent`と`innerHTML`の使い分けは正しいか
 - [ ] `escapeHtml`は必要な箇所のみで使用しているか
+- [ ] `postMessage`のtargetOriginは明示されているか

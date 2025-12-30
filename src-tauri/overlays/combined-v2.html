@@ -145,6 +145,7 @@
       SETTINGS_FETCH_TIMEOUT,
       WebSocketManager,
       SettingsFetcher,
+      PostMessageHandler,
       updateSetlistDisplay,
       fetchLatestSetlist
     } = window.OverlayCore;
@@ -486,6 +487,16 @@
       }
     });
 
+    // ===== PostMessageハンドラ（プレビュー専用） =====
+    // 設定画面のiframeプレビューからの即時反映用
+    // OBS側のオーバーレイには影響なし（親ウィンドウが異なるため）
+    const postMessageHandler = new PostMessageHandler({
+      onSettingsUpdate: (payload) => {
+        // issues/013: 各フィールドの存在チェックはapplySettingsUpdate内で実施
+        applySettingsUpdate(payload);
+      }
+    });
+
     // ===== ウィンドウリサイズ =====
     let resizeTimeout;
     window.addEventListener('resize', () => {
@@ -546,6 +557,9 @@
       // WebSocketマネージャーのクリーンアップ（再接続タイマーも含む）
       wsManager.cleanup();
 
+      // PostMessageハンドラのクリーンアップ
+      postMessageHandler.cleanup();
+
       if (densityManager) {
         densityManager.destroy();
       }
@@ -591,6 +605,9 @@
 
         // WebSocketマネージャーを再初期化
         wsManager.reinitialize();
+
+        // PostMessageハンドラを再初期化（issues/010: bfcache復元時の対応）
+        postMessageHandler.reinitialize();
       }
     });
 

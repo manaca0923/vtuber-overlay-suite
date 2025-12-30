@@ -95,6 +95,17 @@ ws.onopen = () => {
       position: 'top' | 'bottom' | 'left' | 'right',
       showArtist: boolean,     // アーティスト表示
       fontSize: number         // フォントサイズ（px）
+    },
+    widget?: {                 // ウィジェット表示設定（オプショナル、v2レイアウト用）
+      clock: boolean,          // 時計（left.top）
+      weather: boolean,        // 天気（left.topBelow）
+      comment: boolean,        // コメント（left.middle）
+      superchat: boolean,      // スパチャ（left.lower）- T21以降で実装予定
+      logo: boolean,           // ロゴ（left.bottom）
+      setlist: boolean,        // セトリ（right.upper）
+      kpi: boolean,            // KPI（right.lowerLeft）
+      tanzaku: boolean,        // 短冊（right.lowerRight）
+      announcement: boolean    // 告知（right.bottom）
     }
   }
 }

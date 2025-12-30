@@ -699,7 +699,11 @@ mod tests {
 
         let _mock = server
             .mock("GET", "/videos")
-            .match_query(mockito::Matcher::Any)
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("key".into(), "test_api_key".into()),
+                mockito::Matcher::UrlEncoded("id".into(), "dQw4w9WgXcQ".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "id".into()),
+            ]))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(response_body.to_string())
@@ -808,7 +812,11 @@ mod tests {
 
         let _mock = server
             .mock("GET", "/videos")
-            .match_query(mockito::Matcher::Any)
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("key".into(), "test_api_key".into()),
+                mockito::Matcher::UrlEncoded("id".into(), "test_video".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "liveStreamingDetails".into()),
+            ]))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(response_body.to_string())
@@ -1045,7 +1053,11 @@ mod tests {
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
-            .match_query(mockito::Matcher::Any)
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("key".into(), "test_api_key".into()),
+                mockito::Matcher::UrlEncoded("liveChatId".into(), "test_chat_id".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "snippet,authorDetails".into()),
+            ]))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(response_body.to_string())
@@ -1072,7 +1084,12 @@ mod tests {
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
-            .match_query(mockito::Matcher::Any)
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("key".into(), "test_api_key".into()),
+                mockito::Matcher::UrlEncoded("liveChatId".into(), "test_chat_id".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "snippet,authorDetails".into()),
+                mockito::Matcher::UrlEncoded("pageToken".into(), "page_token".into()),
+            ]))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(response_body.to_string())

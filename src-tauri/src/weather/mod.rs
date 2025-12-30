@@ -723,10 +723,14 @@ mod tests {
         // Geocoding APIは成功
         let _geocoding_mock = mock_geocoding_success(&mut server).await;
 
-        // Weather APIも成功
+        // Weather APIも成功（緯度経度はmock_geocoding_successの値に合わせる）
         let _weather_mock = server
             .mock("GET", "/v1/forecast")
-            .match_query(mockito::Matcher::Any)
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("latitude".into(), "35.6895".into()),
+                mockito::Matcher::UrlEncoded("longitude".into(), "139.6917".into()),
+                mockito::Matcher::UrlEncoded("current".into(), "temperature_2m,relative_humidity_2m,weather_code,is_day".into()),
+            ]))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{

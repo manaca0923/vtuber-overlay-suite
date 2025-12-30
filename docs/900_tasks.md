@@ -323,6 +323,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 分割案: `types/settings.rs`, `types/websocket.rs` など
   - 優先度: 低（現時点では問題なし）
 
+- [ ] **react-hooks/set-state-in-effect警告の解消** (PR#97レビューで提案)
+  - 対象ファイル: `UpdateChecker.tsx`, `VideoIdModal.tsx`, `WizardStep2.tsx`
+  - 9個の警告が残存（useEffect内でのsetState呼び出し）
+  - 対応案:
+    - 状態初期化ロジックをuseEffect外に移動
+    - または正当なパターンの場合はeslint-disableコメントで対応
+  - 優先度: 低（動作に問題なし、パフォーマンス影響も軽微）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

@@ -106,6 +106,29 @@ PR#94で`WidgetVisibilitySettings`型の統合を実施。レビューでApprove
 
 これらは優先度低として`docs/900_tasks.md`に追記済み。
 
+## PR#95 設定型統合の実装
+
+PR#95でPR#94レビューの提案に基づき、残りの設定型を統合。
+
+### 変更内容
+
+1. **types.rs の変更**
+   - `CommentSettingsPayload` → `CommentSettings` にリネーム
+   - `SetlistSettingsPayload` → `SetlistSettings` にリネーム
+   - `WeatherSettings` は既に存在していたため変更なし
+   - `SettingsUpdatePayload` の参照を新しい型名に更新
+
+2. **overlay.rs の変更**
+   - 重複していた `CommentSettings`, `SetlistSettings`, `WeatherSettings` の定義を削除
+   - `types.rs` からインポートするように変更
+   - `broadcast_settings_update` を簡略化（手動フィールドコピーから直接渡しへ）
+
+3. **http.rs の変更**
+   - `CommentSettingsApi`, `SetlistSettingsApi`, `WeatherSettingsApi` の定義を削除
+   - `types.rs` から共通型をインポート
+   - `OverlaySettingsApiResponse` で共通型を使用
+   - `default_overlay_settings()` と `get_overlay_settings_api()` を更新
+
 ## 関連タスク
 
 - `docs/900_tasks.md` に「Rust側WidgetVisibilitySettings型の重複削減」: 完了

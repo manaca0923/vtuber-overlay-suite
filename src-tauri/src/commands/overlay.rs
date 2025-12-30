@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::server::types::{
-    CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition, WidgetVisibilitySettings,
+    CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, WeatherSettings,
+    WidgetVisibilitySettings, WsMessage,
 };
 use crate::AppState;
 
@@ -57,35 +58,6 @@ pub struct CommonSettings {
     pub primary_color: String,
     pub font_family: String,
     pub border_radius: u32,
-}
-
-/// コメントオーバーレイ設定
-/// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommentSettings {
-    pub enabled: bool,
-    pub position: CommentPosition,
-    pub show_avatar: bool,
-    pub font_size: u32,
-}
-
-/// セットリストオーバーレイ設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetlistSettings {
-    pub enabled: bool,
-    pub position: SetlistPosition,
-    pub show_artist: bool,
-    pub font_size: u32,
-}
-
-/// 天気ウィジェット設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WeatherSettings {
-    pub enabled: bool,
-    pub position: WeatherPosition,
 }
 
 /// オーバーレイ設定全体
@@ -167,34 +139,16 @@ pub async fn broadcast_settings_update(
     // サーバーサイドバリデーション
     validate_overlay_settings(&settings)?;
 
-    use crate::server::types::{
-        CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload,
-        WeatherSettingsPayload, WsMessage,
-    };
-
+    // 型が統一されたため、直接設定を渡せる
     let payload = SettingsUpdatePayload {
         theme: settings.theme.clone(),
         layout: settings.layout,
         primary_color: settings.common.primary_color.clone(),
         font_family: settings.common.font_family.clone(),
         border_radius: settings.common.border_radius,
-        comment: CommentSettingsPayload {
-            enabled: settings.comment.enabled,
-            position: settings.comment.position,
-            show_avatar: settings.comment.show_avatar,
-            font_size: settings.comment.font_size,
-        },
-        setlist: SetlistSettingsPayload {
-            enabled: settings.setlist.enabled,
-            position: settings.setlist.position,
-            show_artist: settings.setlist.show_artist,
-            font_size: settings.setlist.font_size,
-        },
-        weather: settings.weather.map(|w| WeatherSettingsPayload {
-            enabled: w.enabled,
-            position: w.position,
-        }),
-        // WidgetVisibilitySettingsは共通型のため直接渡せる
+        comment: settings.comment,
+        setlist: settings.setlist,
+        weather: settings.weather,
         widget: settings.widget,
     };
 

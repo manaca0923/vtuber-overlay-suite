@@ -305,11 +305,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `overlay.rs`と`http.rs`から重複定義を削除し、共通型をインポート
   - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
 
-- [ ] **他の設定型も同様に統合を検討** (PR#94レビューで提案)
-  - `WeatherSettings` / `WeatherSettingsPayload` の統一
-  - `CommentSettings` / `CommentSettingsPayload` の統一
-  - `SetlistSettings` / `SetlistSettingsPayload` の統一
-  - 優先度: 低（現状でも動作に問題なし、段階的対応で可）
+- [x] **他の設定型も同様に統合を検討** (PR#94レビューで提案, PR#95で実装)
+  - `WeatherSettings` / `WeatherSettingsPayload` の統一 → 完了
+  - `CommentSettings` / `CommentSettingsPayload` の統一 → 完了
+  - `SetlistSettings` / `SetlistSettingsPayload` の統一 → 完了
+  - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
+  - `http.rs`の`*Api`型を削除し、共通型を使用
 
 ### テスト（推奨）
 

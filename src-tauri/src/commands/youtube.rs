@@ -960,9 +960,11 @@ pub async fn start_polling_innertube(
                     .map(|c| c.get_continuation_type())
                     .unwrap_or(innertube::ContinuationType::Invalidation)
             };
+            // 最大30秒を上限としてガード（極端に大きな値への対応）
+            const MAX_POLLING_INTERVAL_MS: u64 = 30000;
             let wait_ms = match cont_type {
                 innertube::ContinuationType::Invalidation => timeout_ms.clamp(1000, 5000),
-                innertube::ContinuationType::Timed => timeout_ms,
+                innertube::ContinuationType::Timed => timeout_ms.min(MAX_POLLING_INTERVAL_MS),
                 innertube::ContinuationType::Reload => 1000,
             };
             log::debug!(

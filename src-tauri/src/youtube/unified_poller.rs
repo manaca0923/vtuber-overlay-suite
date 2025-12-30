@@ -426,12 +426,14 @@ async fn run_innertube_loop(
                 // - Reload: 初期化用（1秒固定）
                 let api_timeout = client.get_timeout_ms();
                 let cont_type = client.get_continuation_type();
+                // 最大30秒を上限としてガード（極端に大きな値への対応）
+                const MAX_POLLING_INTERVAL_MS: u64 = 30000;
                 let timeout_ms = match cont_type {
                     ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-                    ContinuationType::Timed => api_timeout,
+                    ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),
                     ContinuationType::Reload => 1000,
                 };
-                log::info!(
+                log::debug!(
                     "InnerTube: next poll in {}ms (API: {}ms, type: {:?})",
                     timeout_ms,
                     api_timeout,

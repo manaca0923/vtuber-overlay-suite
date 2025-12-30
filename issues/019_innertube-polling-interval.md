@@ -42,9 +42,10 @@ pub enum ContinuationType {
 }
 
 // src-tauri/src/youtube/unified_poller.rs
+const MAX_POLLING_INTERVAL_MS: u64 = 30000;  // 最大30秒ガード
 let timeout_ms = match continuation_type {
     ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-    ContinuationType::Timed => api_timeout,  // APIの指示を厳守
+    ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),  // 厳守だが最大値ガード
     ContinuationType::Reload => 1000,
 };
 ```
@@ -64,3 +65,12 @@ let timeout_ms = match continuation_type {
 2. **フィールドの必須/Optional区別**: 必須フィールドは「指示」、Optionalは「推奨」の可能性が高い
 3. **参考実装の確認**: 同じAPIを使う他のOSSプロジェクトの実装を確認する
 4. **ドキュメントとの整合性**: 実装を変更したらドキュメントも必ず更新する
+5. **極端な値へのガード**: 「厳守」でも最大値ガードは必要（異常値対策）
+6. **ログレベルの一貫性**: 高頻度のログは`debug`、重要なイベントは`info`で統一
+7. **コード重複の注意**: 同じロジックが複数箇所にある場合はヘルパー関数への抽出を検討
+
+## PR#99レビューからの追加対応
+
+- ログレベルを`debug`に統一（高頻度出力のため）
+- `timedContinuationData`にも最大30秒のガードを追加（極端な値対策）
+- コード重複改善は`docs/900_tasks.md`に技術的負債として記録

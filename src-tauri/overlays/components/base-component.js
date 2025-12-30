@@ -66,16 +66,16 @@ class BaseComponent {
 
   /**
    * データ更新（サブクラスでオーバーライド）
-   * @param {object} data
+   * @param {object} _data
    */
-  update(data) {}
+  update(_data) {}
 
   /**
    * イベントハンドラ（サブクラスでオーバーライド）
-   * @param {string} eventType
-   * @param {object} payload
+   * @param {string} _eventType
+   * @param {object} _payload
    */
-  onEvent(eventType, payload) {}
+  onEvent(_eventType, _payload) {}
 
   /**
    * 破棄処理

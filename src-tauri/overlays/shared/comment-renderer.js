@@ -41,7 +41,7 @@ function sanitizeFontFamily(fontFamily) {
     return null;
   }
   // 危険な文字を除去
-  return fontFamily.replace(/[<>"'`\;{}]/g, '');
+  return fontFamily.replace(/[<>"'`;{}]/g, '');
 }
 
 // =============================================================================

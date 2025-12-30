@@ -12,7 +12,7 @@ use crate::weather::WeatherData;
 use crate::AppState;
 
 /// 都市名を設定
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn set_weather_city(state: State<'_, AppState>, city: String) -> Result<(), String> {
     state.weather.set_city(city).await;
     Ok(())

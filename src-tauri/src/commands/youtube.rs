@@ -632,7 +632,7 @@ impl Default for ApiMode {
 }
 
 /// APIモードを保存
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn save_api_mode(
     mode: ApiMode,
     state: tauri::State<'_, AppState>,
@@ -1236,7 +1236,7 @@ pub async fn get_live_stream_stats(
 /// KPI情報をWebSocketでブロードキャスト
 ///
 /// 視聴者数と高評価数をオーバーレイに配信
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn broadcast_kpi_update(
     main: Option<i64>,
     label: Option<String>,

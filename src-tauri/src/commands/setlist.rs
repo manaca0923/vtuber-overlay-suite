@@ -25,7 +25,7 @@ pub async fn get_songs(state: tauri::State<'_, AppState>) -> Result<Vec<Song>, S
 }
 
 /// 楽曲を作成
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn create_song(
     title: String,
     artist: Option<String>,
@@ -78,7 +78,7 @@ pub async fn create_song(
 }
 
 /// 楽曲を更新
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn update_song(
     id: String,
     title: Option<String>,
@@ -342,7 +342,7 @@ pub async fn remove_song_from_setlist(
 }
 
 /// セットリスト（楽曲リスト付き）を取得
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_setlist_with_songs(
     id: String,
     state: tauri::State<'_, AppState>,

@@ -25,7 +25,7 @@ pub async fn get_songs(state: tauri::State<'_, AppState>) -> Result<Vec<Song>, S
 }
 
 /// 楽曲を作成
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn create_song(
     title: String,
     artist: Option<String>,
@@ -78,7 +78,7 @@ pub async fn create_song(
 }
 
 /// 楽曲を更新
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn update_song(
     id: String,
     title: Option<String>,
@@ -228,7 +228,7 @@ pub async fn delete_setlist(id: String, state: tauri::State<'_, AppState>) -> Re
 }
 
 /// セットリストに楽曲を追加
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn add_song_to_setlist(
     setlist_id: String,
     song_id: String,
@@ -290,7 +290,7 @@ pub async fn add_song_to_setlist(
 }
 
 /// セットリストから楽曲を削除
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn remove_song_from_setlist(
     setlist_id: String,
     setlist_song_id: String,
@@ -342,7 +342,7 @@ pub async fn remove_song_from_setlist(
 }
 
 /// セットリスト（楽曲リスト付き）を取得
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_setlist_with_songs(
     id: String,
     state: tauri::State<'_, AppState>,
@@ -431,7 +431,7 @@ pub async fn get_setlist_with_songs(
 }
 
 /// 指定位置の曲を現在の曲として設定
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn set_current_song(
     setlist_id: String,
     position: i64,
@@ -504,7 +504,7 @@ pub async fn set_current_song(
 }
 
 /// 次の曲へ進む
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn next_song(
     setlist_id: String,
     state: tauri::State<'_, AppState>,
@@ -591,7 +591,7 @@ pub async fn next_song(
 }
 
 /// 前の曲へ戻る
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn previous_song(
     setlist_id: String,
     state: tauri::State<'_, AppState>,
@@ -666,7 +666,7 @@ pub async fn previous_song(
 }
 
 /// セットリスト内の曲順を並び替え
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn reorder_setlist_songs(
     setlist_id: String,
     setlist_song_ids: Vec<String>,
@@ -779,7 +779,7 @@ pub async fn reorder_setlist_songs(
 /// セットリスト更新をWebSocketでブロードキャスト（公開コマンド）
 ///
 /// オーバーレイを後から開いた場合や、手動でセットリストを再送信したい場合に使用
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn broadcast_setlist_update(
     setlist_id: String,
     state: tauri::State<'_, AppState>,

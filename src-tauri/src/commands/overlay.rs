@@ -86,6 +86,21 @@ pub struct WeatherSettings {
     pub position: WeatherPosition,
 }
 
+/// ウィジェット表示設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetVisibilitySettings {
+    pub clock: bool,
+    pub weather: bool,
+    pub comment: bool,
+    pub superchat: bool,
+    pub logo: bool,
+    pub setlist: bool,
+    pub kpi: bool,
+    pub tanzaku: bool,
+    pub announcement: bool,
+}
+
 /// オーバーレイ設定全体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -97,6 +112,8 @@ pub struct OverlaySettings {
     pub setlist: SetlistSettings,
     #[serde(default)]
     pub weather: Option<WeatherSettings>,
+    #[serde(default)]
+    pub widget: Option<WidgetVisibilitySettings>,
 }
 
 /// オーバーレイ設定を保存
@@ -164,7 +181,7 @@ pub async fn broadcast_settings_update(
 
     use crate::server::types::{
         CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload,
-        WeatherSettingsPayload, WsMessage,
+        WeatherSettingsPayload, WidgetVisibilitySettingsPayload, WsMessage,
     };
 
     let payload = SettingsUpdatePayload {
@@ -188,6 +205,17 @@ pub async fn broadcast_settings_update(
         weather: settings.weather.map(|w| WeatherSettingsPayload {
             enabled: w.enabled,
             position: w.position,
+        }),
+        widget: settings.widget.map(|w| WidgetVisibilitySettingsPayload {
+            clock: w.clock,
+            weather: w.weather,
+            comment: w.comment,
+            superchat: w.superchat,
+            logo: w.logo,
+            setlist: w.setlist,
+            kpi: w.kpi,
+            tanzaku: w.tanzaku,
+            announcement: w.announcement,
         }),
     };
 

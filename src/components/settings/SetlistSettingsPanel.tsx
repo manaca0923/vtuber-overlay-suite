@@ -19,23 +19,9 @@ export function SetlistSettingsPanel({ settings, onChange }: SetlistSettingsPane
 
   return (
     <div className="space-y-6">
-      {/* 表示ON/OFF */}
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-gray-700">セットリスト表示</label>
-        <button
-          type="button"
-          onClick={() => updateSettings({ enabled: !settings.enabled })}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-            settings.enabled ? 'bg-blue-600' : 'bg-gray-300'
-          }`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-              settings.enabled ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
-      </div>
+      <p className="text-sm text-gray-500">
+        表示ON/OFFは「ウィジェット」タブで設定できます
+      </p>
 
       {/* 位置選択 */}
       <div>

@@ -289,6 +289,36 @@
       if (settings.performance) {
         applyPerformanceSettings(settings.performance);
       }
+
+      // ウィジェット表示設定
+      if (settings.widget) {
+        applyWidgetVisibility(settings.widget);
+      }
+    }
+
+    // ウィジェット表示/非表示を適用
+    function applyWidgetVisibility(widgetSettings) {
+      const WIDGET_SLOT_MAP = {
+        clock: 'left.top',
+        weather: 'left.topBelow',
+        comment: 'left.middle',
+        superchat: 'left.lower',
+        logo: 'left.bottom',
+        setlist: 'right.upper',
+        kpi: 'right.lowerLeft',
+        tanzaku: 'right.lowerRight',
+        announcement: 'right.bottom',
+      };
+
+      for (const [key, slotId] of Object.entries(WIDGET_SLOT_MAP)) {
+        const enabled = widgetSettings[key] !== false;
+        // SlotManagerはDOMContentLoaded後に初期化されるが、
+        // WebSocketメッセージが先に到着するケースを防御的に処理
+        // 無効なslotIdの場合はSlotManager内部でconsole.warnが出力される
+        if (typeof SlotManager !== 'undefined') {
+          SlotManager.setVisibility(slotId, enabled);
+        }
+      }
     }
 
     function applyPerformanceSettings(performanceSettings) {

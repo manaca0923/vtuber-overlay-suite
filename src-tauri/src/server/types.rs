@@ -89,21 +89,24 @@ pub struct SettingsUpdatePayload {
     pub font_family: String,
     pub border_radius: u32,
     // コメントオーバーレイ設定
-    pub comment: CommentSettingsPayload,
+    pub comment: CommentSettings,
     // セットリストオーバーレイ設定
-    pub setlist: SetlistSettingsPayload,
+    pub setlist: SetlistSettings,
     // 天気ウィジェット設定
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub weather: Option<WeatherSettingsPayload>,
+    pub weather: Option<WeatherSettings>,
     // ウィジェット表示設定
     #[serde(skip_serializing_if = "Option::is_none")]
     pub widget: Option<WidgetVisibilitySettings>,
 }
 
-/// 天気ウィジェット設定
+/// 天気ウィジェット設定（共通型）
+/// - DB保存用（overlay.rs）
+/// - WebSocket配信用（SettingsUpdatePayload）
+/// - HTTP API用（http.rs）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WeatherSettingsPayload {
+pub struct WeatherSettings {
     pub enabled: bool,
     pub position: WeatherPosition,
 }
@@ -169,19 +172,27 @@ pub enum LayoutPreset {
     ThreeColumn,
 }
 
+/// コメントオーバーレイ設定（共通型）
+/// - DB保存用（overlay.rs）
+/// - WebSocket配信用（SettingsUpdatePayload）
+/// - HTTP API用（http.rs）
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CommentSettingsPayload {
+pub struct CommentSettings {
     pub enabled: bool,
     pub position: CommentPosition,
     pub show_avatar: bool,
     pub font_size: u32,
 }
 
+/// セットリストオーバーレイ設定（共通型）
+/// - DB保存用（overlay.rs）
+/// - WebSocket配信用（SettingsUpdatePayload）
+/// - HTTP API用（http.rs）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SetlistSettingsPayload {
+pub struct SetlistSettings {
     pub enabled: bool,
     pub position: SetlistPosition,
     pub show_artist: bool,

@@ -13,7 +13,8 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
 use super::types::{
-    CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition, WidgetVisibilitySettings,
+    CommentPosition, CommentSettings, LayoutPreset, SetlistPosition, SetlistSettings,
+    WeatherPosition, WeatherSettings, WidgetVisibilitySettings,
 };
 
 /// HTTPサーバー用の共有状態
@@ -271,6 +272,8 @@ async fn get_setlist_api(
 }
 
 /// オーバーレイ設定API（オーバーレイ初期化用）
+/// NOTE: CommentSettings, SetlistSettings, WeatherSettings, WidgetVisibilitySettings は
+///       types.rs から共通型を使用
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OverlaySettingsApiResponse {
@@ -279,42 +282,13 @@ struct OverlaySettingsApiResponse {
     primary_color: String,
     font_family: String,
     border_radius: u32,
-    comment: CommentSettingsApi,
-    setlist: SetlistSettingsApi,
+    comment: CommentSettings,
+    setlist: SetlistSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
-    weather: Option<WeatherSettingsApi>,
-    // NOTE: WidgetVisibilitySettingsはtypes.rsから共通型を使用
+    weather: Option<WeatherSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     widget: Option<WidgetVisibilitySettings>,
 }
-
-/// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CommentSettingsApi {
-    enabled: bool,
-    position: CommentPosition,
-    show_avatar: bool,
-    font_size: u32,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SetlistSettingsApi {
-    enabled: bool,
-    position: SetlistPosition,
-    show_artist: bool,
-    font_size: u32,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WeatherSettingsApi {
-    enabled: bool,
-    position: WeatherPosition,
-}
-
-// NOTE: WidgetVisibilitySettingsApi は types.rs の WidgetVisibilitySettings に統合
 
 /// 文字列からWeatherPositionに変換
 fn parse_weather_position(s: &str) -> WeatherPosition {
@@ -336,19 +310,19 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
         primary_color: "#6366f1".to_string(),
         font_family: "'Yu Gothic', 'Meiryo', sans-serif".to_string(),
         border_radius: 8,
-        comment: CommentSettingsApi {
+        comment: CommentSettings {
             enabled: true,
             position: CommentPosition::BottomRight,
             show_avatar: true,
             font_size: 16,
         },
-        setlist: SetlistSettingsApi {
+        setlist: SetlistSettings {
             enabled: true,
             position: SetlistPosition::Bottom,
             show_artist: true,
             font_size: 24,
         },
-        weather: Some(WeatherSettingsApi {
+        weather: Some(WeatherSettings {
             enabled: true,
             position: WeatherPosition::LeftTop,
         }),
@@ -418,7 +392,7 @@ async fn get_overlay_settings_api(
                     // SettingsUpdatePayloadと同じ形式に変換
                     // 天気設定をパース（存在する場合のみ）
                     let weather = if settings["weather"].is_object() {
-                        Some(WeatherSettingsApi {
+                        Some(WeatherSettings {
                             enabled: settings["weather"]["enabled"].as_bool().unwrap_or(true),
                             position: parse_weather_position(
                                 settings["weather"]["position"].as_str().unwrap_or("left-top")
@@ -426,7 +400,7 @@ async fn get_overlay_settings_api(
                         })
                     } else {
                         // デフォルト値
-                        Some(WeatherSettingsApi {
+                        Some(WeatherSettings {
                             enabled: true,
                             position: WeatherPosition::LeftTop,
                         })
@@ -468,7 +442,7 @@ async fn get_overlay_settings_api(
                         primary_color: settings["common"]["primaryColor"].as_str().unwrap_or("#6366f1").to_string(),
                         font_family: settings["common"]["fontFamily"].as_str().unwrap_or("'Yu Gothic', 'Meiryo', sans-serif").to_string(),
                         border_radius: settings["common"]["borderRadius"].as_u64().unwrap_or(8) as u32,
-                        comment: CommentSettingsApi {
+                        comment: CommentSettings {
                             enabled: settings["comment"]["enabled"].as_bool().unwrap_or(true),
                             position: parse_comment_position(
                                 settings["comment"]["position"].as_str().unwrap_or("bottom-right")
@@ -476,7 +450,7 @@ async fn get_overlay_settings_api(
                             show_avatar: settings["comment"]["showAvatar"].as_bool().unwrap_or(true),
                             font_size: settings["comment"]["fontSize"].as_u64().unwrap_or(16) as u32,
                         },
-                        setlist: SetlistSettingsApi {
+                        setlist: SetlistSettings {
                             enabled: settings["setlist"]["enabled"].as_bool().unwrap_or(true),
                             position: parse_setlist_position(
                                 settings["setlist"]["position"].as_str().unwrap_or("bottom")

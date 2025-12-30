@@ -106,6 +106,41 @@ PR#94で`WidgetVisibilitySettings`型の統合を実施。レビューでApprove
 
 これらは優先度低として`docs/900_tasks.md`に追記済み。
 
+## PR#95 設定型統合の実装
+
+PR#95でPR#94レビューの提案に基づき、残りの設定型を統合。
+
+### 変更内容
+
+1. **types.rs の変更**
+   - `CommentSettingsPayload` → `CommentSettings` にリネーム
+   - `SetlistSettingsPayload` → `SetlistSettings` にリネーム
+   - `WeatherSettings` は既に存在していたため変更なし
+   - `SettingsUpdatePayload` の参照を新しい型名に更新
+
+2. **overlay.rs の変更**
+   - 重複していた `CommentSettings`, `SetlistSettings`, `WeatherSettings` の定義を削除
+   - `types.rs` からインポートするように変更
+   - `broadcast_settings_update` を簡略化（手動フィールドコピーから直接渡しへ）
+
+3. **http.rs の変更**
+   - `CommentSettingsApi`, `SetlistSettingsApi`, `WeatherSettingsApi` の定義を削除
+   - `types.rs` から共通型をインポート
+   - `OverlaySettingsApiResponse` で共通型を使用
+   - `default_overlay_settings()` と `get_overlay_settings_api()` を更新
+
+### PR#95 レビュー結果: Approve
+
+#### 軽微な提案（将来対応）
+
+1. **http.rs のJSONパース処理の簡略化**
+   - `get_overlay_settings_api`で手動パースしている箇所を直接デシリアライズに
+   - DBスキーマとの整合性を考慮して現状維持が妥当
+
+2. **types.rs の分割検討**
+   - 型が増えてきた際は`types/settings.rs`などへの分割を検討
+   - 現時点では問題なし
+
 ## 関連タスク
 
 - `docs/900_tasks.md` に「Rust側WidgetVisibilitySettings型の重複削減」: 完了

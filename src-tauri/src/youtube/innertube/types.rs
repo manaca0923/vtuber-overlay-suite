@@ -319,3 +319,50 @@ impl InnerTubeChatResponse {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effective_timeout_ms_invalidation() {
+        let ct = ContinuationType::Invalidation;
+        // 下限クランプ（1000ms未満は1000msに）
+        assert_eq!(ct.effective_timeout_ms(0), 1000);
+        assert_eq!(ct.effective_timeout_ms(500), 1000);
+        assert_eq!(ct.effective_timeout_ms(999), 1000);
+        // 範囲内（そのまま）
+        assert_eq!(ct.effective_timeout_ms(1000), 1000);
+        assert_eq!(ct.effective_timeout_ms(3000), 3000);
+        assert_eq!(ct.effective_timeout_ms(5000), 5000);
+        // 上限クランプ（5000ms超は5000msに）
+        assert_eq!(ct.effective_timeout_ms(5001), 5000);
+        assert_eq!(ct.effective_timeout_ms(10000), 5000);
+    }
+
+    #[test]
+    fn test_effective_timeout_ms_timed() {
+        let ct = ContinuationType::Timed;
+        // 小さい値はそのまま
+        assert_eq!(ct.effective_timeout_ms(0), 0);
+        assert_eq!(ct.effective_timeout_ms(1000), 1000);
+        assert_eq!(ct.effective_timeout_ms(5000), 5000);
+        assert_eq!(ct.effective_timeout_ms(29999), 29999);
+        // 最大値ガード（30000ms）
+        assert_eq!(ct.effective_timeout_ms(30000), 30000);
+        assert_eq!(ct.effective_timeout_ms(30001), 30000);
+        assert_eq!(ct.effective_timeout_ms(60000), 30000);
+        assert_eq!(ct.effective_timeout_ms(u64::MAX), 30000);
+    }
+
+    #[test]
+    fn test_effective_timeout_ms_reload() {
+        let ct = ContinuationType::Reload;
+        // 常に1000ms固定
+        assert_eq!(ct.effective_timeout_ms(0), 1000);
+        assert_eq!(ct.effective_timeout_ms(1000), 1000);
+        assert_eq!(ct.effective_timeout_ms(5000), 1000);
+        assert_eq!(ct.effective_timeout_ms(99999), 1000);
+        assert_eq!(ct.effective_timeout_ms(u64::MAX), 1000);
+    }
+}

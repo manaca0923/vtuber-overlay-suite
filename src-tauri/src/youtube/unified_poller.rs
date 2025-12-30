@@ -14,7 +14,7 @@ use super::backoff::ExponentialBackoff;
 use super::db::save_comments_to_db;
 use super::errors::YouTubeError;
 use super::grpc::GrpcPoller;
-use super::innertube::InnerTubeClient;
+use super::innertube::{ContinuationType, InnerTubeClient};
 use super::poller::{ChatPoller, PollingEvent};
 use super::types::ChatMessage;
 use crate::commands::youtube::ApiMode;
@@ -420,7 +420,23 @@ async fn run_innertube_loop(
                 }
 
                 // 次のポーリングまで待機
-                let timeout_ms = client.get_timeout_ms();
+                // Continuation種別に応じてポーリング間隔を制御
+                // - Invalidation: 推奨間隔（1〜5秒にクランプ、短縮可能）
+                // - Timed: 明示的な待機時間（APIの指示を厳守）
+                // - Reload: 初期化用（1秒固定）
+                let api_timeout = client.get_timeout_ms();
+                let cont_type = client.get_continuation_type();
+                let timeout_ms = match cont_type {
+                    ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
+                    ContinuationType::Timed => api_timeout,
+                    ContinuationType::Reload => 1000,
+                };
+                log::info!(
+                    "InnerTube: next poll in {}ms (API: {}ms, type: {:?})",
+                    timeout_ms,
+                    api_timeout,
+                    cont_type
+                );
                 tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
             }
             Err(e) => {

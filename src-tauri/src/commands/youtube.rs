@@ -952,7 +952,25 @@ pub async fn start_polling_innertube(
             }
 
             // 次のポーリングまで待機
-            let wait_ms = std::cmp::max(timeout_ms, 3000); // 最低3秒
+            // Continuation種別に応じてポーリング間隔を制御
+            let cont_type = {
+                let client_lock = client_mutex.lock().await;
+                client_lock
+                    .as_ref()
+                    .map(|c| c.get_continuation_type())
+                    .unwrap_or(innertube::ContinuationType::Invalidation)
+            };
+            let wait_ms = match cont_type {
+                innertube::ContinuationType::Invalidation => timeout_ms.clamp(1000, 5000),
+                innertube::ContinuationType::Timed => timeout_ms,
+                innertube::ContinuationType::Reload => 1000,
+            };
+            log::debug!(
+                "InnerTube: next poll in {}ms (API: {}ms, type: {:?})",
+                wait_ms,
+                timeout_ms,
+                cont_type
+            );
             tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms)).await;
         }
 

@@ -2,6 +2,22 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Continuation種別（ポーリング間隔の制御に使用）
+///
+/// InnerTube APIは3種類のContinuationデータを返す:
+/// - `invalidationContinuationData`: timeout_msはOptional、推奨間隔（短縮可能）
+/// - `timedContinuationData`: timeout_msは必須、明示的な待機時間（厳守）
+/// - `reloadContinuationData/replay`: 初期化・リプレイ用
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContinuationType {
+    /// invalidationContinuationData - 推奨間隔（短縮可能）
+    Invalidation,
+    /// timedContinuationData - 明示的な待機時間（厳守）
+    Timed,
+    /// reloadContinuationData/replay - 初期化・リプレイ用
+    Reload,
+}
+
 /// InnerTube APIレスポンス（ライブチャット取得）
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -243,7 +259,11 @@ pub struct BadgeIcon {
 
 impl InnerTubeChatResponse {
     /// 次回取得用のcontinuationトークンを抽出
-    pub fn get_next_continuation(&self) -> Option<(String, u64)> {
+    ///
+    /// # Returns
+    /// - `(continuation_token, timeout_ms, continuation_type)` のタプル
+    /// - `continuation_type` はポーリング間隔の制御に使用
+    pub fn get_next_continuation(&self) -> Option<(String, u64, ContinuationType)> {
         let continuation = self
             .continuation_contents
             .as_ref()?
@@ -255,15 +275,24 @@ impl InnerTubeChatResponse {
 
         // 優先順位: invalidation > timed > replay
         if let Some(data) = &continuation.invalidation_continuation_data {
-            return Some((data.continuation.clone(), data.timeout_ms.unwrap_or(5000)));
+            return Some((
+                data.continuation.clone(),
+                data.timeout_ms.unwrap_or(5000),
+                ContinuationType::Invalidation,
+            ));
         }
         if let Some(data) = &continuation.timed_continuation_data {
-            return Some((data.continuation.clone(), data.timeout_ms));
+            return Some((
+                data.continuation.clone(),
+                data.timeout_ms,
+                ContinuationType::Timed,
+            ));
         }
         if let Some(data) = &continuation.live_chat_replay_continuation_data {
             return Some((
                 data.continuation.clone(),
                 data.time_until_last_message_msec.unwrap_or(5000),
+                ContinuationType::Reload,
             ));
         }
 

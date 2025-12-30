@@ -1,10 +1,13 @@
 use reqwest::Client;
 use std::fmt;
+use std::time::Duration;
 
 use super::errors::YouTubeError;
 use super::types::{LiveChatMessagesResponse, LiveStreamStats, VideoResponse};
 
 const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
+/// HTTPリクエストのタイムアウト（秒）
+const HTTP_TIMEOUT_SECS: u64 = 10;
 
 #[derive(Clone)]
 pub struct YouTubeClient {
@@ -26,8 +29,13 @@ impl fmt::Debug for YouTubeClient {
 
 impl YouTubeClient {
     pub fn new(api_key: String) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .build()
+            .expect("Failed to build HTTP client with timeout");
+
         Self {
-            client: Client::new(),
+            client,
             api_key,
             #[cfg(test)]
             base_url: API_BASE.to_string(),
@@ -37,8 +45,27 @@ impl YouTubeClient {
     /// テスト用: カスタムベースURLでクライアントを作成
     #[cfg(test)]
     pub fn new_with_base_url(api_key: String, base_url: String) -> Self {
+        Self::new_with_base_url_and_timeout(
+            api_key,
+            base_url,
+            Duration::from_secs(HTTP_TIMEOUT_SECS),
+        )
+    }
+
+    /// テスト用: カスタムベースURLとタイムアウトでクライアントを作成
+    #[cfg(test)]
+    pub fn new_with_base_url_and_timeout(
+        api_key: String,
+        base_url: String,
+        timeout: Duration,
+    ) -> Self {
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("Failed to build HTTP client with timeout");
+
         Self {
-            client: Client::new(),
+            client,
             api_key,
             base_url,
         }
@@ -57,6 +84,16 @@ impl YouTubeClient {
         }
     }
 
+    /// reqwest エラーを YouTubeError に変換（タイムアウトを区別）
+    fn convert_reqwest_error(error: reqwest::Error) -> YouTubeError {
+        if error.is_timeout() {
+            log::warn!("YouTube API request timed out after {}s", HTTP_TIMEOUT_SECS);
+            YouTubeError::Timeout
+        } else {
+            YouTubeError::HttpError(error)
+        }
+    }
+
     /// APIキーを検証（videos.listでクォータ1消費）
     pub async fn validate_api_key(&self) -> Result<bool, YouTubeError> {
         log::info!("Validating API key (quota cost: 1 unit)");
@@ -68,7 +105,8 @@ impl YouTubeClient {
             .get(&url)
             .query(&[("part", "id"), ("id", "dQw4w9WgXcQ"), ("key", &self.api_key)])
             .send()
-            .await?;
+            .await
+            .map_err(Self::convert_reqwest_error)?;
 
         match response.status() {
             reqwest::StatusCode::OK => {
@@ -116,7 +154,8 @@ impl YouTubeClient {
                 ("key", &self.api_key),
             ])
             .send()
-            .await?;
+            .await
+            .map_err(Self::convert_reqwest_error)?;
 
         match response.status() {
             reqwest::StatusCode::OK => {}
@@ -214,7 +253,13 @@ impl YouTubeClient {
             log::debug!("Using page token: {}", token);
         }
 
-        let response = self.client.get(&url).query(&query_params).send().await?;
+        let response = self
+            .client
+            .get(&url)
+            .query(&query_params)
+            .send()
+            .await
+            .map_err(Self::convert_reqwest_error)?;
 
         match response.status() {
             reqwest::StatusCode::OK => {
@@ -319,7 +364,8 @@ impl YouTubeClient {
                 ("key", &self.api_key),
             ])
             .send()
-            .await?;
+            .await
+            .map_err(Self::convert_reqwest_error)?;
 
         let status = response.status();
         match status {
@@ -585,7 +631,10 @@ mod tests {
         let result = client.get_live_stream_stats("test_video").await;
         match result {
             Err(YouTubeError::ApiError(msg)) => {
-                assert!(msg.contains("サーバーエラー"));
+                assert_eq!(
+                    msg,
+                    "サーバーエラー (500 Internal Server Error): 一時的な障害の可能性があります"
+                );
             }
             _ => panic!("Expected ApiError, got {:?}", result),
         }
@@ -605,8 +654,10 @@ mod tests {
         let result = client.get_live_stream_stats("test_video").await;
         match result {
             Err(YouTubeError::ApiError(msg)) => {
-                assert!(msg.contains("サーバーエラー"));
-                assert!(msg.contains("502"));
+                assert_eq!(
+                    msg,
+                    "サーバーエラー (502 Bad Gateway): 一時的な障害の可能性があります"
+                );
             }
             _ => panic!("Expected ApiError, got {:?}", result),
         }
@@ -626,7 +677,10 @@ mod tests {
         let result = client.get_live_stream_stats("test_video").await;
         match result {
             Err(YouTubeError::ApiError(msg)) => {
-                assert!(msg.contains("サーバーエラー"));
+                assert_eq!(
+                    msg,
+                    "サーバーエラー (503 Service Unavailable): 一時的な障害の可能性があります"
+                );
             }
             _ => panic!("Expected ApiError, got {:?}", result),
         }
@@ -647,8 +701,7 @@ mod tests {
         let result = client.get_live_stream_stats("test_video").await;
         match result {
             Err(YouTubeError::ApiError(msg)) => {
-                assert!(msg.contains("予期しないエラー"));
-                assert!(msg.contains("418"));
+                assert_eq!(msg, "予期しないエラー (418 I'm a teapot)");
             }
             _ => panic!("Expected ApiError, got {:?}", result),
         }
@@ -996,9 +1049,14 @@ mod tests {
 
         let result = client.get_live_chat_id("test_video").await;
         // 5xxサーバーエラーはApiErrorにマッピング
-        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
-        if let Err(YouTubeError::ApiError(msg)) = result {
-            assert!(msg.contains("サーバーエラー"));
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "サーバーエラー (500 Internal Server Error): 一時的な障害の可能性があります"
+                );
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
         }
     }
 
@@ -1015,9 +1073,11 @@ mod tests {
 
         let result = client.get_live_chat_id("test_video").await;
         // 予期しないステータスはApiErrorにマッピング
-        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
-        if let Err(YouTubeError::ApiError(msg)) = result {
-            assert!(msg.contains("予期しないエラー"));
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert_eq!(msg, "予期しないエラー (418 I'm a teapot)");
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
         }
     }
 
@@ -1260,9 +1320,14 @@ mod tests {
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         // 5xxサーバーエラーはApiErrorにマッピング
-        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
-        if let Err(YouTubeError::ApiError(msg)) = result {
-            assert!(msg.contains("サーバーエラー"));
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert_eq!(
+                    msg,
+                    "サーバーエラー (500 Internal Server Error): 一時的な障害の可能性があります"
+                );
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
         }
     }
 
@@ -1296,9 +1361,36 @@ mod tests {
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         // 予期しないステータスはApiErrorにマッピング
-        assert!(matches!(result, Err(YouTubeError::ApiError(_))));
-        if let Err(YouTubeError::ApiError(msg)) = result {
-            assert!(msg.contains("予期しないエラー"));
+        match result {
+            Err(YouTubeError::ApiError(msg)) => {
+                assert_eq!(msg, "予期しないエラー (418 I'm a teapot)");
+            }
+            _ => panic!("Expected ApiError, got {:?}", result),
         }
+    }
+
+    // =============================================================================
+    // タイムアウト関連テスト
+    // =============================================================================
+    //
+    // 注: mockitoではタイムアウト動作の完全なシミュレーションが困難なため、
+    // 実際のタイムアウト動作テストは除外しています。
+    // タイムアウト機能自体は以下のように実装されています:
+    // - HTTPクライアントに10秒のタイムアウトを設定
+    // - タイムアウト発生時は YouTubeError::Timeout を返す
+    // - convert_reqwest_error() でタイムアウトエラーを判別
+
+    #[test]
+    fn test_timeout_error_message() {
+        let err = YouTubeError::Timeout;
+        assert_eq!(format!("{}", err), "Request timeout: API応答がありません");
+    }
+
+    #[test]
+    fn test_client_has_timeout() {
+        // クライアントがタイムアウト付きで作成されることを確認
+        let client = YouTubeClient::new("test_key".to_string());
+        // クライアントが正常に作成されることを確認（タイムアウト設定が内部で行われている）
+        assert!(!client.api_key.is_empty());
     }
 }

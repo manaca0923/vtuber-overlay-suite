@@ -299,21 +299,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
 
-- [ ] **ネットワークタイムアウトのテスト** (PR#84)
-  - 現在: mockitoの制約により実際のタイムアウトテストは除外
-  - 提案: mockitoの`with_delay`を使用したタイムアウトテストの追加
-  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
+- [x] **ネットワークタイムアウト機能** (PR#84, PR#90で実装)
+  - 実装済み: HTTPクライアントに10秒タイムアウトを設定、`YouTubeError::Timeout`バリアント追加
+  - 注: mockitoではタイムアウト動作の完全シミュレーションが困難なため、動作テストは除外
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/youtube/errors.rs`
 
 - [x] **HTTPモックのクエリパラメータ検証強化** (PR#84, PR#89で実装)
   - 実装済み: 成功テストで`Matcher::AllOf`を使用してAPIキー、ID、partパラメータを検証
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
 
-- [ ] **HTTPモックテストのエラーメッセージ検証強化** (PR#84)
-  - 現在: `assert!(msg.contains("サーバーエラー"))`のように部分一致で検証
-  - 提案: 正確なエラーメッセージフォーマットを検証してより堅牢なテストに
-  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
+- [x] **HTTPモックテストのエラーメッセージ検証強化** (PR#84, PR#90で実装)
+  - 実装済み: `assert_eq!`を使用して正確なエラーメッセージフォーマットを検証
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/commands/template.rs`
 
 - [x] **YouTubeテストヘルパー関数の導入** (PR#85, PR#88で実装)
   - 実装済み: `setup_test_client()`ヘルパー関数を追加

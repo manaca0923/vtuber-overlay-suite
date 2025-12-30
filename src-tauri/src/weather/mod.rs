@@ -108,8 +108,22 @@ impl WeatherClient {
     /// テスト用: カスタムベースURLで天気クライアントを作成
     #[cfg(test)]
     pub fn new_with_base_urls(geocoding_base_url: String, weather_base_url: String) -> Self {
+        Self::new_with_base_urls_and_timeout(
+            geocoding_base_url,
+            weather_base_url,
+            Duration::from_secs(HTTP_TIMEOUT_SECS),
+        )
+    }
+
+    /// テスト用: カスタムベースURLとタイムアウトで天気クライアントを作成
+    #[cfg(test)]
+    pub fn new_with_base_urls_and_timeout(
+        geocoding_base_url: String,
+        weather_base_url: String,
+        timeout: Duration,
+    ) -> Self {
         let client = Client::builder()
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .timeout(timeout)
             .build()
             .expect("Failed to build HTTP client with timeout");
 
@@ -777,4 +791,17 @@ mod tests {
         let result = client.fetch_weather().await;
         assert!(matches!(result, Err(WeatherError::ParseError(_))));
     }
+
+    // =============================================================================
+    // タイムアウト関連
+    // =============================================================================
+    //
+    // 注: mockitoではタイムアウト動作の完全なシミュレーションが困難なため、
+    // 実際のタイムアウト動作テストは除外しています。
+    // タイムアウト機能自体は以下のように実装されています:
+    // - HTTPクライアントに10秒のタイムアウトを設定 (HTTP_TIMEOUT_SECS)
+    // - タイムアウト発生時は WeatherError::Timeout を返す
+    // - is_timeout() でタイムアウトエラーを判別
+    //
+    // test_weather_error_timeout() でエラーメッセージのフォーマットを検証済み
 }

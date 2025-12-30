@@ -38,6 +38,9 @@ pub enum YouTubeError {
     #[error("API error: {0}")]
     ApiError(String),
 
+    #[error("Request timeout: API応答がありません")]
+    Timeout,
+
     #[error("InnerTube API not initialized - call initialize() first")]
     InnerTubeNotInitialized,
 

@@ -77,6 +77,22 @@ setThreshold(threshold) {
 }
 ```
 
+**上下限ガードのパターン**（PR#100で追加）:
+```javascript
+// 外部から受け取る値には、最小値と最大値の両方をガード
+setBufferInterval(intervalMs) {
+  const MAX_BUFFER_INTERVAL = 30000;  // 上限値は定数化
+
+  // Number.isFinite()は型チェック+NaN/Infinity排除を同時に行う
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0 || intervalMs > MAX_BUFFER_INTERVAL) return;
+
+  this.bufferInterval = intervalMs;
+}
+```
+
+> **Note**: `Number.isFinite()` は `typeof === 'number' && !isNaN()` より簡潔で、
+> `Infinity` も排除できるため推奨。
+
 **オブジェクト型の型ガード例**:
 ```javascript
 setSettings(settings) {

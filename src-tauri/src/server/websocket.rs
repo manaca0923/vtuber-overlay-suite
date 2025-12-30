@@ -191,7 +191,7 @@ async fn handle_connection(
     if !cached_comments.is_empty() {
         log::info!("Sending {} cached comments to peer {}", cached_comments.len(), peer_id);
         for comment in cached_comments {
-            let msg = WsMessage::CommentAdd { payload: comment, instant: true };
+            let msg = WsMessage::CommentAdd { payload: comment, instant: true, buffer_interval_ms: None };
             if let Ok(json) = serde_json::to_string(&msg) {
                 if tx.send(Message::Text(json)).is_err() {
                     log::warn!("Failed to send cached comment to peer {}", peer_id);

@@ -269,7 +269,7 @@ async fn run_grpc_stream(
                         // Broadcast to WebSocket clients (for overlays) - gRPCは即時表示
                         let state_lock = server_state.read().await;
                         for msg in &messages {
-                            state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone(), instant: true }).await;
+                            state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone(), instant: true, buffer_interval_ms: None }).await;
                         }
 
                         log::info!("Broadcast {} chat messages to WebSocket (total: {})", broadcast_count, message_count);

@@ -26,16 +26,21 @@ const MAX_POLLING_INTERVAL_MS: u64 = 30000;
 /// 極端に短い値によるサーバー過負荷を防止
 const MIN_POLLING_INTERVAL_MS: u64 = 500;
 
+/// InnerTubeモードのバッファ間隔（1秒）
+/// オーバーレイ側で1秒間に取得したコメントを等間隔で表示するための設定
+/// ポーリング間隔（1秒）と合わせることで、リアルタイムに近い表示を実現
+pub const INNERTUBE_BUFFER_INTERVAL_MS: u32 = 1000;
+
 impl ContinuationType {
     /// 実効的なポーリング間隔を計算
     ///
     /// Continuation種別に応じて適切なポーリング間隔を返す:
-    /// - `Invalidation`: 1〜5秒にクランプ（推奨値なので短縮可能）
+    /// - `Invalidation`: 1秒固定（リアルタイム表示のため高頻度ポーリング）
     /// - `Timed`: APIの値を使用（500ms〜30秒でガード）
     /// - `Reload`: 1秒固定（初期化後は即座にポーリング）
     pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
         match self {
-            ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
+            ContinuationType::Invalidation => 1000, // 1秒固定（リアルタイム表示のため）
             ContinuationType::Timed => api_timeout.clamp(MIN_POLLING_INTERVAL_MS, MAX_POLLING_INTERVAL_MS),
             ContinuationType::Reload => 1000,
         }
@@ -331,17 +336,14 @@ mod tests {
     #[test]
     fn test_effective_timeout_ms_invalidation() {
         let ct = ContinuationType::Invalidation;
-        // 下限クランプ（1000ms未満は1000msに）
+        // リアルタイム表示のため、常に1秒固定
         assert_eq!(ct.effective_timeout_ms(0), 1000);
         assert_eq!(ct.effective_timeout_ms(500), 1000);
-        assert_eq!(ct.effective_timeout_ms(999), 1000);
-        // 範囲内（そのまま）
         assert_eq!(ct.effective_timeout_ms(1000), 1000);
-        assert_eq!(ct.effective_timeout_ms(3000), 3000);
-        assert_eq!(ct.effective_timeout_ms(5000), 5000);
-        // 上限クランプ（5000ms超は5000msに）
-        assert_eq!(ct.effective_timeout_ms(5001), 5000);
-        assert_eq!(ct.effective_timeout_ms(10000), 5000);
+        assert_eq!(ct.effective_timeout_ms(3000), 1000);
+        assert_eq!(ct.effective_timeout_ms(5000), 1000);
+        assert_eq!(ct.effective_timeout_ms(10000), 1000);
+        assert_eq!(ct.effective_timeout_ms(u64::MAX), 1000);
     }
 
     #[test]

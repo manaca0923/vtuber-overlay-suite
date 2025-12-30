@@ -348,6 +348,19 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - メンテナンス性向上のため
   - 優先度: 低（任意の改善提案）
 
+- [ ] **queue()呼び出し時のsetBufferInterval()最適化** (PR#100レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
+  - 現在: `queue()` が呼ばれるたびに `setBufferInterval()` を呼び出し
+  - 改善案: `queue()` 側で値が異なる場合のみ `setBufferInterval()` を呼び出す
+  - 優先度: 低（軽微なパフォーマンス改善）
+
+- [ ] **Invalidation種別のポーリング間隔設計再検討** (PR#100レビューで提案)
+  - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs:43`
+  - 現在: `Invalidation` は常に1秒固定
+  - 検討案: APIの推奨値も考慮して `api_timeout.max(1000).min(5000)` とする
+  - サーバー負荷とリアルタイム体験のトレードオフを再検討
+  - 優先度: 低（設計判断、次回以降の検討事項）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
@@ -446,6 +459,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - メッセージ送受信テスト（手動テスト推奨：サーバー起動が必要）
   - 複数クライアント同時接続テスト（手動テスト推奨：サーバー起動が必要）
   - 注: WebSocketサーバーのモック化が複雑なため、統合テストとして実環境でのテストを推奨
+
+- [ ] **comment-renderer.jsのユニットテスト追加** (PR#100レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
+  - テスト対象: `setBufferInterval()` の入力検証・タイマー管理
+  - 優先度: 低（将来的なJavaScriptテスト基盤構築時に対応）
 
 - [x] **save_comments_to_dbの戻り値構造化** (PR#56, PR#88で実装)
   - 実装済み: `SaveCommentsResult { saved, failed, skipped }`構造体を返すように変更

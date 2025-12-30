@@ -81,6 +81,18 @@ function applyWidgetVisibility(widgetSettings) {
 }
 ```
 
+## 2回目レビュー対応（追記）
+
+### 確認事項への回答
+
+1. **widget設定とenabled設定の同期**
+   - 逆方向（`weather.enabled`→`widget.weather`）の反映は不要
+   - 各設定パネルからON/OFFトグルを削除したため、`enabled`は直接変更されない
+
+2. **SlotManager存在チェックの一貫性**
+   - `applyWidgetVisibility`関数にコメントを追加して意図を明確化
+   - WebSocketメッセージがDOMContentLoaded前に到着するケースへの防御的処理
+
 ## 関連タスク
 
 - `docs/900_tasks.md` に「Rust側WidgetVisibilitySettings型の重複削減」を追加済み

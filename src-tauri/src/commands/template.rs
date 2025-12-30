@@ -141,7 +141,10 @@ mod tests {
 
         let result = validate_template(template);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("コンポーネントが1つも定義されていません"));
+        assert_eq!(
+            result.unwrap_err(),
+            "コンポーネントが1つも定義されていません"
+        );
     }
 
     #[test]
@@ -174,7 +177,10 @@ mod tests {
 
         let result = validate_template(template);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("slotが重複"));
+        assert_eq!(
+            result.unwrap_err(),
+            "有効なコンポーネントでslotが重複しています"
+        );
     }
 
     #[test]
@@ -207,7 +213,7 @@ mod tests {
 
         let result = validate_template(template);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("コンポーネントIDが重複"));
+        assert_eq!(result.unwrap_err(), "コンポーネントIDが重複しています");
     }
 
     // 注: test_validate_template_forces_layout_type は削除

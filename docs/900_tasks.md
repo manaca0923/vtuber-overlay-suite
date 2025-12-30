@@ -299,21 +299,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
 
-- [ ] **ネットワークタイムアウトのテスト** (PR#84)
-  - 現在: mockitoの制約により実際のタイムアウトテストは除外
-  - 提案: mockitoの`with_delay`を使用したタイムアウトテストの追加
-  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
+- [x] **ネットワークタイムアウト機能** (PR#84, PR#90で実装)
+  - 実装済み: HTTPクライアントに10秒タイムアウトを設定、`YouTubeError::Timeout`バリアント追加
+  - 注: mockitoではタイムアウト動作の完全シミュレーションが困難なため、動作テストは除外
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/youtube/errors.rs`
 
 - [x] **HTTPモックのクエリパラメータ検証強化** (PR#84, PR#89で実装)
   - 実装済み: 成功テストで`Matcher::AllOf`を使用してAPIキー、ID、partパラメータを検証
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
 
-- [ ] **HTTPモックテストのエラーメッセージ検証強化** (PR#84)
-  - 現在: `assert!(msg.contains("サーバーエラー"))`のように部分一致で検証
-  - 提案: 正確なエラーメッセージフォーマットを検証してより堅牢なテストに
-  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
+- [x] **HTTPモックテストのエラーメッセージ検証強化** (PR#84, PR#90で実装)
+  - 実装済み: `assert_eq!`を使用して正確なエラーメッセージフォーマットを検証
+  - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/commands/template.rs`
 
 - [x] **YouTubeテストヘルパー関数の導入** (PR#85, PR#88で実装)
   - 実装済み: `setup_test_client()`ヘルパー関数を追加
@@ -326,6 +323,21 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - [x] **ApiErrorのリトライロジック確認** (PR#86, PR#88で確認)
   - 確認済み: `poller.rs`のcatch-allハンドラでexponential backoffによるリトライが実装済み
   - 対象ファイル: `src-tauri/src/youtube/poller.rs`
+
+- [ ] **WeatherClientのタイムアウトエラー変換** (PR#90レビュー提案)
+  - YouTubeClientと同様に`convert_reqwest_error`パターンを適用
+  - `is_timeout()`でタイムアウトを検出し`WeatherError::Timeout`に変換
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+
+- [ ] **HTTPタイムアウト定数の統一** (PR#90レビュー提案)
+  - 現在: `HTTP_TIMEOUT_SECS`がYouTubeClientとWeatherClientで個別定義
+  - 対応: 共通のconfigモジュールまたは定数ファイルに統一することを検討
+  - 優先度: 低
+
+- [ ] **タイムアウトエラーのログレベル検討** (PR#90レビュー提案)
+  - 現在: タイムアウト時に`log::warn!`を使用
+  - 検討: 頻発する環境では`log::info!`の方が適切な可能性
+  - 優先度: 低
 
 ### セキュリティ（将来課題）
 

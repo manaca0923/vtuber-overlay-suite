@@ -21,6 +21,7 @@ interface UpdateState {
   error: string | null;
   update: Update | null;
   retryCount: number;
+  /** 将来の自動リトライ用。現在は手動リトライのみ */
   nextRetryDelay: number;
 }
 

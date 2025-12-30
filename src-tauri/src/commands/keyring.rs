@@ -14,7 +14,7 @@ use sqlx::Row;
 // =============================================================================
 
 /// APIキーをセキュアストレージに保存
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn save_api_key(api_key: String, _state: tauri::State<'_, AppState>) -> Result<(), String> {
     // 空文字列のバリデーション
     if api_key.trim().is_empty() {

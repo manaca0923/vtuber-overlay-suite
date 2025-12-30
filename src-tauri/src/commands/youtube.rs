@@ -15,13 +15,13 @@ use tauri::{AppHandle, Emitter};
 /// ポーラー停止後のグレースフルシャットダウン待機時間（ミリ秒）
 const POLLER_GRACEFUL_SHUTDOWN_MS: u64 = 200;
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn validate_api_key(api_key: String) -> Result<bool, String> {
     let client = YouTubeClient::new(api_key);
     client.validate_api_key().await.map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_live_chat_id(api_key: String, video_id: String) -> Result<String, String> {
     let client = YouTubeClient::new(api_key);
     client
@@ -30,7 +30,7 @@ pub async fn get_live_chat_id(api_key: String, video_id: String) -> Result<Strin
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_chat_messages(
     api_key: String,
     live_chat_id: String,
@@ -111,7 +111,7 @@ pub async fn get_chat_messages(
 }
 
 /// ポーリングを開始
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_polling(
     api_key: String,
     live_chat_id: String,
@@ -311,7 +311,7 @@ pub async fn is_polling_running(state: tauri::State<'_, AppState>) -> Result<boo
 }
 
 /// ポーリング状態をDBに保存
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn save_polling_state(
     live_chat_id: String,
     next_page_token: Option<String>,
@@ -431,7 +431,7 @@ pub struct PollingStateData {
 
 /// テストモード: ダミーコメントを送信
 /// message_type_name: "text" | "superChat" | "superSticker" | "membership" | "membershipGift"
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn send_test_comment(
     comment_text: String,
     author_name: String,
@@ -495,7 +495,7 @@ pub async fn send_test_comment(
 
 /// ウィザード設定を保存（videoId, liveChatId, useBundledKey）
 /// 空の値や null は既存値を維持する（マージ方式）
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn save_wizard_settings(
     video_id: String,
     live_chat_id: String,
@@ -690,7 +690,7 @@ pub async fn load_api_mode(state: tauri::State<'_, AppState>) -> Result<ApiMode,
 
 /// InnerTube API接続テスト（開発ビルドのみ有効）
 #[cfg(debug_assertions)]
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn test_innertube_connection(video_id: String) -> Result<String, String> {
     use crate::youtube::innertube::{parse_chat_response, InnerTubeClient};
 
@@ -767,7 +767,7 @@ fn get_innertube_handle() -> &'static Arc<TokioMutex<Option<JoinHandle<()>>>> {
 ///
 /// 公式APIとは異なり、video_idのみで開始可能。
 /// カスタム絵文字の画像URLを含むメッセージを取得可能。
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_polling_innertube(
     video_id: String,
     app: AppHandle,
@@ -1040,7 +1040,7 @@ pub async fn has_bundled_api_key() -> Result<bool, String> {
 }
 
 /// BYOKキーを設定
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn set_byok_key(api_key: Option<String>) -> Result<(), String> {
     let mut manager = get_api_key_manager()
         .write()
@@ -1059,7 +1059,7 @@ pub async fn set_byok_key(api_key: Option<String>) -> Result<(), String> {
 
 /// 有効なAPIキーを取得（内部使用）
 /// prefer_bundled: true=同梱キー優先、false=BYOK優先
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_active_api_key(prefer_bundled: bool) -> Result<Option<String>, String> {
     let manager = get_api_key_manager()
         .read()
@@ -1119,7 +1119,7 @@ fn get_unified_poller() -> &'static Arc<TokioMutex<UnifiedPoller>> {
 /// 1. Tauriイベント（chat-messages）→ フロントエンドUI
 /// 2. WebSocketブロードキャスト（comment:add）→ OBSオーバーレイ
 /// 3. SQLite保存 → コメントログ
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn start_unified_polling(
     video_id: String,
     mode: ApiMode,
@@ -1203,7 +1203,7 @@ use crate::youtube::types::LiveStreamStats;
 /// 視聴者数、高評価数、再生回数を取得。
 /// APIキーが必要（同梱キーまたはBYOK）。
 /// クォータ消費: 約3 units
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_live_stream_stats(
     video_id: String,
     use_bundled_key: bool,

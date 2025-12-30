@@ -56,6 +56,38 @@ const MIN_DISPLAY_INTERVAL: u32 = 100;
 ## 関連PR
 
 - PR#100: InnerTubeコメント表示のリアルタイム体験改善（レビューで指摘）
+- PR#102: ウィジェット表示設定トグル修正（デフォルト設定オブジェクトの配置）
+
+## JavaScript固有のパターン
+
+### 関数内で毎回作成される定数オブジェクト
+
+```javascript
+// 悪い例: 呼び出しごとにオブジェクトが再作成される
+function applySettingsUpdate(settings) {
+  const DEFAULT_WIDGET_SETTINGS = {
+    clock: true, weather: true, comment: true, ...
+  };
+  applyWidgetVisibility(settings.widget || DEFAULT_WIDGET_SETTINGS);
+}
+
+// 良い例: グローバルスコープで一度だけ定義
+const DEFAULT_WIDGET_SETTINGS = {
+  clock: true, weather: true, comment: true, ...
+};
+
+function applySettingsUpdate(settings) {
+  applyWidgetVisibility(settings.widget || DEFAULT_WIDGET_SETTINGS);
+}
+```
+
+### 判断基準
+
+| 状況 | グローバル化すべきか |
+|------|---------------------|
+| 頻繁に呼ばれる関数内の定数 | ✅ 必須 |
+| 関数のロジックと密接に関連するマッピング | ❌ 関数内でOK |
+| 将来的に複数箇所で参照される可能性 | ✅ 推奨 |
 
 ## 教訓
 

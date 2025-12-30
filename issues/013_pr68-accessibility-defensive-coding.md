@@ -100,3 +100,18 @@ setSettings(settings) {
   Object.assign(this.settings, settings);
 }
 ```
+
+**オブジェクト型の型ガード（配列排除版）**（PR#102で追加）:
+```javascript
+// typeof [] === 'object' がtrueになるため、配列も排除する必要がある場合
+applyWidgetVisibility(widgetSettings) {
+  if (!widgetSettings || typeof widgetSettings !== 'object' || Array.isArray(widgetSettings)) {
+    console.warn('[Widget] Invalid widgetSettings, skipping');
+    return;
+  }
+  // 処理...
+}
+```
+
+> **Note**: `typeof` だけでは配列とオブジェクトを区別できない。
+> 純粋なオブジェクトのみを許可する場合は `Array.isArray()` チェックを追加する。

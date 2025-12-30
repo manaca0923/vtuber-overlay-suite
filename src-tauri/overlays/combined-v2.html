@@ -155,6 +155,12 @@
     let commentEnabled = true;
     let setlistEnabled = true;
 
+    // ウィジェット表示のデフォルト設定（issues/016: オプショナルフィールドのフォールバック用）
+    const DEFAULT_WIDGET_SETTINGS = {
+      clock: true, weather: true, comment: true, superchat: true, logo: true,
+      setlist: true, kpi: true, tanzaku: true, announcement: true
+    };
+
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
     // letを使用: bfcache復元時に再初期化するため
     let updateBatcher = new UpdateBatcher({ batchInterval: 150 });
@@ -290,14 +296,20 @@
         applyPerformanceSettings(settings.performance);
       }
 
-      // ウィジェット表示設定
-      if (settings.widget) {
-        applyWidgetVisibility(settings.widget);
-      }
+      // ウィジェット表示設定（issues/016: 新フィールドはオプショナル、デフォルト値を設定）
+      // settings.widget が undefined/null の場合はデフォルト（全表示）を適用
+      applyWidgetVisibility(settings.widget || DEFAULT_WIDGET_SETTINGS);
     }
 
     // ウィジェット表示/非表示を適用
     function applyWidgetVisibility(widgetSettings) {
+      // issues/013: 防御的プログラミング - オブジェクト型のガード
+      // Array.isArrayチェック追加: typeof [] === 'object' がtrueになるため
+      if (!widgetSettings || typeof widgetSettings !== 'object' || Array.isArray(widgetSettings)) {
+        console.warn('[Widget] Invalid widgetSettings, skipping');
+        return;
+      }
+
       const WIDGET_SLOT_MAP = {
         clock: 'left.top',
         weather: 'left.topBelow',

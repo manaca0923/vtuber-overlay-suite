@@ -67,11 +67,11 @@ InnerTubeモードでgRPCに近いリアルタイム体験を実現するため�
 
 1. **ポーリング間隔を1秒固定化**: `Invalidation`の間隔を`clamp(1000, 5000)`から`1000`固定に変更
 2. **表示モードをバッファリングに変更**: `instant: true`から`instant: false`に変更
-3. **モード別バッファ間隔の追加**: WebSocketメッセージに`bufferIntervalMs`フィールドを追加
+3. **モード別バッファ間隔の追加**: WebSocketメッセージに`buffer_interval_ms`フィールドを追加
 
 ### 表示方式の比較
 
-| モード | ポーリング間隔 | instant | bufferIntervalMs | オーバーレイ表示 |
+| モード | ポーリング間隔 | instant | buffer_interval_ms | オーバーレイ表示 |
 |--------|---------------|---------|------------------|-----------------|
 | gRPC | push | `true` | - | 150ms間隔で即時表示 |
 | InnerTube | 1秒固定 | `false` | 1000 | 1秒バッファ→等間隔表示 |

@@ -50,8 +50,8 @@ ws.onopen = () => {
     messageType: MessageType,
     publishedAt: string
   },
-  instant: boolean,           // true: 即時表示（gRPC/キャッシュ）, false: バッファリング表示
-  bufferIntervalMs?: number   // バッファ間隔（ミリ秒）。InnerTube: 1000, 公式API: 省略時デフォルト5000
+  instant: boolean,            // true: 即時表示（gRPC/キャッシュ）, false: バッファリング表示
+  buffer_interval_ms?: number  // バッファ間隔（ミリ秒）。InnerTube: 1000, 公式API: 省略時デフォルト5000
 }
 
 // コメント削除（モデレーション）

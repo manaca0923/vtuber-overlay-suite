@@ -76,6 +76,8 @@ pub struct SaveCommentsResult {
 
 impl SaveCommentsResult {
     /// 全メッセージが正常に保存されたかどうか
+    /// NOTE: 現在未使用だが、将来のエラーハンドリング強化時に使用予定
+    #[allow(dead_code)]
     pub fn is_complete(&self) -> bool {
         self.failed == 0 && self.skipped == 0
     }

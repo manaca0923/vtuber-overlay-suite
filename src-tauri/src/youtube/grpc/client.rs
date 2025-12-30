@@ -373,11 +373,15 @@ impl GrpcChatClient {
     }
 
     /// Get the next page token
+    /// NOTE: 現在未使用だが、将来の再開機能で使用予定（PR#40: 公式APIモードの保存状態再開機能）
+    #[allow(dead_code)]
     pub fn next_page_token(&self) -> Option<&str> {
         self.next_page_token.as_deref()
     }
 
     /// Set the next page token (for resuming)
+    /// NOTE: 現在未使用だが、将来の再開機能で使用予定（PR#40: 公式APIモードの保存状態再開機能）
+    #[allow(dead_code)]
     pub fn set_next_page_token(&mut self, token: Option<String>) {
         self.next_page_token = token;
     }

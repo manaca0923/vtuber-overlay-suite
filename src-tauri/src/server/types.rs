@@ -18,6 +18,9 @@ pub enum WsMessage {
         /// 即座に表示するかどうか（gRPC/InnerTubeの場合はtrue、ポーリングの場合はfalse）
         #[serde(default)]
         instant: bool,
+        /// バッファ間隔（ミリ秒）。InnerTubeは1000、公式APIはNone（デフォルト5000）
+        #[serde(skip_serializing_if = "Option::is_none")]
+        buffer_interval_ms: Option<u32>,
     },
 
     /// コメント削除（モデレーション）

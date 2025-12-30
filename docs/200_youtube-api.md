@@ -139,9 +139,12 @@ InnerTube APIは3種類のContinuationデータを返し、それぞれポーリ
 
 | Continuation Type | 間隔制御 | 根拠 |
 |------------------|---------|------|
-| `invalidationContinuationData` | 1〜5秒にクランプ | `timeoutMs`はOptional、推奨値なので短縮可能 |
+| `invalidationContinuationData` | **1秒固定** | リアルタイム表示のため高頻度ポーリング（推奨値なので短縮可能） |
 | `timedContinuationData` | 500ms〜30秒でガード | 明示的な待機指示を尊重しつつ、極端な値から保護 |
 | `reloadContinuationData` | 1秒固定 | 初期化・リプレイ用、すぐに次のポーリングへ |
+
+> **Note**: Invalidationを1秒固定にすることで、InnerTubeモードでもgRPCに近いリアルタイム体験を実現。
+> オーバーレイ側では`bufferIntervalMs=1000`を指定し、1秒間に取得したコメントを等間隔で表示する。
 
 **エラー時**: 指数バックオフ（5s→10s→20s→...→60s）、ジッタ付き
 

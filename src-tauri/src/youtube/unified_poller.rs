@@ -165,10 +165,10 @@ impl UnifiedPoller {
                                 );
                             }
 
-                            // WebSocketでブロードキャスト（公式APIはバッファリング表示）
+                            // WebSocketでブロードキャスト（公式APIはバッファリング表示、デフォルト5秒）
                             let state_lock = server_state.read().await;
                             for msg in messages_clone {
-                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg, instant: false }).await;
+                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg, instant: false, buffer_interval_ms: None }).await;
                             }
                         });
                     }
@@ -412,10 +412,14 @@ async fn run_innertube_loop(
                         );
                     }
 
-                    // WebSocketでブロードキャスト（InnerTubeは即時表示）
+                    // WebSocketでブロードキャスト（InnerTubeはバッファリング表示、1秒間隔）
                     let state_lock = server_state.read().await;
                     for msg in &new_messages {
-                        state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone(), instant: true }).await;
+                        state_lock.broadcast(WsMessage::CommentAdd {
+                            payload: msg.clone(),
+                            instant: false,
+                            buffer_interval_ms: Some(1000), // InnerTubeは1秒バッファ
+                        }).await;
                     }
                 }
 

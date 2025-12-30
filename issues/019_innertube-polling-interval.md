@@ -39,7 +39,7 @@ const MAX_POLLING_INTERVAL_MS: u64 = 30000;
 const MIN_POLLING_INTERVAL_MS: u64 = 500;
 
 pub enum ContinuationType {
-    Invalidation,  // 推奨間隔（短縮可能）
+    Invalidation,  // 1秒固定（リアルタイム表示のため）
     Timed,         // 明示的待機（厳守、ただしガード付き）
     Reload,        // 初期化・リプレイ用
 }
@@ -48,7 +48,7 @@ impl ContinuationType {
     /// 実効的なポーリング間隔を計算（ロジック一元化）
     pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
         match self {
-            ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
+            ContinuationType::Invalidation => 1000,  // 1秒固定（リアルタイム表示のため）
             ContinuationType::Timed => api_timeout.clamp(MIN_POLLING_INTERVAL_MS, MAX_POLLING_INTERVAL_MS),
             ContinuationType::Reload => 1000,
         }
@@ -58,6 +58,31 @@ impl ContinuationType {
 // 使用例（unified_poller.rs, youtube.rs）
 let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
 ```
+
+## リアルタイム表示対応（PR#100）
+
+### 変更点
+
+InnerTubeモードでgRPCに近いリアルタイム体験を実現するため、以下の変更を実施:
+
+1. **ポーリング間隔を1秒固定化**: `Invalidation`の間隔を`clamp(1000, 5000)`から`1000`固定に変更
+2. **表示モードをバッファリングに変更**: `instant: true`から`instant: false`に変更
+3. **モード別バッファ間隔の追加**: WebSocketメッセージに`bufferIntervalMs`フィールドを追加
+
+### 表示方式の比較
+
+| モード | ポーリング間隔 | instant | bufferIntervalMs | オーバーレイ表示 |
+|--------|---------------|---------|------------------|-----------------|
+| gRPC | push | `true` | - | 150ms間隔で即時表示 |
+| InnerTube | 1秒固定 | `false` | 1000 | 1秒バッファ→等間隔表示 |
+| 公式API | 5秒 | `false` | 省略（デフォルト5000） | 5秒バッファ→等間隔表示 |
+
+### 適用したノウハウ
+
+- **issues/008**: instantQueueとbufferQueueの分離を維持
+- **issues/010**: タイマー変更時は既存タイマーをクリア
+- **issues/013**: 防御的プログラミング（`Number.isFinite()` && `> 0`）
+- **issues/016**: 新フィールドは`Option<T>`で定義、`skip_serializing_if`使用
 
 ## 参考実装
 

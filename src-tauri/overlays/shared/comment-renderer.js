@@ -392,7 +392,8 @@ class CommentQueueManager {
     this.MAX_PROCESSED_IDS = 1000;
 
     // 定期フラッシュ開始（バッファモード用）
-    setInterval(() => this.flushBuffer(), this.BUFFER_INTERVAL);
+    // タイマーIDを保持（setBufferInterval()で動的に変更可能にするため）
+    this._bufferTimerId = setInterval(() => this.flushBuffer(), this.BUFFER_INTERVAL);
   }
 
   /**
@@ -425,8 +426,9 @@ class CommentQueueManager {
   /**
    * コメントをバッファに追加（バッファモード）
    * @param {Object} comment - コメントデータ
+   * @param {number|null} bufferIntervalMs - バッファ間隔（ミリ秒）。指定時はBUFFER_INTERVALを更新
    */
-  queue(comment) {
+  queue(comment, bufferIntervalMs = null) {
     if (!comment || !comment.id) {
       console.warn('Invalid comment: missing id', comment);
       return;
@@ -435,7 +437,33 @@ class CommentQueueManager {
     // 重複チェック
     if (this._isDuplicate(comment.id)) return;
 
+    // bufferIntervalMs の型チェック + 範囲チェック（防御的プログラミング: issues/013）
+    if (Number.isFinite(bufferIntervalMs) && bufferIntervalMs > 0) {
+      this.setBufferInterval(bufferIntervalMs);
+    }
+
     this.commentBuffer.push(comment);
+  }
+
+  /**
+   * バッファ間隔を動的に変更
+   * モード別のポーリング間隔に対応（InnerTube: 1000ms, 公式API: 5000ms）
+   * @param {number} intervalMs - 新しいバッファ間隔（ミリ秒）
+   */
+  setBufferInterval(intervalMs) {
+    // 型チェック + 範囲チェック（防御的プログラミング: issues/013）
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) return;
+
+    if (this.BUFFER_INTERVAL !== intervalMs) {
+      console.log(`Changing BUFFER_INTERVAL from ${this.BUFFER_INTERVAL}ms to ${intervalMs}ms`);
+      this.BUFFER_INTERVAL = intervalMs;
+      // 既存タイマーを必ずクリア（issues/010: タイマー管理）
+      if (this._bufferTimerId) {
+        clearInterval(this._bufferTimerId);
+        this._bufferTimerId = null;
+      }
+      this._bufferTimerId = setInterval(() => this.flushBuffer(), this.BUFFER_INTERVAL);
+    }
   }
 
   /**

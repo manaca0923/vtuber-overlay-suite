@@ -220,6 +220,7 @@ pub async fn start_polling(
                         .broadcast(WsMessage::CommentAdd {
                             payload: message.clone(),
                             instant: false,
+                            buffer_interval_ms: None,
                         })
                         .await;
                 }
@@ -487,6 +488,7 @@ pub async fn send_test_comment(
         .broadcast(WsMessage::CommentAdd {
             payload: test_message,
             instant: true,
+            buffer_interval_ms: None,
         })
         .await;
 
@@ -938,14 +940,15 @@ pub async fn start_polling_innertube(
                     );
                 }
 
-                // WebSocketでブロードキャスト（InnerTubeは即時表示）
+                // WebSocketでブロードキャスト（InnerTubeはバッファリング表示、1秒間隔）
                 let server_state_clone = Arc::clone(&server_state);
                 for message in new_messages {
                     let state_lock = server_state_clone.read().await;
                     state_lock
                         .broadcast(WsMessage::CommentAdd {
                             payload: message,
-                            instant: true,
+                            instant: false,
+                            buffer_interval_ms: Some(1000), // InnerTubeは1秒バッファ
                         })
                         .await;
                 }

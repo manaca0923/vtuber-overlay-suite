@@ -36,10 +36,11 @@ InnerTube APIは3種類のContinuationデータを返す:
 ```rust
 // src-tauri/src/youtube/innertube/types.rs
 const MAX_POLLING_INTERVAL_MS: u64 = 30000;
+const MIN_POLLING_INTERVAL_MS: u64 = 500;
 
 pub enum ContinuationType {
     Invalidation,  // 推奨間隔（短縮可能）
-    Timed,         // 明示的待機（厳守）
+    Timed,         // 明示的待機（厳守、ただしガード付き）
     Reload,        // 初期化・リプレイ用
 }
 
@@ -48,7 +49,7 @@ impl ContinuationType {
     pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
         match self {
             ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-            ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),
+            ContinuationType::Timed => api_timeout.clamp(MIN_POLLING_INTERVAL_MS, MAX_POLLING_INTERVAL_MS),
             ContinuationType::Reload => 1000,
         }
     }
@@ -73,7 +74,7 @@ let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
 2. **フィールドの必須/Optional区別**: 必須フィールドは「指示」、Optionalは「推奨」の可能性が高い
 3. **参考実装の確認**: 同じAPIを使う他のOSSプロジェクトの実装を確認する
 4. **ドキュメントとの整合性**: 実装を変更したらドキュメントも必ず更新する
-5. **極端な値へのガード**: 「厳守」でも最大値ガードは必要（異常値対策）
+5. **極端な値へのガード**: 「厳守」でも最大値・最小値の両ガードが必要（異常値・過負荷対策）
 6. **ログレベルの一貫性**: 高頻度のログは`debug`、重要なイベントは`info`で統一
 7. **コード重複の注意**: 同じロジックが複数箇所にある場合はヘルパー関数への抽出を検討
 
@@ -81,4 +82,6 @@ let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
 
 - ログレベルを`debug`に統一（高頻度出力のため）
 - `timedContinuationData`にも最大30秒のガードを追加（極端な値対策）
-- コード重複改善は`docs/900_tasks.md`に技術的負債として記録
+- `timedContinuationData`に最小500msのガードを追加（サーバー過負荷防止）
+- コード重複改善は`docs/900_tasks.md`に技術的負債として記録 → 完了
+- `effective_timeout_ms()`の境界値テストを追加

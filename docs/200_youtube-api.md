@@ -140,22 +140,18 @@ InnerTube APIは3種類のContinuationデータを返し、それぞれポーリ
 | Continuation Type | 間隔制御 | 根拠 |
 |------------------|---------|------|
 | `invalidationContinuationData` | 1〜5秒にクランプ | `timeoutMs`はOptional、推奨値なので短縮可能 |
-| `timedContinuationData` | APIの値を厳守 | 明示的な待機指示、短縮は仕様違反リスク |
+| `timedContinuationData` | 500ms〜30秒でガード | 明示的な待機指示を尊重しつつ、極端な値から保護 |
 | `reloadContinuationData` | 1秒固定 | 初期化・リプレイ用、すぐに次のポーリングへ |
 
 **エラー時**: 指数バックオフ（5s→10s→20s→...→60s）、ジッタ付き
 
 ```rust
-// 実装例
-let timeout_ms = match continuation_type {
-    ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-    ContinuationType::Timed => api_timeout,  // APIの指示を厳守
-    ContinuationType::Reload => 1000,
-};
+// 実装例（ContinuationType::effective_timeout_ms()を使用）
+let timeout_ms = continuation_type.effective_timeout_ms(api_timeout);
 tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
 ```
 
-> **注意**: `timedContinuationData`の`timeoutMs`を短縮するとAPIの仕様違反となるリスクがあるため、必ずAPIの値を使用する。
+> **注意**: `timedContinuationData`の`timeoutMs`を短縮するとAPIの仕様違反となるリスクがあるため、基本的にAPIの値を使用する。ただし、極端な値（0や非常に大きな値）への対策としてガードを設けている。
 
 ### エラーハンドリング
 

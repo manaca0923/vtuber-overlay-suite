@@ -22,17 +22,21 @@ pub enum ContinuationType {
 /// 極端に大きな値が返された場合のガード
 const MAX_POLLING_INTERVAL_MS: u64 = 30000;
 
+/// ポーリング間隔の最小値（500ms）
+/// 極端に短い値によるサーバー過負荷を防止
+const MIN_POLLING_INTERVAL_MS: u64 = 500;
+
 impl ContinuationType {
     /// 実効的なポーリング間隔を計算
     ///
     /// Continuation種別に応じて適切なポーリング間隔を返す:
     /// - `Invalidation`: 1〜5秒にクランプ（推奨値なので短縮可能）
-    /// - `Timed`: APIの値を使用（最大30秒でガード）
+    /// - `Timed`: APIの値を使用（500ms〜30秒でガード）
     /// - `Reload`: 1秒固定（初期化後は即座にポーリング）
     pub fn effective_timeout_ms(&self, api_timeout: u64) -> u64 {
         match self {
             ContinuationType::Invalidation => api_timeout.clamp(1000, 5000),
-            ContinuationType::Timed => api_timeout.min(MAX_POLLING_INTERVAL_MS),
+            ContinuationType::Timed => api_timeout.clamp(MIN_POLLING_INTERVAL_MS, MAX_POLLING_INTERVAL_MS),
             ContinuationType::Reload => 1000,
         }
     }
@@ -343,8 +347,12 @@ mod tests {
     #[test]
     fn test_effective_timeout_ms_timed() {
         let ct = ContinuationType::Timed;
-        // 小さい値はそのまま
-        assert_eq!(ct.effective_timeout_ms(0), 0);
+        // 下限ガード（500ms未満は500msに）
+        assert_eq!(ct.effective_timeout_ms(0), 500);
+        assert_eq!(ct.effective_timeout_ms(100), 500);
+        assert_eq!(ct.effective_timeout_ms(499), 500);
+        // 範囲内はそのまま
+        assert_eq!(ct.effective_timeout_ms(500), 500);
         assert_eq!(ct.effective_timeout_ms(1000), 1000);
         assert_eq!(ct.effective_timeout_ms(5000), 5000);
         assert_eq!(ct.effective_timeout_ms(29999), 29999);

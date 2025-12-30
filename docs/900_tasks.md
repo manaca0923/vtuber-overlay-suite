@@ -305,11 +305,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
   - 優先度: 低
 
-- [ ] **HTTPモックのクエリパラメータ検証強化** (PR#84)
-  - 現在: `Matcher::Any`を使用してクエリパラメータを無視
-  - 提案: 重要なパラメータ（APIキー、ID等）を`Matcher::AllOf`で明示的に検証
+- [x] **HTTPモックのクエリパラメータ検証強化** (PR#84, PR#89で実装)
+  - 実装済み: 成功テストで`Matcher::AllOf`を使用してAPIキー、ID、partパラメータを検証
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
 
 - [ ] **HTTPモックテストのエラーメッセージ検証強化** (PR#84)
   - 現在: `assert!(msg.contains("サーバーエラー"))`のように部分一致で検証
@@ -385,12 +383,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 実装済み: `SaveCommentsResult { saved, failed, skipped }`構造体を返すように変更
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
 
-- [ ] **SaveCommentsResultのログ出力強化** (PR#88レビュー)
-  - 現在: デバッグログのみ
-  - 提案: `save_comments_to_db()`の呼び出し元で`failed > 0`または`skipped > 0`の場合にwarnログを出力
-  - 目的: 本番環境での問題検出を容易にする
-  - 対象ファイル: `src-tauri/src/youtube/unified_poller.rs`, `src-tauri/src/commands/youtube.rs`
-  - 優先度: 低
+- [x] **SaveCommentsResultのログ出力強化** (PR#88レビュー, PR#89で実装)
+  - 実装済み: `save_comments_to_db()`の呼び出し元5箇所でfailed/skippedのwarnログを出力
+  - 対象ファイル: `src-tauri/src/youtube/unified_poller.rs`, `src-tauri/src/commands/youtube.rs`, `src-tauri/src/youtube/grpc/poller.rs`
 
 - [ ] **save_comments_to_dbの総予算設定可能化** (PR#56)
   - 残タスク:

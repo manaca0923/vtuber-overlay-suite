@@ -256,7 +256,13 @@ async fn run_grpc_stream(
                         let _ = app_handle.emit("chat-messages", &messages);
 
                         // DBに保存
-                        save_comments_to_db(&db_pool, &messages).await;
+                        let save_result = save_comments_to_db(&db_pool, &messages).await;
+                        if save_result.failed > 0 || save_result.skipped > 0 {
+                            log::warn!(
+                                "save_comments_to_db: {} saved, {} failed, {} skipped",
+                                save_result.saved, save_result.failed, save_result.skipped
+                            );
+                        }
 
                         // Broadcast to WebSocket clients (for overlays) - gRPCは即時表示
                         let state_lock = server_state.read().await;

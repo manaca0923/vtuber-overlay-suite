@@ -157,7 +157,13 @@ impl UnifiedPoller {
                         let messages_clone = messages.clone();
                         tokio::spawn(async move {
                             // DBに保存
-                            save_comments_to_db(&db_pool, &messages_clone).await;
+                            let save_result = save_comments_to_db(&db_pool, &messages_clone).await;
+                            if save_result.failed > 0 || save_result.skipped > 0 {
+                                log::warn!(
+                                    "save_comments_to_db: {} saved, {} failed, {} skipped",
+                                    save_result.saved, save_result.failed, save_result.skipped
+                                );
+                            }
 
                             // WebSocketでブロードキャスト（公式APIはバッファリング表示）
                             let state_lock = server_state.read().await;
@@ -398,7 +404,13 @@ async fn run_innertube_loop(
 
                     // WS/DB連携
                     // DBに保存
-                    save_comments_to_db(&db_pool, &new_messages).await;
+                    let save_result = save_comments_to_db(&db_pool, &new_messages).await;
+                    if save_result.failed > 0 || save_result.skipped > 0 {
+                        log::warn!(
+                            "save_comments_to_db: {} saved, {} failed, {} skipped",
+                            save_result.saved, save_result.failed, save_result.skipped
+                        );
+                    }
 
                     // WebSocketでブロードキャスト（InnerTubeは即時表示）
                     let state_lock = server_state.read().await;

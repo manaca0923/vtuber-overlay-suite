@@ -50,6 +50,14 @@ pub enum WsMessage {
     /// 天気更新
     #[serde(rename = "weather:update")]
     WeatherUpdate { payload: WeatherUpdatePayload },
+
+    /// スパチャ追加（専用ウィジェット表示用）
+    #[serde(rename = "superchat:add")]
+    SuperchatAdd { payload: SuperchatPayload },
+
+    /// スパチャ削除（表示完了時）
+    #[serde(rename = "superchat:remove")]
+    SuperchatRemove { payload: SuperchatRemovePayload },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -300,4 +308,39 @@ pub struct WeatherUpdatePayload {
     pub location: String,
     /// 湿度（%）
     pub humidity: Option<i32>,
+}
+
+/// スパチャペイロード（専用ウィジェット表示用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuperchatPayload {
+    /// メッセージID（コメントIDと同一）
+    pub id: String,
+    /// 送信者名
+    pub author_name: String,
+    /// 送信者アイコンURL
+    pub author_image_url: String,
+    /// 金額表示文字列（"¥1,000" 等）
+    pub amount: String,
+    /// 金額（マイクロ単位）
+    /// 例: ¥1,000 = 1_000_000_000 micros
+    pub amount_micros: u64,
+    /// 通貨コード（"JPY", "USD" 等）
+    pub currency: String,
+    /// メッセージ本文
+    pub message: String,
+    /// 金額帯（1-7, YouTube公式準拠）
+    /// 1: ¥100-199, 2: ¥200-499, 3: ¥500-999,
+    /// 4: ¥1,000-1,999, 5: ¥2,000-4,999, 6: ¥5,000-9,999, 7: ¥10,000+
+    pub tier: u8,
+    /// 表示時間（ミリ秒）
+    pub display_duration_ms: u64,
+}
+
+/// スパチャ削除ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuperchatRemovePayload {
+    /// 削除するスパチャのID
+    pub id: String,
 }

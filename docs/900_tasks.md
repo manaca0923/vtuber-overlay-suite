@@ -649,3 +649,287 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 - 縮退時: updateThrottle 2秒→4秒、maxItems 6→4、showSec 6秒→10秒
 
 ---
+
+## ウィジェット実装状況（2025-12-31 調査）
+
+> ウィジェット表示設定（設定画面のトグル）に表示される9つのウィジェットの実装状況。
+> 各ウィジェットは3層（バックエンド/WebSocket送信/オーバーレイUI）で構成される。
+
+### 実装状況サマリー
+
+| ウィジェット | スロット | バックエンド | WS送信 | UI表示 | 総合判定 |
+|-------------|---------|-------------|--------|--------|----------|
+| 時計 | left.top | - | - | ✅ | ✅ **完全動作**（ローカル実行設計） |
+| 天気 | left.topBelow | ✅ | ✅ | ✅ | ✅ **完全動作** |
+| コメント | left.middle | ✅ | ✅ | ✅ | ✅ **完全動作** |
+| スパチャ | left.lower | ✅ | ✅ | ✅ | ✅ **完全動作** |
+| **ロゴ** | left.bottom | ❌ | ❌ | ✅ | ⚠️ UI のみ（設定UIなし） |
+| セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
+| **KPI** | right.lowerLeft | ❌ | ✅型のみ | ✅ | ⚠️ データ供給なし |
+| **短冊** | right.lowerRight | ❌ | ✅型のみ | ✅ | ⚠️ データ供給なし |
+| **告知** | right.bottom | ❌ | ✅型のみ | ✅ | ⚠️ スタブ表示 |
+
+### 詳細説明
+
+#### ✅ 完全動作（5個）
+
+1. **時計** (`ClockWidget`)
+   - 設計上バックエンド不要（ブラウザのローカル時刻を使用）
+   - 毎秒更新、日本語フォーマット対応
+   - ファイル: `src-tauri/overlays/components/clock-widget.js`
+
+2. **天気** (`WeatherWidget`)
+   - Open-Meteo API連携（APIキー不要）
+   - 都市名 → 緯度経度変換 → 天気取得
+   - 15分キャッシュ、WMOコード → 絵文字変換
+   - WebSocket: `weather:update` メッセージ
+   - ファイル: `src-tauri/src/weather/`, `src-tauri/src/commands/weather.rs`
+
+3. **コメント**
+   - gRPC/InnerTube/公式API 3モード対応
+   - 即時表示（instant）/バッファ表示 両対応
+   - DB保存、履歴キャッシュ（50件）
+   - WebSocket: `comment:add` / `comment:remove` メッセージ
+   - ファイル: `src-tauri/src/youtube/`, `src-tauri/overlays/shared/comment-renderer.js`
+
+4. **セトリ**
+   - DB完備（setlists, setlist_songs テーブル）
+   - 曲の再生状態管理、リアルタイム更新
+   - WebSocket: `setlist:update` メッセージ
+   - ファイル: `src-tauri/src/commands/setlist.rs`
+
+5. **スパチャ** (`SuperchatCard`)
+   - スパチャ専用表示ウィジェット（コメント欄とは別に目立たせて表示）
+   - 金額帯Tier判定（1-7）、通貨換算（JPY, USD, EUR等対応）
+   - Tierに応じた表示時間（10秒〜5分）
+   - キュー管理（同時表示1件、待機キュー）
+   - WebSocket: `superchat:add` / `superchat:remove` メッセージ
+   - ファイル: `src-tauri/src/superchat/mod.rs`, `src-tauri/overlays/components/superchat-card.js`
+
+#### ⚠️ 部分実装（4個）
+
+6. **ロゴ** (`BrandBlock`)
+   - UIコンポーネントは完成（画像URL/テキスト表示対応）
+   - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
+   - ファイル: `src-tauri/overlays/components/brand-block.js`
+
+7. **KPI** (`KPIBlock`)
+   - UIコンポーネントは完成（数値フォーマット、パルスアニメーション）
+   - WebSocket型定義あり: `kpi:update` (`KpiUpdatePayload`)
+   - **欠けているもの**: YouTube APIから視聴者数等を取得してブロードキャストするバックエンド
+   - 現状: `afterMount`でランダムなモック値を表示
+   - ファイル: `src-tauri/overlays/components/kpi-block.js`
+
+8. **短冊** (`QueueList`)
+   - UIコンポーネントは完成（リスト表示、最大6件、空時非表示）
+   - WebSocket型定義あり: `queue:update` (`QueueUpdatePayload`)
+   - **欠けているもの**: キュー管理のバックエンドロジック、設定UI
+   - 現状: データがないため非表示
+   - ファイル: `src-tauri/overlays/components/queue-list.js`
+
+9. **告知** (`PromoPanel`)
+   - UIコンポーネントは完成（サイクル表示、フェードアニメーション）
+   - WebSocket型定義あり: `promo:update` (`PromoUpdatePayload`)
+   - **欠けているもの**: 告知コンテンツ管理のバックエンド、設定UI
+   - 現状: `afterMount`で固定ダミー文言（「チャンネル登録よろしく」等）を表示
+   - ファイル: `src-tauri/overlays/components/promo-panel.js`
+
+### 関連ファイル
+
+- オーバーレイHTML: `src-tauri/overlays/combined-v2.html`
+- コンポーネント: `src-tauri/overlays/components/*.js`
+- WebSocket型定義: `src-tauri/src/server/types.rs`
+- 設定画面: `src/components/settings/WidgetSettingsPanel.tsx`
+
+---
+
+## T25: スパチャウィジェット実装
+**優先度**: P1 | **見積**: 5日 | **依存**: T16
+**ステータス**: ✅ **完了**（2025-12-31）
+
+### 概要
+スーパーチャット専用表示ウィジェット（left.lower スロット）を実装する。
+コメント欄で流れるスパチャとは別に、目立つ専用領域で一定時間表示する。
+
+### 背景
+- 現在スパチャはコメント欄で他のコメントと一緒に流れている
+- 配信者がスパチャを見逃しやすい
+- 専用ウィジェットで目立たせて表示し、一定時間固定表示 + キュー管理が必要
+
+### チェックリスト
+
+#### Phase 1: バックエンド実装
+- [x] スパチャデータの抽出ロジック（コメント取得時にスパチャを別途保持）
+- [x] スパチャキュー管理（表示待ちスパチャのキュー）
+- [x] WebSocket送信: `superchat:add` / `superchat:remove` メッセージ
+- [x] 表示時間管理（金額に応じた表示時間）
+
+#### Phase 2: オーバーレイUI実装
+- [x] `superchat-card.js` コンポーネント作成
+- [x] combined-v2.html にWebSocketハンドラ追加
+- [x] スパチャカラー（金額帯に応じた背景色）対応
+- [x] アニメーション（スライドイン/アウト）
+
+#### Phase 3: 設定UI（将来実装）
+- [ ] スパチャウィジェットの設定項目追加
+  - 最小表示金額フィルター
+  - 表示時間設定
+  - 読み上げ連携（将来）
+
+### 技術仕様
+
+#### WebSocketメッセージ
+```typescript
+// スパチャ追加
+{
+  type: 'superchat:add',
+  payload: {
+    id: string,
+    authorName: string,
+    authorImageUrl: string,
+    amount: string,        // "¥1,000" 等
+    amountMicros: number,  // マイクロ単位の金額
+    currency: string,      // "JPY" 等
+    message: string,
+    tier: number,          // 1-7 (金額帯)
+    displayDurationMs: number
+  }
+}
+
+// スパチャ削除（表示完了）
+{
+  type: 'superchat:remove',
+  payload: { id: string }
+}
+```
+
+#### 金額帯とカラー（YouTube公式準拠）
+| Tier | 金額 (JPY) | 背景色 |
+|------|-----------|--------|
+| 1 | ¥100-199 | #1565C0 (Blue) |
+| 2 | ¥200-499 | #00B8D4 (Cyan) |
+| 3 | ¥500-999 | #00BFA5 (Teal) |
+| 4 | ¥1,000-1,999 | #FFB300 (Yellow) |
+| 5 | ¥2,000-4,999 | #F57C00 (Orange) |
+| 6 | ¥5,000-9,999 | #E91E63 (Pink) |
+| 7 | ¥10,000+ | #E62117 (Red) |
+
+### 成果物
+- `src-tauri/overlays/components/superchat-card.js` - UIコンポーネント（キュー管理、アニメーション）
+- `src-tauri/src/server/types.rs` - `SuperchatPayload`, `SuperchatRemovePayload` 型追加
+- `src-tauri/src/superchat/mod.rs` - スパチャモジュール（Tier判定、表示時間計算、通貨換算）
+- `src-tauri/overlays/combined-v2.html` - WebSocketハンドラ追加
+- `src-tauri/src/youtube/unified_poller.rs` - スパチャ検出・ブロードキャスト
+- `src-tauri/src/youtube/grpc/poller.rs` - スパチャ検出・ブロードキャスト
+
+---
+
+## T26: KPIデータ連携
+**優先度**: P2 | **見積**: 2日 | **依存**: T16
+**ステータス**: 未着手
+
+### 概要
+KPIウィジェット（right.lowerLeft）に実データを供給する。
+YouTube APIから視聴者数・高評価数等を取得してリアルタイム表示。
+
+### 背景
+- KPIBlockコンポーネントは完成済み（UI、WebSocket受信、density対応）
+- WebSocket型定義 `kpi:update` も存在
+- **欠けているもの**: データ取得・送信するバックエンドロジック
+
+### チェックリスト
+- [ ] YouTube Data API v3 から視聴者数取得（`videos.list` の `liveStreamingDetails.concurrentViewers`）
+- [ ] 定期的な取得（30秒〜1分間隔）
+- [ ] `broadcast_kpi_update()` 関数実装
+- [ ] 設定UI: 表示するKPI項目の選択（視聴者数/高評価数/チャット速度等）
+
+### 技術仕様
+- 取得間隔: 30秒（クォータ節約のため）
+- 主数値: 視聴者数（デフォルト）
+- 副数値: 高評価数 or チャット速度（1分あたりコメント数）
+
+### 成果物
+- `src-tauri/src/commands/kpi.rs` - KPI取得・ブロードキャストコマンド
+- `src/components/settings/KpiSettingsPanel.tsx` - 設定UI（オプション）
+
+---
+
+## T27: 短冊（キュー）管理機能
+**優先度**: P3 | **見積**: 3日 | **依存**: なし
+**ステータス**: 未着手
+
+### 概要
+短冊ウィジェット（right.lowerRight）のキュー管理機能を実装。
+リクエスト曲や待機者リストなどを管理・表示する。
+
+### 背景
+- QueueListコンポーネントは完成済み（UI、WebSocket受信）
+- WebSocket型定義 `queue:update` も存在
+- **欠けているもの**: キュー管理のバックエンド、設定UI
+
+### チェックリスト
+- [ ] キューデータのDB保存（またはメモリ管理）
+- [ ] キュー操作コマンド: `add_queue_item`, `remove_queue_item`, `clear_queue`
+- [ ] `broadcast_queue_update()` 関数実装
+- [ ] 設定UI: キュータイトル、最大表示件数
+
+### ユースケース
+- リクエスト曲の待ち行列
+- 参加者リスト
+- 抽選待ちリスト
+
+### 成果物
+- `src-tauri/src/commands/queue.rs` - キュー管理コマンド
+- `src/components/settings/QueueSettingsPanel.tsx` - 設定UI
+
+---
+
+## T28: 告知コンテンツ管理
+**優先度**: P3 | **見積**: 2日 | **依存**: なし
+**ステータス**: 未着手
+
+### 概要
+告知ウィジェット（right.bottom）のコンテンツ管理機能を実装。
+ユーザーが告知文を設定し、サイクル表示させる。
+
+### 背景
+- PromoPanelコンポーネントは完成済み（UI、WebSocket受信、サイクル表示）
+- WebSocket型定義 `promo:update` も存在
+- **欠けているもの**: 告知コンテンツの設定UI、保存機能
+- 現状: 固定ダミー文言（「チャンネル登録よろしく」等）を表示
+
+### チェックリスト
+- [ ] 告知コンテンツのDB保存
+- [ ] 告知編集コマンド: `set_promo_items`, `get_promo_items`
+- [ ] `broadcast_promo_update()` 関数実装
+- [ ] 設定UI: 告知文の追加・編集・削除、サイクル間隔設定
+
+### 成果物
+- `src-tauri/src/commands/promo.rs` - 告知管理コマンド
+- `src/components/settings/PromoSettingsPanel.tsx` - 設定UI
+
+---
+
+## T29: ロゴ設定UI
+**優先度**: P3 | **見積**: 1日 | **依存**: なし
+**ステータス**: 未着手
+
+### 概要
+ロゴウィジェット（left.bottom）の設定UIを実装。
+ユーザーがロゴ画像URL/テキストを設定できるようにする。
+
+### 背景
+- BrandBlockコンポーネントは完成済み（UI、画像/テキスト表示）
+- **欠けているもの**: 設定画面からロゴを設定するUI
+- 現状: データがないため何も表示されない
+
+### チェックリスト
+- [ ] ロゴ設定の保存（DB or 設定ファイル）
+- [ ] 設定UI: ロゴURL入力、代替テキスト入力、プレビュー表示
+- [ ] 設定変更時のWebSocketブロードキャスト
+
+### 成果物
+- `src/components/settings/BrandSettingsPanel.tsx` - 設定UI
+- 設定保存ロジック追加
+
+---

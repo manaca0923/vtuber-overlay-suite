@@ -20,6 +20,7 @@ use super::types::ChatMessage;
 use crate::commands::youtube::ApiMode;
 use crate::server::types::WsMessage;
 use crate::server::WebSocketState;
+use crate::superchat::{broadcast_superchat, create_superchat_payload, schedule_superchat_removal};
 use sqlx::SqlitePool;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -168,7 +169,17 @@ impl UnifiedPoller {
                             // WebSocketでブロードキャスト（公式APIはバッファリング表示、デフォルト5秒）
                             let state_lock = server_state.read().await;
                             for msg in messages_clone {
-                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg, instant: false, buffer_interval_ms: None }).await;
+                                // コメント欄にブロードキャスト
+                                state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone(), instant: false, buffer_interval_ms: None }).await;
+
+                                // スパチャの場合は専用ウィジェットにもブロードキャスト
+                                if let Some(superchat_payload) = create_superchat_payload(&msg) {
+                                    let display_duration = superchat_payload.display_duration_ms;
+                                    let superchat_id = superchat_payload.id.clone();
+                                    broadcast_superchat(&server_state, superchat_payload).await;
+                                    // 表示完了後にremoveメッセージを送信するタイマーをスケジュール
+                                    schedule_superchat_removal(Arc::clone(&server_state), superchat_id, display_duration);
+                                }
                             }
                         });
                     }
@@ -416,11 +427,21 @@ async fn run_innertube_loop(
                     use crate::youtube::innertube::INNERTUBE_BUFFER_INTERVAL_MS;
                     let state_lock = server_state.read().await;
                     for msg in &new_messages {
+                        // コメント欄にブロードキャスト
                         state_lock.broadcast(WsMessage::CommentAdd {
                             payload: msg.clone(),
                             instant: false,
                             buffer_interval_ms: Some(INNERTUBE_BUFFER_INTERVAL_MS),
                         }).await;
+
+                        // スパチャの場合は専用ウィジェットにもブロードキャスト
+                        if let Some(superchat_payload) = create_superchat_payload(msg) {
+                            let display_duration = superchat_payload.display_duration_ms;
+                            let superchat_id = superchat_payload.id.clone();
+                            broadcast_superchat(&server_state, superchat_payload).await;
+                            // 表示完了後にremoveメッセージを送信するタイマーをスケジュール
+                            schedule_superchat_removal(Arc::clone(&server_state), superchat_id, display_duration);
+                        }
                     }
                 }
 

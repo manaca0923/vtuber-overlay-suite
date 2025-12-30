@@ -11,6 +11,7 @@
 use super::client::GrpcChatClient;
 use crate::server::types::WsMessage;
 use crate::server::WebSocketState;
+use crate::superchat::{broadcast_superchat, create_superchat_payload, schedule_superchat_removal};
 use crate::youtube::api_key_manager::get_api_key_manager;
 use crate::youtube::backoff::ExponentialBackoff;
 use crate::youtube::db::save_comments_to_db;
@@ -269,7 +270,17 @@ async fn run_grpc_stream(
                         // Broadcast to WebSocket clients (for overlays) - gRPCは即時表示
                         let state_lock = server_state.read().await;
                         for msg in &messages {
+                            // コメント欄にブロードキャスト
                             state_lock.broadcast(WsMessage::CommentAdd { payload: msg.clone(), instant: true, buffer_interval_ms: None }).await;
+
+                            // スパチャの場合は専用ウィジェットにもブロードキャスト
+                            if let Some(superchat_payload) = create_superchat_payload(msg) {
+                                let display_duration = superchat_payload.display_duration_ms;
+                                let superchat_id = superchat_payload.id.clone();
+                                broadcast_superchat(&server_state, superchat_payload).await;
+                                // 表示完了後にremoveメッセージを送信するタイマーをスケジュール
+                                schedule_superchat_removal(Arc::clone(&server_state), superchat_id, display_duration);
+                            }
                         }
 
                         log::info!("Broadcast {} chat messages to WebSocket (total: {})", broadcast_count, message_count);

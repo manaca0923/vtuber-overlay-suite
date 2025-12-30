@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod keyring;
 mod server;
+mod superchat;
 pub mod util; // doctestのためpubにする
 mod weather;
 mod youtube;

@@ -324,6 +324,21 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 確認済み: `poller.rs`のcatch-allハンドラでexponential backoffによるリトライが実装済み
   - 対象ファイル: `src-tauri/src/youtube/poller.rs`
 
+- [ ] **WeatherClientのタイムアウトエラー変換** (PR#90レビュー提案)
+  - YouTubeClientと同様に`convert_reqwest_error`パターンを適用
+  - `is_timeout()`でタイムアウトを検出し`WeatherError::Timeout`に変換
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+
+- [ ] **HTTPタイムアウト定数の統一** (PR#90レビュー提案)
+  - 現在: `HTTP_TIMEOUT_SECS`がYouTubeClientとWeatherClientで個別定義
+  - 対応: 共通のconfigモジュールまたは定数ファイルに統一することを検討
+  - 優先度: 低
+
+- [ ] **タイムアウトエラーのログレベル検討** (PR#90レビュー提案)
+  - 現在: タイムアウト時に`log::warn!`を使用
+  - 検討: 頻発する環境では`log::info!`の方が適切な可能性
+  - 優先度: 低
+
 ### セキュリティ（将来課題）
 
 ### 機能改善（中優先度）

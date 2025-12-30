@@ -6,6 +6,7 @@ import { SetlistSettingsPanel } from './SetlistSettingsPanel';
 import { WeatherSettingsPanel } from './WeatherSettingsPanel';
 import { PerformanceSettingsPanel } from './PerformanceSettingsPanel';
 import { ApiKeySettingsPanel } from './ApiKeySettingsPanel';
+import { WidgetSettingsPanel } from './WidgetSettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
   DEFAULT_OVERLAY_SETTINGS,
@@ -16,6 +17,7 @@ import {
   type OverlaySettings as Settings,
   type ThemeName,
   type LayoutPreset,
+  type WidgetVisibilitySettings,
 } from '../../types/overlaySettings';
 
 type PreviewMode = 'combined' | 'individual';
@@ -26,7 +28,7 @@ export function OverlaySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activePanel, setActivePanel] = useState<'comment' | 'setlist' | 'weather' | 'performance'>('comment');
+  const [activePanel, setActivePanel] = useState<'widget' | 'comment' | 'setlist' | 'weather' | 'performance'>('widget');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
 
   useEffect(() => {
@@ -41,6 +43,21 @@ export function OverlaySettings() {
             : 'three-column'; // 旧プリセットはthree-columnにフォールバック
 
           // 古い設定と新しいデフォルト値をマージ（マイグレーション対応）
+          // widget設定のマイグレーション（既存のenabled設定から生成）
+          const migratedWidget: WidgetVisibilitySettings = saved.widget
+            ? { ...DEFAULT_OVERLAY_SETTINGS.widget, ...saved.widget }
+            : {
+                clock: true,
+                weather: saved.weather?.enabled ?? true,
+                comment: saved.comment?.enabled ?? true,
+                superchat: true,
+                logo: true,
+                setlist: saved.setlist?.enabled ?? true,
+                kpi: true,
+                tanzaku: true,
+                announcement: true,
+              };
+
           const merged: Settings = {
             theme: saved.theme ?? DEFAULT_OVERLAY_SETTINGS.theme,
             layout: migratedLayout,
@@ -64,6 +81,8 @@ export function OverlaySettings() {
             performance: saved.performance
               ? { ...DEFAULT_OVERLAY_SETTINGS.performance, ...saved.performance }
               : DEFAULT_OVERLAY_SETTINGS.performance,
+            // widget設定
+            widget: migratedWidget,
           };
           setSettings(merged);
         }
@@ -165,6 +184,16 @@ export function OverlaySettings() {
           <div className="bg-white rounded-lg shadow">
             <div className="flex border-b">
               <button
+                onClick={() => setActivePanel('widget')}
+                className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
+                  activePanel === 'widget'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ウィジェット
+              </button>
+              <button
                 onClick={() => setActivePanel('comment')}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
                   activePanel === 'comment'
@@ -172,7 +201,7 @@ export function OverlaySettings() {
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                コメント設定
+                コメント
               </button>
               <button
                 onClick={() => setActivePanel('setlist')}
@@ -182,7 +211,7 @@ export function OverlaySettings() {
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                セットリスト設定
+                セトリ
               </button>
               <button
                 onClick={() => setActivePanel('weather')}
@@ -192,7 +221,7 @@ export function OverlaySettings() {
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                天気設定
+                天気
               </button>
               <button
                 onClick={() => setActivePanel('performance')}
@@ -207,6 +236,23 @@ export function OverlaySettings() {
             </div>
 
             <div className="p-6">
+              {activePanel === 'widget' && settings.widget && (
+                <WidgetSettingsPanel
+                  settings={settings.widget}
+                  onChange={(widget) => {
+                    // widget設定と各enabled設定を同期
+                    setSettings((prev) => ({
+                      ...prev,
+                      widget,
+                      comment: { ...prev.comment, enabled: widget.comment },
+                      setlist: { ...prev.setlist, enabled: widget.setlist },
+                      weather: prev.weather
+                        ? { ...prev.weather, enabled: widget.weather }
+                        : { enabled: widget.weather, position: 'left-top' },
+                    }));
+                  }}
+                />
+              )}
               {activePanel === 'comment' && (
                 <CommentSettingsPanel
                   settings={settings.comment}
@@ -302,7 +348,7 @@ export function OverlaySettings() {
           <div className="h-[500px]">
             <OverlayPreview
               settings={settings}
-              activePanel={activePanel === 'weather' || activePanel === 'performance' ? 'comment' : activePanel}
+              activePanel={activePanel === 'widget' || activePanel === 'weather' || activePanel === 'performance' ? 'comment' : activePanel}
               mode={previewMode}
             />
           </div>

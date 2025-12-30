@@ -103,6 +103,19 @@ export interface PerformanceSettings {
   densityThreshold: number; // 過密検出閾値（1-20、デフォルト: 5）
 }
 
+// ウィジェット表示設定
+export interface WidgetVisibilitySettings {
+  clock: boolean; // left.top: 時計
+  weather: boolean; // left.topBelow: 天気
+  comment: boolean; // left.middle: コメント
+  superchat: boolean; // left.lower: スパチャ
+  logo: boolean; // left.bottom: ロゴ
+  setlist: boolean; // right.upper: セトリ
+  kpi: boolean; // right.lowerLeft: KPI
+  tanzaku: boolean; // right.lowerRight: 短冊
+  announcement: boolean; // right.bottom: 告知
+}
+
 // オーバーレイ設定全体
 export interface OverlaySettings {
   theme: ThemeName;
@@ -112,6 +125,7 @@ export interface OverlaySettings {
   setlist: SetlistSettings;
   weather?: WeatherSettings; // オプショナル（後方互換性のため）
   performance?: PerformanceSettings; // オプショナル（後方互換性のため）
+  widget?: WidgetVisibilitySettings; // オプショナル（後方互換性のため）
 }
 
 // デフォルト設定
@@ -141,6 +155,17 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
   },
   performance: {
     densityThreshold: 5, // デフォルト: 2秒間に5回更新で高負荷と判定
+  },
+  widget: {
+    clock: true,
+    weather: true,
+    comment: true,
+    superchat: true,
+    logo: true,
+    setlist: true,
+    kpi: true,
+    tanzaku: true,
+    announcement: true,
   },
 };
 

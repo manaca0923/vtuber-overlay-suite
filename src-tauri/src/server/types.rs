@@ -95,6 +95,9 @@ pub struct SettingsUpdatePayload {
     // 天気ウィジェット設定
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weather: Option<WeatherSettingsPayload>,
+    // ウィジェット表示設定
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub widget: Option<WidgetVisibilitySettingsPayload>,
 }
 
 /// 天気ウィジェット設定
@@ -103,6 +106,21 @@ pub struct SettingsUpdatePayload {
 pub struct WeatherSettingsPayload {
     pub enabled: bool,
     pub position: WeatherPosition,
+}
+
+/// ウィジェット表示設定ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetVisibilitySettingsPayload {
+    pub clock: bool,
+    pub weather: bool,
+    pub comment: bool,
+    pub superchat: bool,
+    pub logo: bool,
+    pub setlist: bool,
+    pub kpi: bool,
+    pub tanzaku: bool,
+    pub announcement: bool,
 }
 
 /// 天気ウィジェットの表示位置

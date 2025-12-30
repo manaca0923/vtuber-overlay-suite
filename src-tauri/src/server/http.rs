@@ -281,6 +281,8 @@ struct OverlaySettingsApiResponse {
     setlist: SetlistSettingsApi,
     #[serde(skip_serializing_if = "Option::is_none")]
     weather: Option<WeatherSettingsApi>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    widget: Option<WidgetVisibilitySettingsApi>,
 }
 
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
@@ -307,6 +309,20 @@ struct SetlistSettingsApi {
 struct WeatherSettingsApi {
     enabled: bool,
     position: WeatherPosition,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WidgetVisibilitySettingsApi {
+    clock: bool,
+    weather: bool,
+    comment: bool,
+    superchat: bool,
+    logo: bool,
+    setlist: bool,
+    kpi: bool,
+    tanzaku: bool,
+    announcement: bool,
 }
 
 /// 文字列からWeatherPositionに変換
@@ -344,6 +360,17 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
         weather: Some(WeatherSettingsApi {
             enabled: true,
             position: WeatherPosition::LeftTop,
+        }),
+        widget: Some(WidgetVisibilitySettingsApi {
+            clock: true,
+            weather: true,
+            comment: true,
+            superchat: true,
+            logo: true,
+            setlist: true,
+            kpi: true,
+            tanzaku: true,
+            announcement: true,
         }),
     }
 }
@@ -414,6 +441,34 @@ async fn get_overlay_settings_api(
                         })
                     };
 
+                    // ウィジェット表示設定をパース（存在する場合のみ）
+                    let widget = if settings["widget"].is_object() {
+                        Some(WidgetVisibilitySettingsApi {
+                            clock: settings["widget"]["clock"].as_bool().unwrap_or(true),
+                            weather: settings["widget"]["weather"].as_bool().unwrap_or(true),
+                            comment: settings["widget"]["comment"].as_bool().unwrap_or(true),
+                            superchat: settings["widget"]["superchat"].as_bool().unwrap_or(true),
+                            logo: settings["widget"]["logo"].as_bool().unwrap_or(true),
+                            setlist: settings["widget"]["setlist"].as_bool().unwrap_or(true),
+                            kpi: settings["widget"]["kpi"].as_bool().unwrap_or(true),
+                            tanzaku: settings["widget"]["tanzaku"].as_bool().unwrap_or(true),
+                            announcement: settings["widget"]["announcement"].as_bool().unwrap_or(true),
+                        })
+                    } else {
+                        // デフォルト値（全て有効）
+                        Some(WidgetVisibilitySettingsApi {
+                            clock: true,
+                            weather: true,
+                            comment: true,
+                            superchat: true,
+                            logo: true,
+                            setlist: true,
+                            kpi: true,
+                            tanzaku: true,
+                            announcement: true,
+                        })
+                    };
+
                     let response = OverlaySettingsApiResponse {
                         theme: settings["theme"].as_str().unwrap_or("default").to_string(),
                         layout: parse_layout_preset(
@@ -439,6 +494,7 @@ async fn get_overlay_settings_api(
                             font_size: settings["setlist"]["fontSize"].as_u64().unwrap_or(24) as u32,
                         },
                         weather,
+                        widget,
                     };
                     Json(response).into_response()
                 }

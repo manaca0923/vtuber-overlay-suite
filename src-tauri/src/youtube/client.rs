@@ -157,7 +157,7 @@ impl YouTubeClient {
             status if status.is_server_error() => {
                 // 5xx サーバーエラー: 一時的な障害の可能性
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!("YouTube API server error ({}): {}", status, error_text);
+                log::warn!("YouTube API server error ({}): {}", status, error_text);
                 return Err(YouTubeError::ApiError(format!(
                     "サーバーエラー ({}): 一時的な障害の可能性があります",
                     status
@@ -166,7 +166,7 @@ impl YouTubeClient {
             status => {
                 // その他の予期しないステータス
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                log::warn!("Unexpected YouTube API status ({}): {}", status, error_text);
                 return Err(YouTubeError::ApiError(format!(
                     "予期しないエラー ({})",
                     status
@@ -280,7 +280,7 @@ impl YouTubeClient {
             status if status.is_server_error() => {
                 // 5xx サーバーエラー: 一時的な障害の可能性
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!("YouTube API server error ({}): {}", status, error_text);
+                log::warn!("YouTube API server error ({}): {}", status, error_text);
                 Err(YouTubeError::ApiError(format!(
                     "サーバーエラー ({}): 一時的な障害の可能性があります",
                     status
@@ -289,7 +289,7 @@ impl YouTubeClient {
             status => {
                 // その他の予期しないステータス
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                log::warn!("Unexpected YouTube API status ({}): {}", status, error_text);
                 Err(YouTubeError::ApiError(format!(
                     "予期しないエラー ({})",
                     status
@@ -351,7 +351,7 @@ impl YouTubeClient {
             _ if status.is_server_error() => {
                 // 5xx サーバーエラー: 一時的な障害の可能性
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!("YouTube API server error ({}): {}", status, error_text);
+                log::warn!("YouTube API server error ({}): {}", status, error_text);
                 return Err(YouTubeError::ApiError(format!(
                     "サーバーエラー ({}): 一時的な障害の可能性があります",
                     status
@@ -360,7 +360,7 @@ impl YouTubeClient {
             _ => {
                 // その他の予期しないステータス
                 let error_text = response.text().await.unwrap_or_default();
-                log::error!("Unexpected YouTube API status ({}): {}", status, error_text);
+                log::warn!("Unexpected YouTube API status ({}): {}", status, error_text);
                 return Err(YouTubeError::ApiError(format!(
                     "予期しないエラー ({})",
                     status
@@ -403,13 +403,23 @@ mod tests {
     use super::*;
     use mockito::Server;
 
+    /// テスト用のセットアップを行い、(ServerGuard, YouTubeClient)を返す
+    async fn setup_test_client() -> (mockito::ServerGuard, YouTubeClient) {
+        let server = Server::new_async().await;
+        let client = YouTubeClient::new_with_base_url(
+            "test_api_key".to_string(),
+            server.url(),
+        );
+        (server, client)
+    }
+
     // =============================================================================
     // get_live_stream_stats HTTPステータスマッピングテスト
     // =============================================================================
 
     #[tokio::test]
     async fn test_get_live_stream_stats_success() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         // 正常なレスポンス
         let response_body = serde_json::json!({
@@ -435,11 +445,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
-
         let result = client.get_live_stream_stats("test_video").await;
         assert!(result.is_ok());
 
@@ -451,7 +456,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_empty_items() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         // items配列が空
         let response_body = serde_json::json!({
@@ -467,10 +472,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("nonexistent").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
@@ -478,7 +479,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_403_quota_exceeded() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -488,10 +489,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
@@ -499,7 +496,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_403_rate_limit() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -509,10 +506,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -520,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_403_other() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -530,10 +523,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -541,7 +530,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_401_unauthorized() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -550,10 +539,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -561,7 +546,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_404_not_found() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -570,10 +555,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
@@ -581,7 +562,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_400_bad_request() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -591,10 +572,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("invalid!id").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
@@ -602,7 +579,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_500_server_error() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -612,10 +589,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -628,7 +601,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_502_bad_gateway() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -637,10 +610,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -654,7 +623,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_503_service_unavailable() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -663,10 +632,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -679,7 +644,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_unexpected_status() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         // 418 I'm a teapot - 予期しないステータス
         let _mock = server
@@ -689,10 +654,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -706,7 +667,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_stream_stats_partial_data() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         // viewCountのみ存在（likeCount, concurrentViewersなし）
         let response_body = serde_json::json!({
@@ -726,10 +687,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(result.is_ok());
@@ -746,7 +703,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_api_key_success() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let response_body = serde_json::json!({
             "items": [{"id": "dQw4w9WgXcQ"}]
@@ -761,10 +718,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.validate_api_key().await;
         assert!(result.is_ok());
@@ -773,7 +726,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_api_key_401_unauthorized() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -782,10 +735,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "invalid_key".to_string(),
-            server.url(),
-        );
 
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -793,7 +742,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_api_key_403_quota_exceeded() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -803,10 +752,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
@@ -814,7 +759,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_api_key_403_rate_limit() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -824,10 +769,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -835,7 +776,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_api_key_403_other() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -845,10 +786,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -856,7 +793,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_api_key_unexpected_status() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -865,10 +802,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.validate_api_key().await;
         assert!(result.is_ok());
@@ -881,7 +814,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_success() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let response_body = serde_json::json!({
             "items": [{
@@ -900,10 +833,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(result.is_ok());
@@ -912,7 +841,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_no_chat_id() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         // liveStreamingDetailsはあるが、activeLiveChatIdがない
         let response_body = serde_json::json!({
@@ -930,10 +859,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::LiveChatNotFound)));
@@ -941,7 +866,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_empty_items() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let response_body = serde_json::json!({
             "items": []
@@ -956,10 +881,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("nonexistent_video").await;
         assert!(matches!(result, Err(YouTubeError::LiveChatNotFound)));
@@ -967,7 +888,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_400_key_invalid() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -977,10 +898,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "invalid_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -988,7 +905,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_400_other() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -998,10 +915,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("invalid!video!id").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
@@ -1009,7 +922,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_401_unauthorized() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1018,10 +931,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "invalid_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -1029,7 +938,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_403_quota_exceeded() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1039,10 +948,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
@@ -1050,7 +955,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_403_rate_limit() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1060,10 +965,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -1071,7 +972,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_403_key_invalid() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1081,10 +982,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "invalid_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -1092,7 +989,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_404_not_found() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1101,10 +998,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("nonexistent_video").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
@@ -1112,7 +1005,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_500_server_error() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1121,10 +1014,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         // 5xxサーバーエラーはApiErrorにマッピング
@@ -1136,7 +1025,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_id_unexpected_status() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/videos")
@@ -1145,10 +1034,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_id("test_video").await;
         // 予期しないステータスはApiErrorにマッピング
@@ -1164,7 +1049,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_success() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let response_body = serde_json::json!({
             "pollingIntervalMillis": 5000,
@@ -1197,10 +1082,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(result.is_ok());
@@ -1213,7 +1094,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_with_page_token() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let response_body = serde_json::json!({
             "pollingIntervalMillis": 3000,
@@ -1229,10 +1110,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client
             .get_live_chat_messages("test_chat_id", Some("page_token"))
@@ -1242,7 +1119,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_400_key_invalid() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1252,10 +1129,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "invalid_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -1263,7 +1136,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_400_invalid_page_token() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1273,10 +1146,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client
             .get_live_chat_messages("test_chat_id", Some("invalid_token"))
@@ -1286,7 +1155,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_400_other() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1296,10 +1165,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::ParseError(_))));
@@ -1307,7 +1172,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_401_unauthorized() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1316,10 +1181,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "invalid_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -1327,7 +1188,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_403_quota_exceeded() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1337,10 +1198,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
@@ -1348,7 +1205,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_403_rate_limit() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1358,10 +1215,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -1369,7 +1222,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_403_live_chat_disabled() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1379,10 +1232,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::LiveChatDisabled)));
@@ -1390,7 +1239,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_403_other() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1400,10 +1249,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -1411,7 +1256,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_404_not_found() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1420,10 +1265,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("nonexistent_chat", None).await;
         assert!(matches!(result, Err(YouTubeError::LiveChatNotFound)));
@@ -1431,7 +1272,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_500_server_error() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1441,10 +1282,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         // 5xxサーバーエラーはApiErrorにマッピング
@@ -1456,7 +1293,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_invalid_json() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1467,10 +1304,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::ParseError(_))));
@@ -1478,7 +1311,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_live_chat_messages_unexpected_status() {
-        let mut server = Server::new_async().await;
+        let (mut server, client) = setup_test_client().await;
 
         let _mock = server
             .mock("GET", "/liveChat/messages")
@@ -1487,10 +1320,6 @@ mod tests {
             .create_async()
             .await;
 
-        let client = YouTubeClient::new_with_base_url(
-            "test_api_key".to_string(),
-            server.url(),
-        );
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         // 予期しないステータスはApiErrorにマッピング

@@ -312,6 +312,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
   - `http.rs`の`*Api`型を削除し、共通型を使用
 
+- [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
+  - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
+  - 改善案: `serde_json::from_str::<OverlaySettings>`で直接デシリアライズ
+  - 注意: DBスキーマとの整合性、マイグレーション対応を考慮
+  - 優先度: 低（現状でも動作に問題なし）
+
+- [ ] **types.rs の分割検討** (PR#95レビューで提案)
+  - 設定関連の型が増えてきているため、将来的にファイルが肥大化した際は分割を検討
+  - 分割案: `types/settings.rs`, `types/websocket.rs` など
+  - 優先度: 低（現時点では問題なし）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

@@ -380,8 +380,8 @@
             if (data.instant) {
               commentQueue.addInstant(data.payload);
             } else {
-              // bufferIntervalMs が指定されていればバッファ間隔を更新
-              commentQueue.queue(data.payload, data.bufferIntervalMs);
+              // buffer_interval_ms が指定されていればバッファ間隔を更新
+              commentQueue.queue(data.payload, data.buffer_interval_ms);
             }
             break;
           case 'comment:remove':

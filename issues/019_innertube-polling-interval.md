@@ -85,3 +85,18 @@ let timeout_ms = cont_type.effective_timeout_ms(api_timeout);
 - `timedContinuationData`に最小500msのガードを追加（サーバー過負荷防止）
 - コード重複改善は`docs/900_tasks.md`に技術的負債として記録 → 完了
 - `effective_timeout_ms()`の境界値テストを追加
+
+## 将来の改善提案（PR#99レビューより、任意）
+
+以下は承認時に提案された任意の改善項目。`docs/900_tasks.md`に記録済み。
+
+1. **`ContinuationType`へのDefaultトレイト実装**
+   - `impl Default for ContinuationType { fn default() -> Self { Self::Invalidation } }`
+   - 初期化コードの明確化
+
+2. **定数の根拠をコメントに追記**
+   - `MAX_POLLING_INTERVAL_MS = 30000`: YouTubeの通常timeoutMsは5-10秒程度なので、その3-6倍を上限に
+   - `MIN_POLLING_INTERVAL_MS = 500`: 一般的なレート制限対策として500ms以上が安全
+
+3. **`get_next_continuation()`のテスト追加**
+   - 各Continuation型の解析テストでより堅牢に

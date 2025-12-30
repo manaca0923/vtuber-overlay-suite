@@ -336,6 +336,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - または正当なパターンの場合はeslint-disableコメントで対応
   - 優先度: 低（動作に問題なし、パフォーマンス影響も軽微）
 
+- [ ] **ContinuationType へのDefaultトレイト実装** (PR#99レビューで提案)
+  - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
+  - `impl Default for ContinuationType { fn default() -> Self { Self::Invalidation } }`
+  - client.rsの初期化コメントが不要になる
+  - 優先度: 低（任意の改善提案）
+
+- [ ] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案)
+  - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
+  - `MAX_POLLING_INTERVAL_MS`, `MIN_POLLING_INTERVAL_MS` になぜこの値を選んだか追記
+  - メンテナンス性向上のため
+  - 優先度: 低（任意の改善提案）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

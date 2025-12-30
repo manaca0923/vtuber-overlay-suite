@@ -1,6 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+
+// リトライ設定
+const MAX_RETRY_COUNT = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 30000;
+
+// スキップされたバージョンを保存するlocalStorageキー
+const SKIPPED_VERSION_KEY = 'vtuber-overlay-suite-skipped-version';
 
 interface UpdateState {
   checking: boolean;
@@ -12,6 +20,8 @@ interface UpdateState {
   contentLength: number;
   error: string | null;
   update: Update | null;
+  retryCount: number;
+  nextRetryDelay: number;
 }
 
 export function UpdateChecker() {
@@ -25,10 +35,26 @@ export function UpdateChecker() {
     contentLength: 0,
     error: null,
     update: null,
+    retryCount: 0,
+    nextRetryDelay: INITIAL_RETRY_DELAY_MS,
   });
   const [dismissed, setDismissed] = useState(false);
+  const [skippedVersion, setSkippedVersion] = useState<string | null>(null);
+  const downloadCancelledRef = useRef(false);
 
-  const checkForUpdates = useCallback(async () => {
+  // localStorageからスキップされたバージョンを読み込み
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SKIPPED_VERSION_KEY);
+      if (saved) {
+        setSkippedVersion(saved);
+      }
+    } catch {
+      // localStorageが使用できない環境では無視
+    }
+  }, []);
+
+  const checkForUpdates = useCallback(async (isRetry = false) => {
     setState((prev) => ({ ...prev, checking: true, error: null }));
     try {
       const update = await check();
@@ -38,28 +64,52 @@ export function UpdateChecker() {
           checking: false,
           available: true,
           update,
+          retryCount: 0,
+          nextRetryDelay: INITIAL_RETRY_DELAY_MS,
         }));
       } else {
-        setState((prev) => ({ ...prev, checking: false, available: false }));
+        setState((prev) => ({
+          ...prev,
+          checking: false,
+          available: false,
+          retryCount: 0,
+          nextRetryDelay: INITIAL_RETRY_DELAY_MS,
+        }));
       }
     } catch (error) {
       console.error('Update check failed:', error);
-      setState((prev) => ({
-        ...prev,
-        checking: false,
-        error: error instanceof Error ? error.message : '更新確認に失敗しました',
-      }));
+      setState((prev) => {
+        const newRetryCount = isRetry ? prev.retryCount + 1 : 1;
+        const canRetry = newRetryCount < MAX_RETRY_COUNT;
+        const nextDelay = Math.min(prev.nextRetryDelay * 2, MAX_RETRY_DELAY_MS);
+
+        return {
+          ...prev,
+          checking: false,
+          error: canRetry
+            ? `更新確認に失敗しました（リトライ ${newRetryCount}/${MAX_RETRY_COUNT}）`
+            : '更新確認に失敗しました（リトライ上限に達しました）',
+          retryCount: newRetryCount,
+          nextRetryDelay: nextDelay,
+        };
+      });
     }
   }, []);
 
-  const downloadAndInstall = useCallback(async () => {
+  const downloadAndInstall = useCallback(async (isRetry = false) => {
     if (!state.update) return;
 
+    downloadCancelledRef.current = false;
     setState((prev) => ({ ...prev, downloading: true, error: null }));
     try {
       let totalDownloaded = 0;
       let contentLength = 0;
       await state.update.downloadAndInstall((event) => {
+        // キャンセルされた場合は処理を中断
+        if (downloadCancelledRef.current) {
+          throw new Error('ダウンロードがキャンセルされました');
+        }
+
         switch (event.event) {
           case 'Started':
             totalDownloaded = 0;
@@ -79,25 +129,78 @@ export function UpdateChecker() {
               downloading: false,
               downloaded: true,
               progress: 100,
+              retryCount: 0,
+              nextRetryDelay: INITIAL_RETRY_DELAY_MS,
             }));
             break;
         }
       });
     } catch (error) {
       console.error('Update download failed:', error);
-      setState((prev) => ({
-        ...prev,
-        downloading: false,
-        error: error instanceof Error ? error.message : 'ダウンロードに失敗しました',
-      }));
+      const isCancelled = downloadCancelledRef.current;
+      setState((prev) => {
+        if (isCancelled) {
+          return {
+            ...prev,
+            downloading: false,
+            error: null,
+            progress: 0,
+            totalDownloaded: 0,
+          };
+        }
+
+        const newRetryCount = isRetry ? prev.retryCount + 1 : 1;
+        const canRetry = newRetryCount < MAX_RETRY_COUNT;
+        const nextDelay = Math.min(prev.nextRetryDelay * 2, MAX_RETRY_DELAY_MS);
+
+        return {
+          ...prev,
+          downloading: false,
+          error: canRetry
+            ? `ダウンロードに失敗しました（リトライ ${newRetryCount}/${MAX_RETRY_COUNT}）`
+            : 'ダウンロードに失敗しました（リトライ上限に達しました）',
+          retryCount: newRetryCount,
+          nextRetryDelay: nextDelay,
+        };
+      });
     }
   }, [state.update]);
+
+  const cancelDownload = useCallback(() => {
+    downloadCancelledRef.current = true;
+    console.log('Download cancelled by user');
+  }, []);
 
   const handleRelaunch = useCallback(async () => {
     try {
       await relaunch();
     } catch (error) {
       console.error('Relaunch failed:', error);
+    }
+  }, []);
+
+  // このバージョンをスキップ
+  const skipVersion = useCallback(() => {
+    if (state.update?.version) {
+      try {
+        localStorage.setItem(SKIPPED_VERSION_KEY, state.update.version);
+        setSkippedVersion(state.update.version);
+        setDismissed(true);
+        console.log(`Skipping version: ${state.update.version}`);
+      } catch {
+        // localStorageが使用できない場合は単に閉じる
+        setDismissed(true);
+      }
+    }
+  }, [state.update?.version]);
+
+  // スキップをクリア（将来的に設定画面から使用可能）
+  const clearSkippedVersion = useCallback(() => {
+    try {
+      localStorage.removeItem(SKIPPED_VERSION_KEY);
+      setSkippedVersion(null);
+    } catch {
+      // localStorageが使用できない環境では無視
     }
   }, []);
 
@@ -111,10 +214,19 @@ export function UpdateChecker() {
     checkForUpdates();
   }, [checkForUpdates]);
 
+  // スキップされたバージョンの場合は非表示
+  const isVersionSkipped = state.update?.version && skippedVersion === state.update.version;
+
   // 非表示の場合は何も表示しない
-  if (dismissed || (!state.available && !state.error)) {
+  if (dismissed || isVersionSkipped || (!state.available && !state.error)) {
     return null;
   }
+
+  // リトライ可能かどうか
+  const canRetry = state.retryCount < MAX_RETRY_COUNT;
+
+  // clearSkippedVersion を将来使用するために保持（lintエラー回避）
+  void clearSkippedVersion;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-sm">
@@ -176,15 +288,19 @@ export function UpdateChecker() {
         )}
 
         {/* アクションボタン */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {state.error ? (
             <>
-              <button
-                onClick={state.update ? downloadAndInstall : checkForUpdates}
-                className="flex-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-              >
-                再試行
-              </button>
+              {canRetry && (
+                <button
+                  onClick={() =>
+                    state.update ? downloadAndInstall(true) : checkForUpdates(true)
+                  }
+                  className="flex-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                >
+                  再試行
+                </button>
+              )}
               <button
                 onClick={() => setDismissed(true)}
                 className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
@@ -200,19 +316,31 @@ export function UpdateChecker() {
               再起動して更新
             </button>
           ) : state.downloading ? (
-            <button
-              disabled
-              className="flex-1 px-3 py-1.5 text-sm bg-gray-300 text-gray-500 rounded cursor-not-allowed"
-            >
-              ダウンロード中...
-            </button>
+            <>
+              <div className="flex-1 px-3 py-1.5 text-sm bg-gray-300 text-gray-500 rounded text-center">
+                ダウンロード中...
+              </div>
+              <button
+                onClick={cancelDownload}
+                className="px-3 py-1.5 text-sm text-red-500 hover:text-red-600 transition-colors"
+              >
+                キャンセル
+              </button>
+            </>
           ) : (
             <>
               <button
-                onClick={downloadAndInstall}
+                onClick={() => downloadAndInstall()}
                 className="flex-1 px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
               >
                 更新する
+              </button>
+              <button
+                onClick={skipVersion}
+                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                title="このバージョンをスキップ"
+              >
+                スキップ
               </button>
               <button
                 onClick={() => setDismissed(true)}

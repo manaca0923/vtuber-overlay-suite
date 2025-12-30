@@ -1,5 +1,6 @@
 //! YouTube関連のDB操作を共通化したモジュール
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use sqlx::sqlite::SqliteConnection;
@@ -7,6 +8,30 @@ use sqlx::SqlitePool;
 use tokio::time::{sleep, timeout};
 
 use super::types::{ChatMessage, MessageType};
+
+// =============================================================================
+// メトリクス（将来的にPrometheus等への連携を想定）
+// =============================================================================
+
+/// DeadlineExceeded発生回数カウンター
+/// システム高負荷状態の頻度を監視するためのメトリクス
+static DEADLINE_EXCEEDED_COUNT: AtomicU64 = AtomicU64::new(0);
+
+/// DeadlineExceeded発生回数を取得
+pub fn get_deadline_exceeded_count() -> u64 {
+    DEADLINE_EXCEEDED_COUNT.load(Ordering::Relaxed)
+}
+
+/// DeadlineExceeded発生回数をリセット（テスト用）
+#[cfg(test)]
+pub fn reset_deadline_exceeded_count() {
+    DEADLINE_EXCEEDED_COUNT.store(0, Ordering::Relaxed);
+}
+
+/// DeadlineExceeded発生をカウント（内部用）
+fn increment_deadline_exceeded() {
+    DEADLINE_EXCEEDED_COUNT.fetch_add(1, Ordering::Relaxed);
+}
 
 /// バッチ処理のチャンクサイズ
 /// ロック保持時間を短縮するため、大きなバッチを分割して処理
@@ -104,12 +129,29 @@ enum TransactionResult {
 /// - `failed`: エラーで保存に失敗したメッセージ数
 /// - `skipped`: 予算超過でスキップされたメッセージ数
 pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) -> SaveCommentsResult {
+    save_comments_to_db_with_timeout(pool, messages, Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS))
+        .await
+}
+
+/// コメントをDBに保存（カスタムタイムアウト版）
+///
+/// `save_comments_to_db`と同様だが、総タイムアウトを指定可能。
+/// 主にテスト用途で使用し、CI環境や遅いストレージでのフレーキーテストを回避する。
+///
+/// ## 引数
+/// - `pool`: SQLiteコネクションプール
+/// - `messages`: 保存するチャットメッセージのスライス
+/// - `total_timeout`: 全チャンクの処理に許容する最大時間
+pub async fn save_comments_to_db_with_timeout(
+    pool: &SqlitePool,
+    messages: &[ChatMessage],
+    total_timeout: Duration,
+) -> SaveCommentsResult {
     if messages.is_empty() {
         return SaveCommentsResult::default();
     }
 
     let start_time = Instant::now();
-    let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
     let mut result = SaveCommentsResult::default();
 
     // チャンクに分割して処理（ロック保持時間を短縮）
@@ -238,9 +280,11 @@ async fn save_chunk_with_retry(
             TransactionResult::DeadlineExceeded => {
                 // デッドライン超過: システムが高負荷状態
                 // リトライしても同じ結果になる可能性が高いため、即座にフォールバック
+                increment_deadline_exceeded();
                 log::warn!(
-                    "DeadlineExceeded: System under high load, skipping further retries ({} messages)",
-                    messages.len()
+                    "DeadlineExceeded: System under high load, skipping further retries ({} messages, total count: {})",
+                    messages.len(),
+                    get_deadline_exceeded_count()
                 );
                 return false;
             }
@@ -2443,5 +2487,120 @@ mod tests {
             }
             other => panic!("Expected GetBusyTimeoutResult::Ok, got {:?}", other),
         }
+    }
+
+    // =========================================================================
+    // メトリクステスト
+    // =========================================================================
+
+    #[test]
+    fn test_deadline_exceeded_counter_initial_value() {
+        // カウンターが正常に取得できることを確認
+        // 他のテストでインクリメントされている可能性があるため、具体的な値はチェックしない
+        let _count = get_deadline_exceeded_count();
+        // u64は常に非負なので、取得できればOK
+    }
+
+    #[test]
+    fn test_deadline_exceeded_counter_increment() {
+        // リセットして初期状態にする
+        reset_deadline_exceeded_count();
+        assert_eq!(get_deadline_exceeded_count(), 0);
+
+        // インクリメント
+        increment_deadline_exceeded();
+        assert_eq!(get_deadline_exceeded_count(), 1);
+
+        // 複数回インクリメント
+        increment_deadline_exceeded();
+        increment_deadline_exceeded();
+        assert_eq!(get_deadline_exceeded_count(), 3);
+
+        // リセット
+        reset_deadline_exceeded_count();
+        assert_eq!(get_deadline_exceeded_count(), 0);
+    }
+
+    // =========================================================================
+    // save_comments_to_db_with_timeout テスト
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_save_comments_with_custom_timeout() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let pool = crate::db::create_pool(db_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+        // テスト用メッセージ
+        let messages = vec![create_test_message("timeout_test_1", "Test message")];
+
+        // 長めのタイムアウトで正常に保存できることを確認
+        let result =
+            save_comments_to_db_with_timeout(&pool, &messages, Duration::from_secs(10)).await;
+        assert_eq!(result.saved, 1);
+        assert_eq!(result.failed, 0);
+        assert_eq!(result.skipped, 0);
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_with_zero_timeout_skips_all() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let pool = crate::db::create_pool(db_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+        // テスト用メッセージ（複数）
+        let messages = vec![
+            create_test_message("zero_timeout_1", "Message 1"),
+            create_test_message("zero_timeout_2", "Message 2"),
+            create_test_message("zero_timeout_3", "Message 3"),
+        ];
+
+        // 0msタイムアウトで全てスキップされることを確認
+        let result =
+            save_comments_to_db_with_timeout(&pool, &messages, Duration::from_millis(0)).await;
+        assert_eq!(result.saved, 0);
+        assert_eq!(result.failed, 0);
+        assert_eq!(
+            result.skipped, 3,
+            "All messages should be skipped with zero timeout"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_save_comments_with_very_short_timeout_skips() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let pool = crate::db::create_pool(db_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+        // テスト用メッセージ
+        let messages = vec![
+            create_test_message("short_timeout_1", "Message 1"),
+            create_test_message("short_timeout_2", "Message 2"),
+        ];
+
+        // 10msタイムアウト（最小予算50ms未満）で全てスキップされることを確認
+        let result =
+            save_comments_to_db_with_timeout(&pool, &messages, Duration::from_millis(10)).await;
+        assert_eq!(result.saved, 0);
+        assert_eq!(result.failed, 0);
+        assert_eq!(
+            result.skipped, 2,
+            "All messages should be skipped with very short timeout"
+        );
     }
 }

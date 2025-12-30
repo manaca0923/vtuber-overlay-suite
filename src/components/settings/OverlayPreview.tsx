@@ -4,6 +4,18 @@ import { LAYOUT_PRESETS } from '../../types/overlaySettings';
 
 type PreviewMode = 'combined' | 'individual';
 
+// カスタムフック: スライダー操作時のパフォーマンス最適化用デバウンス
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 interface OverlayPreviewProps {
   settings: OverlaySettings;
   activePanel: 'comment' | 'setlist';
@@ -16,7 +28,13 @@ const OBS_HEIGHT = 1080;
 
 export function OverlayPreview({ settings, activePanel, mode = 'combined' }: OverlayPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.3);
+  // loadedUrlを追跡することで、useEffectでsetStateを呼ぶ必要がなくなる
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+
+  // スライダー操作時のパフォーマンス最適化（50msデバウンス）
+  const debouncedSettings = useDebounce(settings, 50);
 
   // コンテナサイズに基づいてスケールを計算
   useEffect(() => {
@@ -95,6 +113,42 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
     return `${base}?${params.toString()}`;
   }, [settings, activePanel, mode, isV2Layout]);
 
+  // loadedUrlとpreviewUrlを比較してiframeがロード済みかを判定
+  // これによりuseEffect内でsetStateを呼ぶ必要がなくなる（react-hooks/set-state-in-effect回避）
+  const iframeLoaded = loadedUrl === previewUrl;
+
+  // 設定変更時にpostMessageを送信（即時プレビュー機能）
+  useEffect(() => {
+    if (!iframeLoaded || !iframeRef.current?.contentWindow) return;
+
+    // docs/300: settings:update payload形式に準拠
+    const message = {
+      type: 'preview:settings:update',
+      payload: {
+        theme: debouncedSettings.theme,
+        primaryColor: debouncedSettings.common.primaryColor,
+        fontFamily: debouncedSettings.common.fontFamily,
+        borderRadius: debouncedSettings.common.borderRadius,
+        comment: debouncedSettings.comment,
+        setlist: debouncedSettings.setlist,
+        weather: debouncedSettings.weather,
+        widget: debouncedSettings.widget,
+        performance: debouncedSettings.performance,
+      }
+    };
+
+    // iframeのcontentWindowに送信
+    // '*'を使用: iframeはlocalhostから読み込まれるため、originは異なる
+    iframeRef.current.contentWindow.postMessage(message, '*');
+  }, [debouncedSettings, iframeLoaded]);
+
+  // iframeのhandleLoad関数
+  // previewUrlが変わると、iframeのkeyも変わるため自動的に再作成される
+  // loadedUrlを更新することで、iframeLoadedが自動的にtrueになる
+  const handleIframeLoad = () => {
+    setLoadedUrl(previewUrl);
+  };
+
   const displayMode = mode === 'combined'
     ? (isV2Layout ? '3カラム統合オーバーレイ' : '統合オーバーレイ')
     : activePanel === 'comment' ? 'コメントオーバーレイ' : 'セットリストオーバーレイ';
@@ -124,7 +178,10 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
           }}
         >
           <iframe
+            key={previewUrl}
+            ref={iframeRef}
             src={previewUrl}
+            onLoad={handleIframeLoad}
             style={{
               width: OBS_WIDTH,
               height: OBS_HEIGHT,

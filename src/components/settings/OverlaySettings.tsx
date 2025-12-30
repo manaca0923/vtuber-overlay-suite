@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ThemeSelector } from './ThemeSelector';
 import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
@@ -24,12 +24,26 @@ type PreviewMode = 'combined' | 'individual';
 
 export function OverlaySettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_OVERLAY_SETTINGS);
+  const [originalSettings, setOriginalSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activePanel, setActivePanel] = useState<'widget' | 'comment' | 'setlist' | 'weather' | 'performance'>('widget');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
+
+  // 変更検出（リセットボタンの表示/非表示制御用）
+  const hasChanges = useMemo(() => {
+    if (!originalSettings) return false;
+    return JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  }, [settings, originalSettings]);
+
+  // リセット機能
+  const handleReset = () => {
+    if (originalSettings) {
+      setSettings(originalSettings);
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -85,10 +99,13 @@ export function OverlaySettings() {
             widget: migratedWidget,
           };
           setSettings(merged);
+          setOriginalSettings(merged); // 元設定を保存（リセット機能用）
         }
       } catch (err) {
         console.error('Failed to load overlay settings:', err);
         setError('設定の読み込みに失敗しました。デフォルト設定を使用します。');
+        // エラー時もデフォルト設定を元設定として保存
+        setOriginalSettings(DEFAULT_OVERLAY_SETTINGS);
       } finally {
         setLoading(false);
       }
@@ -104,6 +121,7 @@ export function OverlaySettings() {
     try {
       await saveOverlaySettings(settings);
       await broadcastSettingsUpdate(settings);
+      setOriginalSettings(settings); // 保存成功後に元設定を更新
       setSuccess('設定を保存しました');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -301,6 +319,16 @@ export function OverlaySettings() {
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
               {success}
             </div>
+          )}
+
+          {/* リセットボタン（変更がある場合のみ表示） */}
+          {hasChanges && (
+            <button
+              onClick={handleReset}
+              className="w-full py-2 rounded-lg font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+            >
+              変更を元に戻す
+            </button>
           )}
 
           {/* 保存ボタン */}

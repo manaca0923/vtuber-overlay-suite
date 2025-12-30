@@ -55,6 +55,7 @@ export type TestMessageType = 'text' | 'superChat' | 'superSticker' | 'membershi
 export const sendTestComment = (
   commentText: string,
   authorName: string,
-  messageTypeName?: TestMessageType
+  messageTypeName?: TestMessageType,
+  amount?: string
 ) =>
-  invoke<void>('send_test_comment', { comment_text: commentText, author_name: authorName, message_type_name: messageTypeName });
+  invoke<void>('send_test_comment', { comment_text: commentText, author_name: authorName, message_type_name: messageTypeName, amount });

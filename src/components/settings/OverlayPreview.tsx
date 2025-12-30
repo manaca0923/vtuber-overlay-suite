@@ -30,12 +30,18 @@ const OBS_HEIGHT = 1080;
 const PREVIEW_ORIGIN = 'http://localhost:19800';  // iframeのorigin（postMessage送信先）
 const DEBOUNCE_DELAY_MS = 50;  // スライダー操作時のデバウンス遅延
 
+// スパチャプレビュー用カスタムイベント名
+export const SUPERCHAT_PREVIEW_EVENT = 'preview:superchat:add';
+export const SUPERCHAT_REMOVE_PREVIEW_EVENT = 'preview:superchat:remove';
+
 export function OverlayPreview({ settings, activePanel, mode = 'combined' }: OverlayPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.3);
   // loadedUrlを追跡することで、useEffectでsetStateを呼ぶ必要がなくなる
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  // イベントハンドラからiframeLoaded状態を参照するためのref（クロージャ問題回避）
+  const iframeLoadedRef = useRef(false);
 
   // スライダー操作時のパフォーマンス最適化
   const debouncedSettings = useDebounce(settings, DEBOUNCE_DELAY_MS);
@@ -121,6 +127,11 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
   // これによりuseEffect内でsetStateを呼ぶ必要がなくなる（react-hooks/set-state-in-effect回避）
   const iframeLoaded = loadedUrl === previewUrl;
 
+  // iframeLoaded状態をrefに同期（イベントハンドラから参照するため）
+  useEffect(() => {
+    iframeLoadedRef.current = iframeLoaded;
+  }, [iframeLoaded]);
+
   // 設定変更時にpostMessageを送信（即時プレビュー機能）
   useEffect(() => {
     if (!iframeLoaded || !iframeRef.current?.contentWindow) return;
@@ -138,12 +149,60 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
         weather: debouncedSettings.weather,
         widget: debouncedSettings.widget,
         performance: debouncedSettings.performance,
+        superchat: debouncedSettings.superchat,
       }
     };
 
     // iframeのcontentWindowに送信（セキュリティ: targetOriginを明示）
     iframeRef.current.contentWindow.postMessage(message, PREVIEW_ORIGIN);
   }, [debouncedSettings, iframeLoaded]);
+
+  // スパチャテスト送信のカスタムイベントをリッスン（プレビューiframeへ転送）
+  // 注: イベントリスナーは一度だけ登録し、refを使って最新の状態を参照
+  useEffect(() => {
+    const handleSuperchatAdd = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[OverlayPreview] superchat event received:', {
+        iframeLoaded: iframeLoadedRef.current,
+        hasDetail: !!customEvent.detail,
+        hasContentWindow: !!iframeRef.current?.contentWindow,
+      });
+      // refを使って最新のiframeLoaded状態を参照（クロージャ問題回避）
+      if (!iframeLoadedRef.current || !customEvent.detail || !iframeRef.current?.contentWindow) {
+        console.warn('[OverlayPreview] superchat event ignored - conditions not met');
+        return;
+      }
+
+      console.log('[OverlayPreview] sending postMessage to iframe:', customEvent.detail);
+      iframeRef.current.contentWindow.postMessage({
+        type: 'preview:superchat:add',
+        payload: customEvent.detail,
+      }, PREVIEW_ORIGIN);
+    };
+
+    const handleSuperchatRemove = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      // refを使って最新のiframeLoaded状態を参照（クロージャ問題回避）
+      if (!iframeLoadedRef.current || !customEvent.detail || !iframeRef.current?.contentWindow) {
+        return;
+      }
+
+      iframeRef.current.contentWindow.postMessage({
+        type: 'preview:superchat:remove',
+        payload: { id: customEvent.detail.id },
+      }, PREVIEW_ORIGIN);
+    };
+
+    console.log('[OverlayPreview] Registering superchat event listeners');
+    window.addEventListener(SUPERCHAT_PREVIEW_EVENT, handleSuperchatAdd);
+    window.addEventListener(SUPERCHAT_REMOVE_PREVIEW_EVENT, handleSuperchatRemove);
+
+    return () => {
+      console.log('[OverlayPreview] Removing superchat event listeners');
+      window.removeEventListener(SUPERCHAT_PREVIEW_EVENT, handleSuperchatAdd);
+      window.removeEventListener(SUPERCHAT_REMOVE_PREVIEW_EVENT, handleSuperchatRemove);
+    };
+  }, []); // 依存配列を空に - イベントリスナーは一度だけ登録
 
   // iframeのhandleLoad関数
   // previewUrlが変わると、iframeのkeyも変わるため自動的に再作成される

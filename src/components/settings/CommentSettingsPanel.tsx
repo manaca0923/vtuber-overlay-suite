@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { CommentSettings, CommentPosition } from '../../types/overlaySettings';
+import { sendTestComment } from '../../types/commands';
 
 interface CommentSettingsPanelProps {
   settings: CommentSettings;
@@ -13,8 +15,28 @@ const POSITION_OPTIONS: { value: CommentPosition; label: string }[] = [
 ];
 
 export function CommentSettingsPanel({ settings, onChange }: CommentSettingsPanelProps) {
+  const [sending, setSending] = useState(false);
+  const [testMessage, setTestMessage] = useState('');
+
   const updateSettings = (updates: Partial<CommentSettings>) => {
     onChange({ ...settings, ...updates });
+  };
+
+  // テストコメントを送信
+  const handleTestSend = async () => {
+    setSending(true);
+    setTestMessage('');
+
+    try {
+      await sendTestComment('テストコメントです！', 'テストユーザー', 'text');
+      setTestMessage('✓ コメントを送信しました');
+      setTimeout(() => setTestMessage(''), 2000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setTestMessage(`エラー: ${errorMessage}`);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -79,6 +101,30 @@ export function CommentSettingsPanel({ settings, onChange }: CommentSettingsPane
             }`}
           />
         </button>
+      </div>
+
+      {/* テスト送信 */}
+      <div className="border-t pt-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          テスト送信
+        </label>
+        <button
+          type="button"
+          onClick={handleTestSend}
+          disabled={sending}
+          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+            sending
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          通常コメント
+        </button>
+        {testMessage && (
+          <p className={`text-xs mt-2 ${testMessage.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>
+            {testMessage}
+          </p>
+        )}
       </div>
     </div>
   );

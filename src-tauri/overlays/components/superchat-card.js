@@ -38,14 +38,24 @@ class SuperchatCard extends BaseComponent {
       return;
     }
 
+    console.log('[SuperchatCard] addSuperchat:', {
+      id: data.id,
+      amount: data.amount,
+      maxDisplay: this.maxDisplay,
+      currentDisplayed: this.displayedSuperchats.size,
+      queueLength: this.queue.length,
+    });
+
     // 既に表示中または待機中の場合はスキップ
     if (this.displayedSuperchats.has(data.id)) return;
     if (this.queue.some((s) => s.id === data.id)) return;
 
     // 表示枠に空きがあれば即表示、なければキューに追加
     if (this.displayedSuperchats.size < this.maxDisplay) {
+      console.log('[SuperchatCard] Displaying immediately');
       this._displaySuperchat(data);
     } else {
+      console.log('[SuperchatCard] Adding to queue');
       this.queue.push(data);
     }
   }
@@ -214,6 +224,22 @@ class SuperchatCard extends BaseComponent {
     // addSuperchatへの転送用
     if (data && data.id) {
       this.addSuperchat(data);
+    }
+  }
+
+  /**
+   * 設定を更新
+   * @param {object} settings - SuperchatSettings
+   */
+  updateSettings(settings) {
+    console.log('[SuperchatCard] updateSettings called:', settings);
+    if (!settings) return;
+
+    if (typeof settings.maxDisplay === 'number' && settings.maxDisplay >= 1) {
+      console.log('[SuperchatCard] Updating maxDisplay:', this.maxDisplay, '->', settings.maxDisplay);
+      this.maxDisplay = settings.maxDisplay;
+      // 設定変更後、キューに空きができた場合は処理
+      this._processQueue();
     }
   }
 

@@ -432,11 +432,13 @@ pub struct PollingStateData {
 
 /// テストモード: ダミーコメントを送信
 /// message_type_name: "text" | "superChat" | "superSticker" | "membership" | "membershipGift"
+/// amount: スパチャの金額（例: "¥100", "¥1,000", "¥10,000"）
 #[tauri::command(rename_all = "snake_case")]
 pub async fn send_test_comment(
     comment_text: String,
     author_name: String,
     message_type_name: Option<String>,
+    amount: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     use crate::youtube::types::MessageType;
@@ -445,7 +447,7 @@ pub async fn send_test_comment(
     // メッセージタイプを決定
     let message_type = match message_type_name.as_deref() {
         Some("superChat") => MessageType::SuperChat {
-            amount: "¥1,000".to_string(),
+            amount: amount.clone().unwrap_or_else(|| "¥1,000".to_string()),
             currency: "JPY".to_string(),
         },
         Some("superSticker") => MessageType::SuperSticker {
@@ -486,11 +488,21 @@ pub async fn send_test_comment(
     let state_lock = server_state.read().await;
     state_lock
         .broadcast(WsMessage::CommentAdd {
-            payload: test_message,
+            payload: test_message.clone(),
             instant: true,
             buffer_interval_ms: None,
         })
         .await;
+    drop(state_lock); // ロックを解放
+
+    // スパチャの場合は専用ウィジェットにもブロードキャスト
+    if let Some(superchat_payload) = crate::superchat::create_superchat_payload(&test_message) {
+        let display_duration = superchat_payload.display_duration_ms;
+        let superchat_id = superchat_payload.id.clone();
+        crate::superchat::broadcast_superchat(&server_state, superchat_payload).await;
+        // 表示完了後にremoveメッセージを送信するタイマーをスケジュール
+        crate::superchat::schedule_superchat_removal(server_state, superchat_id, display_duration);
+    }
 
     Ok(())
 }

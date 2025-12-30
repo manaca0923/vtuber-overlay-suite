@@ -103,6 +103,13 @@ export interface PerformanceSettings {
   densityThreshold: number; // 過密検出閾値（1-20、デフォルト: 5）
 }
 
+// スパチャ設定
+export interface SuperchatSettings {
+  maxDisplay: number; // 同時表示数（1-3、デフォルト: 1）
+  displayDurationSec: number; // 表示時間（秒、10-120、デフォルト: 60）
+  queueEnabled: boolean; // キュー表示ON/OFF（待機中のスパチャを順次表示）
+}
+
 // ウィジェット表示設定
 export interface WidgetVisibilitySettings {
   clock: boolean; // left.top: 時計
@@ -126,6 +133,7 @@ export interface OverlaySettings {
   weather?: WeatherSettings; // オプショナル（後方互換性のため）
   performance?: PerformanceSettings; // オプショナル（後方互換性のため）
   widget?: WidgetVisibilitySettings; // オプショナル（後方互換性のため）
+  superchat?: SuperchatSettings; // オプショナル（後方互換性のため）
 }
 
 // デフォルト設定
@@ -166,6 +174,11 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
     kpi: true,
     tanzaku: true,
     announcement: true,
+  },
+  superchat: {
+    maxDisplay: 1, // 同時表示1件
+    displayDurationSec: 60, // 60秒表示
+    queueEnabled: true, // キュー表示ON
   },
 };
 

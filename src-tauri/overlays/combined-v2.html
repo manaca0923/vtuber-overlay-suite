@@ -151,6 +151,9 @@
       fetchLatestSetlist
     } = window.OverlayCore;
 
+    // プレビューモード判定（設定画面のiframeプレビュー時はtrue）
+    const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
+
     // ===== 設定 =====
     let showAvatar = true;
     let showArtist = true;
@@ -301,6 +304,21 @@
       // ウィジェット表示設定（issues/016: 新フィールドはオプショナル、デフォルト値を設定）
       // settings.widget が undefined/null の場合はデフォルト（全表示）を適用
       applyWidgetVisibility(settings.widget || DEFAULT_WIDGET_SETTINGS);
+
+      // スパチャ設定
+      if (settings.superchat) {
+        applySuperchatSettings(settings.superchat);
+      }
+    }
+
+    // スパチャ設定を適用
+    function applySuperchatSettings(superchatSettings) {
+      if (!superchatSettings || typeof superchatSettings !== 'object') return;
+
+      const superchatComponent = ComponentRegistry.getInstance('left.lower');
+      if (superchatComponent && typeof superchatComponent.updateSettings === 'function') {
+        superchatComponent.updateSettings(superchatSettings);
+      }
     }
 
     // ウィジェット表示/非表示を適用
@@ -486,18 +504,21 @@
             break;
 
           // スパチャウィジェット
+          // プレビューモードではpostMessage経由で受信するため、WebSocket経由はスキップ
           case 'superchat:add':
-            // SuperchatCardコンポーネントにスパチャを追加
-            const superchatCard = ComponentRegistry.getInstance('left.lower');
-            if (superchatCard && typeof superchatCard.addSuperchat === 'function') {
-              superchatCard.addSuperchat(data.payload);
+            if (!isPreviewMode) {
+              const superchatCard = ComponentRegistry.getInstance('left.lower');
+              if (superchatCard && typeof superchatCard.addSuperchat === 'function') {
+                superchatCard.addSuperchat(data.payload);
+              }
             }
             break;
           case 'superchat:remove':
-            // SuperchatCardコンポーネントからスパチャを削除
-            const superchatCardForRemove = ComponentRegistry.getInstance('left.lower');
-            if (superchatCardForRemove && typeof superchatCardForRemove.removeSuperchat === 'function') {
-              superchatCardForRemove.removeSuperchat(data.payload?.id);
+            if (!isPreviewMode) {
+              const superchatCardForRemove = ComponentRegistry.getInstance('left.lower');
+              if (superchatCardForRemove && typeof superchatCardForRemove.removeSuperchat === 'function') {
+                superchatCardForRemove.removeSuperchat(data.payload?.id);
+              }
             }
             break;
         }
@@ -511,6 +532,20 @@
       onSettingsUpdate: (payload) => {
         // issues/013: 各フィールドの存在チェックはapplySettingsUpdate内で実施
         applySettingsUpdate(payload);
+      },
+      onSuperchatAdd: (payload) => {
+        // スパチャ追加（プレビュー用）
+        const superchatCard = ComponentRegistry.getInstance('left.lower');
+        if (superchatCard && typeof superchatCard.addSuperchat === 'function') {
+          superchatCard.addSuperchat(payload);
+        }
+      },
+      onSuperchatRemove: (id) => {
+        // スパチャ削除（プレビュー用）
+        const superchatCard = ComponentRegistry.getInstance('left.lower');
+        if (superchatCard && typeof superchatCard.removeSuperchat === 'function') {
+          superchatCard.removeSuperchat(id);
+        }
       }
     });
 

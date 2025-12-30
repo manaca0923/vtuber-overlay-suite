@@ -1,6 +1,34 @@
 import { useState } from 'react';
 import { sendTestComment } from '../types/commands';
 import type { TestMessageType } from '../types/commands';
+import { SUPERCHAT_PREVIEW_EVENT, SUPERCHAT_REMOVE_PREVIEW_EVENT } from './settings/OverlayPreview';
+
+// プレビュー用スパチャペイロード型
+interface PreviewSuperchatPayload {
+  id: string;
+  authorName: string;
+  authorImageUrl: string;
+  amount: string;
+  message: string;
+  tier: number;
+}
+
+// 金額とTierの対応（Tier4: ¥1,000-1,999）
+const DEFAULT_SUPERCHAT_TIER = 4;
+const DEFAULT_SUPERCHAT_AMOUNT = '¥1,000';
+const DEFAULT_SUPERCHAT_DISPLAY_DURATION_MS = 60_000; // Tier4: 1分
+
+// プレビュー用スパチャイベントを発火
+function dispatchSuperchatPreviewEvent(payload: PreviewSuperchatPayload): void {
+  console.log('[TestModeButton] dispatching superchat preview event:', payload);
+  window.dispatchEvent(new CustomEvent(SUPERCHAT_PREVIEW_EVENT, { detail: payload }));
+
+  // 表示完了後にremoveイベントを発火
+  setTimeout(() => {
+    console.log('[TestModeButton] dispatching superchat remove event:', payload.id);
+    window.dispatchEvent(new CustomEvent(SUPERCHAT_REMOVE_PREVIEW_EVENT, { detail: { id: payload.id } }));
+  }, DEFAULT_SUPERCHAT_DISPLAY_DURATION_MS);
+}
 
 const MESSAGE_TYPES: { value: TestMessageType; label: string; color: string }[] = [
   { value: 'text', label: '通常コメント', color: 'bg-gray-100 text-gray-700' },
@@ -60,6 +88,20 @@ export function TestModeButton() {
       await sendTestComment(commentText, authorName || 'テストユーザー', messageType);
       const typeLabel = MESSAGE_TYPES.find(t => t.value === messageType)?.label || 'コメント';
       setMessage(`✓ ${typeLabel}を送信しました`);
+
+      // スパチャの場合はプレビューiframeにも通知
+      if (messageType === 'superChat') {
+        const superchatPayload: PreviewSuperchatPayload = {
+          id: `test-superchat-${Date.now()}`,
+          authorName: authorName || 'テストユーザー',
+          authorImageUrl: '', // テストではアバター無し
+          amount: DEFAULT_SUPERCHAT_AMOUNT,
+          message: commentText,
+          tier: DEFAULT_SUPERCHAT_TIER,
+        };
+        dispatchSuperchatPreviewEvent(superchatPayload);
+      }
+
       setTimeout(() => {
         setMessage('');
         setCommentText('');

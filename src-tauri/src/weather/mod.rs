@@ -19,8 +19,10 @@ mod types;
 pub use cache::WeatherCache;
 pub use types::{GeocodingResponse, OpenMeteoResponse, WeatherData};
 
+use crate::config::{http_timeout, HTTP_TIMEOUT_SECS};
 use reqwest::Client;
 use std::sync::Arc;
+#[cfg(test)]
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -30,9 +32,6 @@ const GEOCODING_API_URL: &str = "https://geocoding-api.open-meteo.com/v1/search"
 
 /// Open-Meteo Weather APIのベースURL
 const WEATHER_API_URL: &str = "https://api.open-meteo.com/v1/forecast";
-
-/// HTTPリクエストのタイムアウト（秒）
-const HTTP_TIMEOUT_SECS: u64 = 10;
 
 /// 天気APIエラー
 #[derive(Debug, Error)]
@@ -89,7 +88,7 @@ impl WeatherClient {
     pub fn new() -> Self {
         // タイムアウト付きのHTTPクライアントを構築
         let client = Client::builder()
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .timeout(http_timeout())
             .build()
             .expect("Failed to build HTTP client with timeout - this should never fail");
 
@@ -108,11 +107,7 @@ impl WeatherClient {
     /// テスト用: カスタムベースURLで天気クライアントを作成
     #[cfg(test)]
     pub fn new_with_base_urls(geocoding_base_url: String, weather_base_url: String) -> Self {
-        Self::new_with_base_urls_and_timeout(
-            geocoding_base_url,
-            weather_base_url,
-            Duration::from_secs(HTTP_TIMEOUT_SECS),
-        )
+        Self::new_with_base_urls_and_timeout(geocoding_base_url, weather_base_url, http_timeout())
     }
 
     /// テスト用: カスタムベースURLとタイムアウトで天気クライアントを作成

@@ -1,13 +1,13 @@
 use reqwest::Client;
 use std::fmt;
+#[cfg(test)]
 use std::time::Duration;
 
 use super::errors::YouTubeError;
 use super::types::{LiveChatMessagesResponse, LiveStreamStats, VideoResponse};
+use crate::config::{http_timeout, HTTP_TIMEOUT_SECS};
 
 const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
-/// HTTPリクエストのタイムアウト（秒）
-const HTTP_TIMEOUT_SECS: u64 = 10;
 
 #[derive(Clone)]
 pub struct YouTubeClient {
@@ -30,7 +30,7 @@ impl fmt::Debug for YouTubeClient {
 impl YouTubeClient {
     pub fn new(api_key: String) -> Self {
         let client = Client::builder()
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .timeout(http_timeout())
             .build()
             .expect("Failed to build HTTP client with timeout");
 
@@ -45,11 +45,7 @@ impl YouTubeClient {
     /// テスト用: カスタムベースURLでクライアントを作成
     #[cfg(test)]
     pub fn new_with_base_url(api_key: String, base_url: String) -> Self {
-        Self::new_with_base_url_and_timeout(
-            api_key,
-            base_url,
-            Duration::from_secs(HTTP_TIMEOUT_SECS),
-        )
+        Self::new_with_base_url_and_timeout(api_key, base_url, http_timeout())
     }
 
     /// テスト用: カスタムベースURLとタイムアウトでクライアントを作成

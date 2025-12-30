@@ -12,7 +12,9 @@ use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
-use super::types::{CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition};
+use super::types::{
+    CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition, WidgetVisibilitySettings,
+};
 
 /// HTTPサーバー用の共有状態
 #[derive(Clone)]
@@ -281,8 +283,9 @@ struct OverlaySettingsApiResponse {
     setlist: SetlistSettingsApi,
     #[serde(skip_serializing_if = "Option::is_none")]
     weather: Option<WeatherSettingsApi>,
+    // NOTE: WidgetVisibilitySettingsはtypes.rsから共通型を使用
     #[serde(skip_serializing_if = "Option::is_none")]
-    widget: Option<WidgetVisibilitySettingsApi>,
+    widget: Option<WidgetVisibilitySettings>,
 }
 
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
@@ -311,19 +314,7 @@ struct WeatherSettingsApi {
     position: WeatherPosition,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WidgetVisibilitySettingsApi {
-    clock: bool,
-    weather: bool,
-    comment: bool,
-    superchat: bool,
-    logo: bool,
-    setlist: bool,
-    kpi: bool,
-    tanzaku: bool,
-    announcement: bool,
-}
+// NOTE: WidgetVisibilitySettingsApi は types.rs の WidgetVisibilitySettings に統合
 
 /// 文字列からWeatherPositionに変換
 fn parse_weather_position(s: &str) -> WeatherPosition {
@@ -361,7 +352,7 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
             enabled: true,
             position: WeatherPosition::LeftTop,
         }),
-        widget: Some(WidgetVisibilitySettingsApi {
+        widget: Some(WidgetVisibilitySettings {
             clock: true,
             weather: true,
             comment: true,
@@ -443,7 +434,7 @@ async fn get_overlay_settings_api(
 
                     // ウィジェット表示設定をパース（存在する場合のみ）
                     let widget = if settings["widget"].is_object() {
-                        Some(WidgetVisibilitySettingsApi {
+                        Some(WidgetVisibilitySettings {
                             clock: settings["widget"]["clock"].as_bool().unwrap_or(true),
                             weather: settings["widget"]["weather"].as_bool().unwrap_or(true),
                             comment: settings["widget"]["comment"].as_bool().unwrap_or(true),
@@ -456,7 +447,7 @@ async fn get_overlay_settings_api(
                         })
                     } else {
                         // デフォルト値（全て有効）
-                        Some(WidgetVisibilitySettingsApi {
+                        Some(WidgetVisibilitySettings {
                             clock: true,
                             weather: true,
                             comment: true,

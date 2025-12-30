@@ -93,6 +93,20 @@ function applyWidgetVisibility(widgetSettings) {
    - `applyWidgetVisibility`関数にコメントを追加して意図を明確化
    - WebSocketメッセージがDOMContentLoaded前に到着するケースへの防御的処理
 
+## PR#94 型統合の実装
+
+PR#94で`WidgetVisibilitySettings`型の統合を実施。レビューでApproveされた。
+
+### 追加の改善提案（PR#94レビュー）
+
+同様のパターンで他の設定型も統合可能：
+- `WeatherSettings` / `WeatherSettingsPayload`
+- `CommentSettings` / `CommentSettingsPayload`
+- `SetlistSettings` / `SetlistSettingsPayload`
+
+これらは優先度低として`docs/900_tasks.md`に追記済み。
+
 ## 関連タスク
 
-- `docs/900_tasks.md` に「Rust側WidgetVisibilitySettings型の重複削減」を追加済み
+- `docs/900_tasks.md` に「Rust側WidgetVisibilitySettings型の重複削減」: 完了
+- `docs/900_tasks.md` に「他の設定型も同様に統合を検討」: 追加

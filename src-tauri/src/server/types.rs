@@ -97,7 +97,7 @@ pub struct SettingsUpdatePayload {
     pub weather: Option<WeatherSettingsPayload>,
     // ウィジェット表示設定
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub widget: Option<WidgetVisibilitySettingsPayload>,
+    pub widget: Option<WidgetVisibilitySettings>,
 }
 
 /// 天気ウィジェット設定
@@ -108,10 +108,13 @@ pub struct WeatherSettingsPayload {
     pub position: WeatherPosition,
 }
 
-/// ウィジェット表示設定ペイロード
+/// ウィジェット表示設定（共通型）
+/// - DB保存用（overlay.rs）
+/// - WebSocket配信用（SettingsUpdatePayload）
+/// - HTTP API用（http.rs）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WidgetVisibilitySettingsPayload {
+pub struct WidgetVisibilitySettings {
     pub clock: bool,
     pub weather: bool,
     pub comment: bool,

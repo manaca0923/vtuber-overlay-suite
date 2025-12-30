@@ -246,7 +246,9 @@ T13で実装したInnerTubeクライアントを本番ポーリングに統合�
 ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にする。
 
 ### チェックリスト
-- [ ] **本番UI結線**: 設定画面からApiMode切り替え（次フェーズ）
+- [x] **本番UI結線**: 設定画面からApiMode切り替え
+  - 実装済み: `CommentControlPanel.tsx:503-584` に取得モード選択UI実装済み
+  - InnerTube / 公式API(gRPC) / 公式API(ポーリング) の3モード切り替え可能
 - [x] **自動テスト追加**: 絵文字キャッシュ・ポーラー切替テスト
   - 絵文字キャッシュテスト: `parser.rs`に7つのテスト実装済み（サイズ制限、LRU、並行アクセス等）
   - ポーラー切替テスト: 統合テストが必要なため手動テスト項目として管理
@@ -298,11 +300,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### コード品質
 
-- [ ] **Rust側WidgetVisibilitySettings型の重複削減** (PR#93)
-  - 現在: `overlay.rs`、`http.rs`、`types.rs`に同様の構造体が存在
-  - 対応: 共通型の使用または`From`トレイトで変換を実装
-  - 優先度: 低（現状でも動作に問題なし）
-  - 対象ファイル: `src-tauri/src/commands/overlay.rs`, `src-tauri/src/server/http.rs`, `src-tauri/src/server/types.rs`
+- [x] **Rust側WidgetVisibilitySettings型の重複削減** (PR#93, PR#94で実装)
+  - 実装済み: `types.rs`に共通型`WidgetVisibilitySettings`を定義
+  - `overlay.rs`と`http.rs`から重複定義を削除し、共通型をインポート
+  - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
+
+- [ ] **他の設定型も同様に統合を検討** (PR#94レビューで提案)
+  - `WeatherSettings` / `WeatherSettingsPayload` の統一
+  - `CommentSettings` / `CommentSettingsPayload` の統一
+  - `SetlistSettings` / `SetlistSettingsPayload` の統一
+  - 優先度: 低（現状でも動作に問題なし、段階的対応で可）
 
 ### テスト（推奨）
 
@@ -494,9 +501,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応: 統合ポーラーに保存状態復元機能を追加
   - @see `src/components/CommentControlPanel.tsx:285-286`
 
-- [ ] **接続状態管理の最適化** (PR#40)
-  - 現在: `isPolling`と`connectionStatus`を別々に管理
-  - 提案: `connectionStatus`を拡張（`'disconnected' | 'connecting' | 'connected' | 'error'`）し、`isPolling`を派生状態化
+- [x] **接続状態管理の最適化** (PR#40) - **対応不要と判断**
+  - 分析結果: `isPolling`と`connectionStatus`は異なる概念を表すため、統合は不適切
+    - `isPolling`: ポーリングタスクの実行状態
+    - `connectionStatus`: 接続の状態（切断/接続/エラー）
+  - 例: ポーリング中でも一時的に切断（リトライ中）の状態がありえる
+  - 現在の設計が正しいため変更不要
 
 ### 技術スタック
 - gRPC: tonic 0.12 + prost 0.13

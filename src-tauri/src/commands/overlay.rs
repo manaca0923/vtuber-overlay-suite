@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::server::types::{CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition};
+use crate::server::types::{
+    CommentPosition, LayoutPreset, SetlistPosition, WeatherPosition, WidgetVisibilitySettings,
+};
 use crate::AppState;
 
 /// HEXカラーコードのバリデーション (#RRGGBB形式)
@@ -86,22 +88,8 @@ pub struct WeatherSettings {
     pub position: WeatherPosition,
 }
 
-/// ウィジェット表示設定
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WidgetVisibilitySettings {
-    pub clock: bool,
-    pub weather: bool,
-    pub comment: bool,
-    pub superchat: bool,
-    pub logo: bool,
-    pub setlist: bool,
-    pub kpi: bool,
-    pub tanzaku: bool,
-    pub announcement: bool,
-}
-
 /// オーバーレイ設定全体
+/// NOTE: WidgetVisibilitySettingsはcrate::server::typesから再利用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlaySettings {
@@ -181,7 +169,7 @@ pub async fn broadcast_settings_update(
 
     use crate::server::types::{
         CommentSettingsPayload, SetlistSettingsPayload, SettingsUpdatePayload,
-        WeatherSettingsPayload, WidgetVisibilitySettingsPayload, WsMessage,
+        WeatherSettingsPayload, WsMessage,
     };
 
     let payload = SettingsUpdatePayload {
@@ -206,17 +194,8 @@ pub async fn broadcast_settings_update(
             enabled: w.enabled,
             position: w.position,
         }),
-        widget: settings.widget.map(|w| WidgetVisibilitySettingsPayload {
-            clock: w.clock,
-            weather: w.weather,
-            comment: w.comment,
-            superchat: w.superchat,
-            logo: w.logo,
-            setlist: w.setlist,
-            kpi: w.kpi,
-            tanzaku: w.tanzaku,
-            announcement: w.announcement,
-        }),
+        // WidgetVisibilitySettingsは共通型のため直接渡せる
+        widget: settings.widget,
     };
 
     let server_state = state.server.read().await;

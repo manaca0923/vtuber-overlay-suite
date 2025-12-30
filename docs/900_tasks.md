@@ -324,9 +324,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 確認済み: `poller.rs`のcatch-allハンドラでexponential backoffによるリトライが実装済み
   - 対象ファイル: `src-tauri/src/youtube/poller.rs`
 
-- [ ] **WeatherClientのタイムアウトエラー変換** (PR#90レビュー提案)
-  - YouTubeClientと同様に`convert_reqwest_error`パターンを適用
-  - `is_timeout()`でタイムアウトを検出し`WeatherError::Timeout`に変換
+- [x] **WeatherClientのタイムアウトエラー変換** (PR#90で実装済み)
+  - 実装済み: `is_timeout()`でタイムアウトを検出し`WeatherError::Timeout`に変換
+  - geocode_city()とfetch_weather_for_city()の両方で適用済み
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
 
 - [ ] **HTTPタイムアウト定数の統一** (PR#90レビュー提案)

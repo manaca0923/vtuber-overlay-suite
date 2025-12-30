@@ -412,13 +412,14 @@ async fn run_innertube_loop(
                         );
                     }
 
-                    // WebSocketでブロードキャスト（InnerTubeはバッファリング表示、1秒間隔）
+                    // WebSocketでブロードキャスト（InnerTubeはバッファリング表示）
+                    use crate::youtube::innertube::INNERTUBE_BUFFER_INTERVAL_MS;
                     let state_lock = server_state.read().await;
                     for msg in &new_messages {
                         state_lock.broadcast(WsMessage::CommentAdd {
                             payload: msg.clone(),
                             instant: false,
-                            buffer_interval_ms: Some(1000), // InnerTubeは1秒バッファ
+                            buffer_interval_ms: Some(INNERTUBE_BUFFER_INTERVAL_MS),
                         }).await;
                     }
                 }

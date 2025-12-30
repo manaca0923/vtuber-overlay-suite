@@ -940,7 +940,8 @@ pub async fn start_polling_innertube(
                     );
                 }
 
-                // WebSocketでブロードキャスト（InnerTubeはバッファリング表示、1秒間隔）
+                // WebSocketでブロードキャスト（InnerTubeはバッファリング表示）
+                use crate::youtube::innertube::INNERTUBE_BUFFER_INTERVAL_MS;
                 let server_state_clone = Arc::clone(&server_state);
                 for message in new_messages {
                     let state_lock = server_state_clone.read().await;
@@ -948,7 +949,7 @@ pub async fn start_polling_innertube(
                         .broadcast(WsMessage::CommentAdd {
                             payload: message,
                             instant: false,
-                            buffer_interval_ms: Some(1000), // InnerTubeは1秒バッファ
+                            buffer_interval_ms: Some(INNERTUBE_BUFFER_INTERVAL_MS),
                         })
                         .await;
                 }

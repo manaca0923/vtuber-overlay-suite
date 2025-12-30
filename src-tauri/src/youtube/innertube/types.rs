@@ -26,6 +26,11 @@ const MAX_POLLING_INTERVAL_MS: u64 = 30000;
 /// 極端に短い値によるサーバー過負荷を防止
 const MIN_POLLING_INTERVAL_MS: u64 = 500;
 
+/// InnerTubeモードのバッファ間隔（1秒）
+/// オーバーレイ側で1秒間に取得したコメントを等間隔で表示するための設定
+/// ポーリング間隔（1秒）と合わせることで、リアルタイムに近い表示を実現
+pub const INNERTUBE_BUFFER_INTERVAL_MS: u32 = 1000;
+
 impl ContinuationType {
     /// 実効的なポーリング間隔を計算
     ///

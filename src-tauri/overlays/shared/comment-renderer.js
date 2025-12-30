@@ -451,8 +451,12 @@ class CommentQueueManager {
    * @param {number} intervalMs - 新しいバッファ間隔（ミリ秒）
    */
   setBufferInterval(intervalMs) {
+    // バッファ間隔の上限値（30秒）- 極端な値への防御
+    const MAX_BUFFER_INTERVAL = 30000;
+
     // 型チェック + 範囲チェック（防御的プログラミング: issues/013）
-    if (!Number.isFinite(intervalMs) || intervalMs <= 0) return;
+    // 最小値（> 0）と最大値（<= 30秒）の両方をガード
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0 || intervalMs > MAX_BUFFER_INTERVAL) return;
 
     if (this.BUFFER_INTERVAL !== intervalMs) {
       console.log(`Changing BUFFER_INTERVAL from ${this.BUFFER_INTERVAL}ms to ${intervalMs}ms`);

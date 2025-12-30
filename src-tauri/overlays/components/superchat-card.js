@@ -185,10 +185,18 @@ class SuperchatCard extends BaseComponent {
     el.classList.remove('visible');
     el.classList.add('removing');
 
+    // 二重実行防止フラグ
+    let callbackExecuted = false;
+    const safeCallback = () => {
+      if (callbackExecuted) return;
+      callbackExecuted = true;
+      callback();
+    };
+
     el.addEventListener(
       'animationend',
       () => {
-        callback();
+        safeCallback();
       },
       { once: true }
     );
@@ -196,7 +204,7 @@ class SuperchatCard extends BaseComponent {
     // フォールバック（アニメーションが発火しなかった場合）
     setTimeout(() => {
       if (el.parentNode) {
-        callback();
+        safeCallback();
       }
     }, 500);
   }

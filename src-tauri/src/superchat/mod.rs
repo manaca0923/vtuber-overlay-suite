@@ -149,7 +149,10 @@ fn parse_amount_micros(amount_str: &str) -> u64 {
         digits.replace(',', "")
     };
 
-    let amount: f64 = cleaned.parse().unwrap_or(0.0);
+    let amount: f64 = cleaned.parse().unwrap_or_else(|_| {
+        log::warn!("Failed to parse superchat amount: '{}' (cleaned: '{}')", amount_str, cleaned);
+        0.0
+    });
     (amount * 1_000_000.0) as u64
 }
 

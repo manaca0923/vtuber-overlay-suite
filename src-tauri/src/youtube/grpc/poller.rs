@@ -91,6 +91,8 @@ impl GrpcPoller {
     }
 
     /// Check if polling is active
+    /// NOTE: 現在未使用だが、将来の状態確認機能で使用予定
+    #[allow(dead_code)]
     pub fn is_running(&self) -> bool {
         self.task_handle.is_some() && !self.stop_signal.load(Ordering::SeqCst)
     }

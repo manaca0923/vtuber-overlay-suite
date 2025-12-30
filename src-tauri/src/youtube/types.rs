@@ -214,7 +214,9 @@ pub struct VideoStatistics {
     #[serde(rename = "likeCount")]
     pub like_count: Option<String>,
     /// コメント数
+    /// NOTE: YouTube APIレスポンスに含まれるフィールド。現在未使用だが、将来のKPI表示で使用予定
     #[serde(rename = "commentCount")]
+    #[allow(dead_code)]
     pub comment_count: Option<String>,
 }
 

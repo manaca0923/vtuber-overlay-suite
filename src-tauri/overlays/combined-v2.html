@@ -304,7 +304,8 @@
     // ウィジェット表示/非表示を適用
     function applyWidgetVisibility(widgetSettings) {
       // issues/013: 防御的プログラミング - オブジェクト型のガード
-      if (!widgetSettings || typeof widgetSettings !== 'object') {
+      // Array.isArrayチェック追加: typeof [] === 'object' がtrueになるため
+      if (!widgetSettings || typeof widgetSettings !== 'object' || Array.isArray(widgetSettings)) {
         console.warn('[Widget] Invalid widgetSettings, skipping');
         return;
       }

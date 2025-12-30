@@ -26,6 +26,10 @@ interface OverlayPreviewProps {
 const OBS_WIDTH = 1920;
 const OBS_HEIGHT = 1080;
 
+// プレビュー用定数
+const PREVIEW_ORIGIN = 'http://localhost:19800';  // iframeのorigin（postMessage送信先）
+const DEBOUNCE_DELAY_MS = 50;  // スライダー操作時のデバウンス遅延
+
 export function OverlayPreview({ settings, activePanel, mode = 'combined' }: OverlayPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -33,8 +37,8 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
   // loadedUrlを追跡することで、useEffectでsetStateを呼ぶ必要がなくなる
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
 
-  // スライダー操作時のパフォーマンス最適化（50msデバウンス）
-  const debouncedSettings = useDebounce(settings, 50);
+  // スライダー操作時のパフォーマンス最適化
+  const debouncedSettings = useDebounce(settings, DEBOUNCE_DELAY_MS);
 
   // コンテナサイズに基づいてスケールを計算
   useEffect(() => {
@@ -137,9 +141,8 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
       }
     };
 
-    // iframeのcontentWindowに送信
-    // '*'を使用: iframeはlocalhostから読み込まれるため、originは異なる
-    iframeRef.current.contentWindow.postMessage(message, '*');
+    // iframeのcontentWindowに送信（セキュリティ: targetOriginを明示）
+    iframeRef.current.contentWindow.postMessage(message, PREVIEW_ORIGIN);
   }, [debouncedSettings, iframeLoaded]);
 
   // iframeのhandleLoad関数

@@ -373,6 +373,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - サーバー負荷とリアルタイム体験のトレードオフを再検討
   - 優先度: 低（設計判断、次回以降の検討事項）
 
+- [ ] **hasChanges計算のメモ化最適化** (PR#103レビューで提案)
+  - 対象ファイル: `src/components/settings/OverlaySettings.tsx`
+  - 現在: `JSON.stringify`によるフル比較
+  - 問題: 大きなオブジェクトに対するJSON.stringify比較は重くなる可能性
+  - 改善案: `lodash.isEqual`や`fast-deep-equal`などの専用ライブラリを使用
+  - 優先度: 低（現時点では設定オブジェクトが小さいため問題なし）
+
+- [ ] **combined.htmlへのpostMessageハンドラ追加検討** (PR#103レビューで確認)
+  - 対象ファイル: `src-tauri/overlays/combined.html`
+  - 現状: v2レイアウト（combined-v2.html）のみPostMessageHandler対応
+  - 対応案: v1レイアウトも利用者がいる場合は同様の対応を追加
+  - 優先度: 低（v2レイアウトへの移行を推奨）
+
+- [ ] **postMessageメッセージ型のドキュメント追記** (PR#103レビューで提案)
+  - 対象ファイル: `docs/300_overlay-specs.md`
+  - 追記内容: `preview:settings:update`メッセージ型の仕様
+  - 優先度: 低（ドキュメント改善）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

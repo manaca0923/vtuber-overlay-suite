@@ -472,7 +472,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("nonexistent").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
     }
@@ -488,7 +487,6 @@ mod tests {
             .with_body(r#"{"error": {"errors": [{"reason": "quotaExceeded"}]}}"#)
             .create_async()
             .await;
-
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
@@ -506,7 +504,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
     }
@@ -523,7 +520,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
     }
@@ -539,7 +535,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
     }
@@ -554,7 +549,6 @@ mod tests {
             .with_status(404)
             .create_async()
             .await;
-
 
         let result = client.get_live_stream_stats("test_video").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
@@ -572,7 +566,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("invalid!id").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
     }
@@ -588,7 +581,6 @@ mod tests {
             .with_body("Internal Server Error")
             .create_async()
             .await;
-
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -609,7 +601,6 @@ mod tests {
             .with_status(502)
             .create_async()
             .await;
-
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -632,7 +623,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("test_video").await;
         match result {
             Err(YouTubeError::ApiError(msg)) => {
@@ -653,7 +643,6 @@ mod tests {
             .with_status(418)
             .create_async()
             .await;
-
 
         let result = client.get_live_stream_stats("test_video").await;
         match result {
@@ -687,7 +676,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_stream_stats("test_video").await;
         assert!(result.is_ok());
 
@@ -718,7 +706,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.validate_api_key().await;
         assert!(result.is_ok());
         assert!(result.unwrap());
@@ -734,7 +721,6 @@ mod tests {
             .with_status(401)
             .create_async()
             .await;
-
 
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -752,7 +738,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
     }
@@ -768,7 +753,6 @@ mod tests {
             .with_body(r#"{"error": {"errors": [{"reason": "rateLimitExceeded"}]}}"#)
             .create_async()
             .await;
-
 
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -786,7 +770,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.validate_api_key().await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
     }
@@ -801,7 +784,6 @@ mod tests {
             .with_status(500)
             .create_async()
             .await;
-
 
         let result = client.validate_api_key().await;
         assert!(result.is_ok());
@@ -833,7 +815,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("test_video").await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test_chat_id_123");
@@ -859,7 +840,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::LiveChatNotFound)));
     }
@@ -881,7 +861,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("nonexistent_video").await;
         assert!(matches!(result, Err(YouTubeError::LiveChatNotFound)));
     }
@@ -897,7 +876,6 @@ mod tests {
             .with_body(r#"{"error": {"errors": [{"reason": "keyInvalid"}]}}"#)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -915,7 +893,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("invalid!video!id").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
     }
@@ -930,7 +907,6 @@ mod tests {
             .with_status(401)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -948,7 +924,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
     }
@@ -964,7 +939,6 @@ mod tests {
             .with_body(r#"{"error": {"errors": [{"reason": "rateLimitExceeded"}]}}"#)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -982,7 +956,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("test_video").await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
     }
@@ -998,7 +971,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_id("nonexistent_video").await;
         assert!(matches!(result, Err(YouTubeError::VideoNotFound)));
     }
@@ -1013,7 +985,6 @@ mod tests {
             .with_status(500)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_id("test_video").await;
         // 5xxサーバーエラーはApiErrorにマッピング
@@ -1033,7 +1004,6 @@ mod tests {
             .with_status(418) // I'm a teapot
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_id("test_video").await;
         // 予期しないステータスはApiErrorにマッピング
@@ -1082,7 +1052,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(result.is_ok());
 
@@ -1110,7 +1079,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client
             .get_live_chat_messages("test_chat_id", Some("page_token"))
             .await;
@@ -1129,7 +1097,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
     }
@@ -1145,7 +1112,6 @@ mod tests {
             .with_body(r#"{"error": {"errors": [{"reason": "invalidPageToken"}]}}"#)
             .create_async()
             .await;
-
 
         let result = client
             .get_live_chat_messages("test_chat_id", Some("invalid_token"))
@@ -1165,7 +1131,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::ParseError(_))));
     }
@@ -1180,7 +1145,6 @@ mod tests {
             .with_status(401)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
@@ -1198,7 +1162,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::QuotaExceeded)));
     }
@@ -1214,7 +1177,6 @@ mod tests {
             .with_body(r#"{"error": {"errors": [{"reason": "rateLimitExceeded"}]}}"#)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::RateLimitExceeded)));
@@ -1232,7 +1194,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::LiveChatDisabled)));
     }
@@ -1249,7 +1210,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::InvalidApiKey)));
     }
@@ -1264,7 +1224,6 @@ mod tests {
             .with_status(404)
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_messages("nonexistent_chat", None).await;
         assert!(matches!(result, Err(YouTubeError::LiveChatNotFound)));
@@ -1281,7 +1240,6 @@ mod tests {
             .with_body("Internal Server Error")
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         // 5xxサーバーエラーはApiErrorにマッピング
@@ -1304,7 +1262,6 @@ mod tests {
             .create_async()
             .await;
 
-
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         assert!(matches!(result, Err(YouTubeError::ParseError(_))));
     }
@@ -1319,7 +1276,6 @@ mod tests {
             .with_status(418) // I'm a teapot
             .create_async()
             .await;
-
 
         let result = client.get_live_chat_messages("test_chat_id", None).await;
         // 予期しないステータスはApiErrorにマッピング

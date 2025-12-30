@@ -385,6 +385,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 実装済み: `SaveCommentsResult { saved, failed, skipped }`構造体を返すように変更
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
 
+- [ ] **SaveCommentsResultのログ出力強化** (PR#88レビュー)
+  - 現在: デバッグログのみ
+  - 提案: `save_comments_to_db()`の呼び出し元で`failed > 0`または`skipped > 0`の場合にwarnログを出力
+  - 目的: 本番環境での問題検出を容易にする
+  - 対象ファイル: `src-tauri/src/youtube/unified_poller.rs`, `src-tauri/src/commands/youtube.rs`
+  - 優先度: 低
+
 - [ ] **save_comments_to_dbの総予算設定可能化** (PR#56)
   - 残タスク:
     - **予算を設定可能に**: メッセージ数/チャンク数に比例させる、または設定ファイルで変更可能に
@@ -416,6 +423,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 実装済み: `TransactionResult::DeadlineExceeded`バリアントを追加
   - デッドライン超過時は`Busy`ではなく`DeadlineExceeded`を返すように変更
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
+
+- [ ] **DeadlineExceededメトリクス計測** (PR#88レビュー)
+  - 将来的にPrometheusなどのメトリクス基盤を導入する際の検討事項
+  - `DeadlineExceeded`発生回数をカウントするとシステム負荷状況の可視化に有用
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（メトリクス基盤導入時に対応）
 
 ### ドキュメント
 

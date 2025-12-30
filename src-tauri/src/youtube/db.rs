@@ -38,6 +38,29 @@ const RETRY_TOTAL_TIMEOUT_MS: u64 = 2000;
 /// この値を超えないようにしつつ、残り時間に応じて短縮する
 const MAX_BUSY_TIMEOUT_PER_ATTEMPT_MS: u64 = 500;
 
+/// コメント保存の結果統計
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SaveCommentsResult {
+    /// 正常に保存されたメッセージ数
+    pub saved: usize,
+    /// 保存に失敗したメッセージ数（エラー発生）
+    pub failed: usize,
+    /// 予算超過でスキップされたメッセージ数
+    pub skipped: usize,
+}
+
+impl SaveCommentsResult {
+    /// 全メッセージが正常に保存されたかどうか
+    pub fn is_complete(&self) -> bool {
+        self.failed == 0 && self.skipped == 0
+    }
+
+    /// 処理されたメッセージの総数
+    pub fn total(&self) -> usize {
+        self.saved + self.failed + self.skipped
+    }
+}
+
 /// トランザクション処理の結果
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TransactionResult {
@@ -45,6 +68,9 @@ enum TransactionResult {
     Success,
     /// SQLITE_BUSYエラー（リトライ可能）
     Busy,
+    /// デッドライン超過（リトライしても同じ結果になる可能性が高い）
+    /// BUSYとは異なり、システムが高負荷状態であることを示す
+    DeadlineExceeded,
     /// その他のエラー（リトライ不可）
     OtherError,
     /// 接続が汚染された状態（rollback失敗等）
@@ -71,13 +97,20 @@ enum TransactionResult {
 /// ## タイムアウト保証
 /// 全チャンクの処理は総タイムアウト（RETRY_TOTAL_TIMEOUT_MS）内で完了する。
 /// フォールバックパスも同じ予算を共有し、予算超過時はスキップする。
-pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
+///
+/// ## 戻り値
+/// `SaveCommentsResult`で保存結果の統計を返す:
+/// - `saved`: 正常に保存されたメッセージ数
+/// - `failed`: エラーで保存に失敗したメッセージ数
+/// - `skipped`: 予算超過でスキップされたメッセージ数
+pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) -> SaveCommentsResult {
     if messages.is_empty() {
-        return;
+        return SaveCommentsResult::default();
     }
 
     let start_time = Instant::now();
     let total_timeout = Duration::from_millis(RETRY_TOTAL_TIMEOUT_MS);
+    let mut result = SaveCommentsResult::default();
 
     // チャンクに分割して処理（ロック保持時間を短縮）
     for chunk in messages.chunks(BATCH_CHUNK_SIZE) {
@@ -92,26 +125,41 @@ pub async fn save_comments_to_db(pool: &SqlitePool, messages: &[ChatMessage]) {
                 remaining.as_millis(),
                 chunk.len()
             );
-            return;
+            result.skipped += chunk.len();
+            // 残り全てのチャンクもスキップ扱い
+            for remaining_chunk in messages.chunks(BATCH_CHUNK_SIZE).skip(result.total() / BATCH_CHUNK_SIZE + 1) {
+                result.skipped += remaining_chunk.len();
+            }
+            return result;
         }
 
         // 残り予算をsave_chunk_with_retryに渡す（end-to-end予算管理）
-        if !save_chunk_with_retry(pool, chunk, remaining).await {
+        if save_chunk_with_retry(pool, chunk, remaining).await {
+            // トランザクション成功: 全メッセージ保存済み
+            result.saved += chunk.len();
+        } else {
             // トランザクション失敗時は1件ずつ個別INSERTにフォールバック
             // ただし総タイムアウトを超過している場合はスキップ
             let elapsed = start_time.elapsed();
             if elapsed >= total_timeout {
                 log::warn!(
-                    "save_comments_to_db: Total timeout exceeded, skipping fallback for chunk"
+                    "save_comments_to_db: Total timeout exceeded, skipping fallback for chunk ({} messages)",
+                    chunk.len()
                 );
+                result.skipped += chunk.len();
                 continue;
             }
 
             log::debug!("Transaction failed after retries, falling back to individual inserts");
             let remaining = total_timeout - elapsed;
-            save_chunk_individually(pool, chunk, remaining).await;
+            let fallback_result = save_chunk_individually(pool, chunk, remaining).await;
+            result.saved += fallback_result.saved;
+            result.failed += fallback_result.failed;
+            result.skipped += fallback_result.skipped;
         }
     }
+
+    result
 }
 
 /// チャンクをexponential backoffでリトライしながら保存
@@ -185,6 +233,15 @@ async fn save_chunk_with_retry(
                 // 非SQLITE_BUSYエラー（テーブル不存在など）はリトライしない
                 // Poisonedはsave_chunk_with_transaction_and_timeout内でOtherErrorに変換されるため
                 // ここには到達しないが、網羅性のために明示的に処理
+                return false;
+            }
+            TransactionResult::DeadlineExceeded => {
+                // デッドライン超過: システムが高負荷状態
+                // リトライしても同じ結果になる可能性が高いため、即座にフォールバック
+                log::warn!(
+                    "DeadlineExceeded: System under high load, skipping further retries ({} messages)",
+                    messages.len()
+                );
                 return false;
             }
             TransactionResult::Busy => {
@@ -626,8 +683,8 @@ async fn save_chunk_with_transaction_on_conn(
                 log::warn!("Rollback failed after deadline exceeded: {:?}", rb_err);
                 return TransactionResult::Poisoned;
             }
-            // デッドライン超過はBusyとして返す（リトライはsave_chunk_with_retryで判断）
-            return TransactionResult::Busy;
+            // デッドライン超過: リトライしても同じ結果になる可能性が高い
+            return TransactionResult::DeadlineExceeded;
         }
 
         if let Err(e) = insert_comment(&mut *tx, msg).await {
@@ -665,7 +722,8 @@ async fn save_chunk_with_transaction_on_conn(
             log::warn!("Rollback failed after deadline exceeded before commit: {:?}", rb_err);
             return TransactionResult::Poisoned;
         }
-        return TransactionResult::Busy;
+        // デッドライン超過: リトライしても同じ結果になる可能性が高い
+        return TransactionResult::DeadlineExceeded;
     }
 
     // コミット
@@ -693,9 +751,8 @@ async fn save_chunk_with_transaction_on_conn(
 /// リトライパスと同様に、元のbusy_timeoutを取得・設定・復元する。
 /// 取得または設定に失敗した場合は即座に終了し、予算を超えてブロックするリスクを排除。
 /// これにより、接続の以前のbusy_timeout（5秒など）で長時間ブロックすることを防ぐ。
-async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], remaining: Duration) {
-    let mut success_count = 0;
-    let mut error_count = 0;
+async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], remaining: Duration) -> SaveCommentsResult {
+    let mut result = SaveCommentsResult::default();
     let start_time = Instant::now();
 
     // 残り時間が少なすぎる場合はスキップ
@@ -706,7 +763,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
             remaining.as_millis(),
             messages.len()
         );
-        return;
+        result.skipped = messages.len();
+        return result;
     }
 
     // 接続取得のタイムアウト（残り予算の半分、最大500ms）
@@ -718,7 +776,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         Ok(Ok(conn)) => conn,
         Ok(Err(e)) => {
             log::warn!("Failed to acquire connection for fallback: {:?}", e);
-            return;
+            result.failed = messages.len();
+            return result;
         }
         Err(_) => {
             log::warn!(
@@ -726,7 +785,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
                 acquire_timeout_ms,
                 messages.len()
             );
-            return;
+            result.skipped = messages.len();
+            return result;
         }
     };
 
@@ -741,7 +801,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
                 messages.len()
             );
             // 一時的なロック競合なのでdetachしない
-            return;
+            result.skipped = messages.len();
+            return result;
         }
         GetBusyTimeoutResult::OtherError => {
             log::warn!(
@@ -749,7 +810,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
                 messages.len()
             );
             conn.detach();
-            return;
+            result.failed = messages.len();
+            return result;
         }
     };
 
@@ -762,7 +824,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
             remaining_after_acquire.as_millis(),
             messages.len()
         );
-        return;
+        result.skipped = messages.len();
+        return result;
     }
 
     // busy_timeoutを計算
@@ -793,7 +856,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
                 e
             );
             // 一時的なロック競合なのでdetachしない
-            return;
+            result.skipped = messages.len();
+            return result;
         }
         log::warn!(
             "Skipping individual insert fallback: failed to set busy_timeout, detaching connection, {} messages not saved: {:?}",
@@ -801,7 +865,8 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
             e
         );
         conn.detach();
-        return;
+        result.failed = messages.len();
+        return result;
     }
 
     for msg in messages {
@@ -809,16 +874,18 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         if start_time.elapsed() >= remaining {
             log::debug!(
                 "Individual insert fallback: budget exhausted after {}/{} messages",
-                success_count + error_count,
+                result.saved + result.failed,
                 messages.len()
             );
+            // 残りのメッセージはスキップ扱い
+            result.skipped = messages.len() - result.saved - result.failed;
             break;
         }
 
         match insert_comment(&mut *conn, msg).await {
-            Ok(_) => success_count += 1,
+            Ok(_) => result.saved += 1,
             Err(e) => {
-                error_count += 1;
+                result.failed += 1;
                 log::debug!("Failed to insert comment individually: {:?}", e);
             }
         }
@@ -830,14 +897,16 @@ async fn save_chunk_individually(pool: &SqlitePool, messages: &[ChatMessage], re
         conn.detach();
     }
 
-    if error_count > 0 || success_count + error_count < messages.len() {
+    if result.failed > 0 || result.skipped > 0 {
         log::warn!(
             "Individual insert fallback: {} succeeded, {} failed, {} skipped (budget)",
-            success_count,
-            error_count,
-            messages.len() - success_count - error_count
+            result.saved,
+            result.failed,
+            result.skipped
         );
     }
+
+    result
 }
 
 /// 単一コメントをINSERT
@@ -2250,11 +2319,11 @@ mod tests {
 
         let result = save_chunk_with_transaction_on_conn(&mut conn, &messages, past_deadline).await;
 
-        // デッドライン超過でBusyが返されること（早期終了）
+        // デッドライン超過でDeadlineExceededが返されること（早期終了）
         assert_eq!(
             result,
-            TransactionResult::Busy,
-            "Should return Busy when deadline is exceeded"
+            TransactionResult::DeadlineExceeded,
+            "Should return DeadlineExceeded when deadline is exceeded"
         );
 
         // 接続をドロップしてプールに返す

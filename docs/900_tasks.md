@@ -295,11 +295,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### テスト（推奨）
 
-- [ ] **Weather APIテストのヘルパー関数抽出** (PR#84)
-  - 現在: Geocodingレスポンスのモック設定が各テストで重複
-  - 提案: `mock_geocoding_success()`などのヘルパー関数に抽出して可読性向上
+- [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
+  - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
-  - 優先度: 低
 
 - [ ] **ネットワークタイムアウトのテスト** (PR#84)
   - 現在: mockitoの制約により実際のタイムアウトテストは除外
@@ -319,23 +317,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/youtube/client.rs`, `src-tauri/src/weather/mod.rs`
   - 優先度: 低
 
-- [ ] **YouTubeテストヘルパー関数の導入** (PR#85)
-  - 現在: 各テストでセットアップコード（`Server::new_async().await`, `YouTubeClient::new_with_base_url`）が重複
-  - 提案: `setup_test_client()` ヘルパー関数に抽出してメンテナンス性向上
+- [x] **YouTubeテストヘルパー関数の導入** (PR#85, PR#88で実装)
+  - 実装済み: `setup_test_client()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/youtube/client.rs`
-  - 優先度: 低
 
-- [ ] **5xxエラーのログレベル検討** (PR#86)
-  - 現在: 5xxサーバーエラーに`log::error!`を使用
-  - 提案: 一時的な障害の可能性があるため`log::warn!`の方が適切かもしれない
+- [x] **5xxエラーのログレベル検討** (PR#86, PR#88で実装)
+  - 実装済み: 5xxエラーの`log::error!`を`log::warn!`に変更（一時的な障害）
   - 対象ファイル: `src-tauri/src/youtube/client.rs`
-  - 優先度: 低
 
-- [ ] **ApiErrorのリトライロジック確認** (PR#86)
-  - 確認: `ApiError`が返された場合、上位層でリトライが適切に行われるか
-  - 5xxエラーは一時的な障害の可能性があるためリトライ対象にすべきケースあり
+- [x] **ApiErrorのリトライロジック確認** (PR#86, PR#88で確認)
+  - 確認済み: `poller.rs`のcatch-allハンドラでexponential backoffによるリトライが実装済み
   - 対象ファイル: `src-tauri/src/youtube/poller.rs`
-  - 優先度: 低
 
 ### セキュリティ（将来課題）
 
@@ -389,19 +381,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - メッセージ送受信テスト
   - 複数クライアント同時接続テスト
 
-- [ ] **save_comments_to_dbの総予算によるデータスキップ検討** (PR#56)
-  - 現在: 2秒の総予算を超えると残りのメッセージをスキップ
-  - 設計判断: SQLITE_BUSYなしでもスキップが発生する可能性がある（データ損失リスク）
-  - 対応案:
-    - 予算をチャンクごとにスコープするか、チャンク数でスケールする
-    - スキップ数をログ/メトリクスで報告し、上流でリキュー可能にする
-    - 現状はリアルタイム性を優先し、2秒以内に完了することを保証
-    - **戻り値を構造化**: `{ saved: usize, failed: usize, skipped: usize }`を返し、呼び出し元に通知
+- [x] **save_comments_to_dbの戻り値構造化** (PR#56, PR#88で実装)
+  - 実装済み: `SaveCommentsResult { saved, failed, skipped }`構造体を返すように変更
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+
+- [ ] **SaveCommentsResultのログ出力強化** (PR#88レビュー)
+  - 現在: デバッグログのみ
+  - 提案: `save_comments_to_db()`の呼び出し元で`failed > 0`または`skipped > 0`の場合にwarnログを出力
+  - 目的: 本番環境での問題検出を容易にする
+  - 対象ファイル: `src-tauri/src/youtube/unified_poller.rs`, `src-tauri/src/commands/youtube.rs`
+  - 優先度: 低
+
+- [ ] **save_comments_to_dbの総予算設定可能化** (PR#56)
+  - 残タスク:
     - **予算を設定可能に**: メッセージ数/チャンク数に比例させる、または設定ファイルで変更可能に
     - **テスト用に予算を注入可能に**: `test_concurrent_writes_with_retry`が2秒固定予算でフレーキーになる可能性あり（遅いディスク/CI環境）
-    - **テスト追加**: 予算超過時のskippedカウントを検証するテスト（構造化戻り値実装後）
+    - **テスト追加**: 予算超過時のskippedカウントを検証するテスト
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 中（本番運用後にフィードバックを収集）
+  - 優先度: 低（本番運用後にフィードバックを収集）
 
 - [ ] **`broadcast_weather_update(force_refresh=true)` のテスト** (PR#57)
   - キャッシュクリア→新規取得→ブロードキャストの動作を検証
@@ -422,12 +419,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（プール設定でbusy_timeout=0を使うケースは稀）
   - 備考: 現在の実装は「リトライを優先する」設計判断に基づく
 
-- [ ] **TransactionResult::DeadlineExceeded専用バリアント検討** (PR#81レビュー)
-  - 現在: デッドライン超過時は`TransactionResult::Busy`を返す
-  - 問題: デッドライン超過は「リトライしても同じ結果になる可能性が高い」ケース
-  - 対応案: 専用の`TransactionResult::DeadlineExceeded`を追加して明示的に区別
+- [x] **TransactionResult::DeadlineExceeded専用バリアント検討** (PR#81レビュー, PR#88で実装)
+  - 実装済み: `TransactionResult::DeadlineExceeded`バリアントを追加
+  - デッドライン超過時は`Busy`ではなく`DeadlineExceeded`を返すように変更
   - 対象ファイル: `src-tauri/src/youtube/db.rs`
-  - 優先度: 低（現状でも上位で予算チェックされるため実害なし）
+
+- [ ] **DeadlineExceededメトリクス計測** (PR#88レビュー)
+  - 将来的にPrometheusなどのメトリクス基盤を導入する際の検討事項
+  - `DeadlineExceeded`発生回数をカウントするとシステム負荷状況の可視化に有用
+  - 対象ファイル: `src-tauri/src/youtube/db.rs`
+  - 優先度: 低（メトリクス基盤導入時に対応）
 
 ### ドキュメント
 

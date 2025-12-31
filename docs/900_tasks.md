@@ -1000,18 +1000,22 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 - [x] YouTube Data API v3 から同時接続者数取得（`videos.list` の `liveStreamingDetails.concurrentViewers`）
 - [x] 定期的な取得（30秒間隔）
 - [x] `fetch_and_broadcast_viewer_count()` コマンド実装
+- [x] InnerTubeモードでの視聴者数表示対応（`fetch_viewer_count_innertube` コマンド）
 - [ ] 設定UI: 表示するKPI項目の選択（視聴者数/高評価数/チャット速度等）（将来対応）
 
 ### 技術仕様
 - 取得間隔: 30秒（クォータ節約とリアルタイム性のバランス）
-- 主数値: 同時接続者数
-- 副数値: 高評価数
-- InnerTubeモードではスキップ（YouTube Data API不使用のため）
+- 主数値: 同時接続者数（gRPC/公式API）または視聴回数（InnerTube）
+- 副数値: 高評価数（gRPC/公式APIのみ）
+- InnerTubeモード: `/player`エンドポイントで視聴回数を取得（ラベル「視聴中」/「再生回数」で区別）
 
 ### 成果物
-- `src-tauri/src/commands/youtube.rs` - `fetch_and_broadcast_viewer_count` コマンド追加
-- `src/components/CommentControlPanel.tsx` - ポーリング中の定期取得ロジック追加
+- `src-tauri/src/commands/youtube.rs` - `fetch_and_broadcast_viewer_count`, `fetch_viewer_count_innertube` コマンド追加
+- `src/components/CommentControlPanel.tsx` - ポーリング中の定期取得ロジック追加（モード別対応）
 - `src-tauri/overlays/components/kpi-block.js` - モックデータ削除、実データ待機に変更
+- `src-tauri/src/youtube/innertube/client.rs` - `get_video_details()` メソッド追加
+- `src-tauri/src/youtube/innertube/types.rs` - `VideoDetails`, `InnerTubePlayerResponse` 型追加
+- `issues/028_pr109-log-level-trace.md` - 定期実行ログレベル指針のノウハウ
 
 ---
 

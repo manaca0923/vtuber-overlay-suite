@@ -17,7 +17,7 @@ mod auto_updater;
 mod cache;
 mod types;
 
-pub use auto_updater::WeatherAutoUpdater;
+pub use auto_updater::{MultiCityConfig, WeatherAutoUpdater};
 pub use cache::WeatherCache;
 pub use types::{GeocodingResponse, OpenMeteoResponse, WeatherData};
 

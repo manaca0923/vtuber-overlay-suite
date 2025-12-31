@@ -242,3 +242,32 @@ pub async fn broadcast_weather_multi(
     );
     Ok(())
 }
+
+/// マルチシティ設定を自動更新に反映する
+///
+/// 設定保存時や手動配信時に呼び出し、以降の自動更新でこの設定が使用される。
+///
+/// # Arguments
+/// * `enabled` - マルチシティモード有効/無効
+/// * `cities` - 都市リスト [(id, name, displayName), ...]
+/// * `rotation_interval_sec` - ローテーション間隔（秒）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_multi_city_mode(
+    state: State<'_, AppState>,
+    enabled: bool,
+    cities: Vec<(String, String, String)>,
+    rotation_interval_sec: u32,
+) -> Result<(), String> {
+    let cities_len = cities.len();
+    state
+        .weather_updater
+        .set_multi_city_config(enabled, cities, rotation_interval_sec);
+
+    log::info!(
+        "Multi-city mode set: enabled={}, cities={}, interval={}s",
+        enabled,
+        cities_len,
+        rotation_interval_sec
+    );
+    Ok(())
+}

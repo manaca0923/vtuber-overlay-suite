@@ -191,6 +191,7 @@ pub fn run() {
           commands::weather::set_weather_city_and_broadcast,
           commands::weather::get_weather_multi,
           commands::weather::broadcast_weather_multi,
+          commands::weather::set_multi_city_mode,
           commands::system::get_system_fonts,
         ]
       }
@@ -264,6 +265,7 @@ pub fn run() {
           commands::weather::set_weather_city_and_broadcast,
           commands::weather::get_weather_multi,
           commands::weather::broadcast_weather_multi,
+          commands::weather::set_multi_city_mode,
           commands::system::get_system_fonts,
         ]
       }

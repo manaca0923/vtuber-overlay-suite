@@ -6,6 +6,7 @@ import {
   broadcastWeather,
   setWeatherCityAndBroadcast,
   broadcastWeatherMulti,
+  setMultiCityMode,
   type WeatherData,
 } from '../../types/weather';
 import type {
@@ -216,6 +217,9 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     setLoading(true);
     setError(null);
     try {
+      // 自動更新を単一都市モードに設定
+      await setMultiCityMode(false, [], 5);
+
       await broadcastWeather();
     } catch (err) {
       setError('配信に失敗しました');
@@ -245,6 +249,10 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
         c.displayName,
       ]);
 
+      // 自動更新にマルチシティモードを反映（15分ごとの更新で使用）
+      await setMultiCityMode(true, cityTuples, multiCitySettings.rotationIntervalSec);
+
+      // 今すぐ配信
       await broadcastWeatherMulti(cityTuples, multiCitySettings.rotationIntervalSec);
     } catch (err) {
       setError('マルチシティ配信に失敗しました');

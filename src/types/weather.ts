@@ -81,6 +81,18 @@ export const broadcastWeatherMulti = (
     rotation_interval_sec: rotationIntervalSec,
   });
 
+/** マルチシティモードを自動更新に反映 */
+export const setMultiCityMode = (
+  enabled: boolean,
+  cities: Array<[string, string, string]>,
+  rotationIntervalSec: number
+) =>
+  invoke<void>('set_multi_city_mode', {
+    enabled,
+    cities,
+    rotation_interval_sec: rotationIntervalSec,
+  });
+
 // Tauri Commands - KPI/視聴者数
 // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
 export const getLiveStreamStats = (videoId: string, useBundledKey: boolean) =>

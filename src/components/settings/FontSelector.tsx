@@ -17,7 +17,9 @@ const loadedGoogleFonts = new Set<string>();
 function loadGoogleFont(fontSpec: string): void {
   if (!fontSpec || loadedGoogleFonts.has(fontSpec)) return;
 
-  const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontSpec)}&display=swap`;
+  // fontSpecは既にURLエンコード済みの形式（+はスペース、:と;はそのまま）
+  // encodeURIComponentを使うと+が%2Bに変換されてしまうので直接使用
+  const url = `https://fonts.googleapis.com/css2?family=${fontSpec}&display=swap`;
 
   // セキュリティチェック
   try {
@@ -32,6 +34,8 @@ function loadGoogleFont(fontSpec: string): void {
   link.href = url;
   document.head.appendChild(link);
   loadedGoogleFonts.add(fontSpec);
+
+  console.log('[FontSelector] Google Font loaded:', fontSpec);
 }
 
 /**

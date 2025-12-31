@@ -197,7 +197,7 @@ export function FontSelector({ themeSettings, onChange }: FontSelectorProps) {
       <p className="text-xs text-gray-500">
         ※ Noto Sans JP、M PLUS 1はGoogle Fontsから動的に読み込まれます。
         <br />
-        ※ 游ゴシック、メイリオはWindowsに標準搭載されています。
+        ※ 游ゴシック、メイリオはWindows専用フォントです（macOSでは代替フォントで表示）。
       </p>
     </div>
   );

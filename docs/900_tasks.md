@@ -810,13 +810,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | スパチャ | left.lower | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **ロゴ** | left.bottom | ❌ | ❌ | ✅ | ⚠️ UI のみ（設定UIなし） |
 | セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
-| **KPI** | right.lowerLeft | ❌ | ✅型のみ | ✅ | ⚠️ データ供給なし |
+| **KPI** | right.lowerLeft | ✅ | ✅ | ✅ | ✅ **完全動作**（gRPC/公式APIモード時） |
 | **短冊** | right.lowerRight | ❌ | ✅型のみ | ✅ | ⚠️ データ供給なし |
 | **告知** | right.bottom | ❌ | ✅型のみ | ✅ | ⚠️ スタブ表示 |
 
 ### 詳細説明
 
-#### ✅ 完全動作（5個）
+#### ✅ 完全動作（6個）
 
 1. **時計** (`ClockWidget`)
    - 設計上バックエンド不要（ブラウザのローカル時刻を使用）
@@ -851,19 +851,19 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
    - WebSocket: `superchat:add` / `superchat:remove` メッセージ
    - ファイル: `src-tauri/src/superchat/mod.rs`, `src-tauri/overlays/components/superchat-card.js`
 
-#### ⚠️ 部分実装（4個）
+6. **KPI** (`KPIBlock`)
+   - UIコンポーネント完成（数値フォーマット、パルスアニメーション）
+   - YouTube Data APIから同時接続者数・高評価数を30秒ごとに取得
+   - gRPC/公式APIモードでのみ動作（InnerTubeモードではスキップ）
+   - WebSocket: `kpi:update` メッセージ
+   - ファイル: `src-tauri/overlays/components/kpi-block.js`
 
-6. **ロゴ** (`BrandBlock`)
+#### ⚠️ 部分実装（3個）
+
+7. **ロゴ** (`BrandBlock`)
    - UIコンポーネントは完成（画像URL/テキスト表示対応）
    - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
    - ファイル: `src-tauri/overlays/components/brand-block.js`
-
-7. **KPI** (`KPIBlock`)
-   - UIコンポーネントは完成（数値フォーマット、パルスアニメーション）
-   - WebSocket型定義あり: `kpi:update` (`KpiUpdatePayload`)
-   - **欠けているもの**: YouTube APIから視聴者数等を取得してブロードキャストするバックエンド
-   - 現状: `afterMount`でランダムなモック値を表示
-   - ファイル: `src-tauri/overlays/components/kpi-block.js`
 
 8. **短冊** (`QueueList`)
    - UIコンポーネントは完成（リスト表示、最大6件、空時非表示）
@@ -971,31 +971,33 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ## T26: KPIデータ連携
 **優先度**: P2 | **見積**: 2日 | **依存**: T16
-**ステータス**: 未着手
+**ステータス**: ✅ **完了**（2025-12-31）
 
 ### 概要
 KPIウィジェット（right.lowerLeft）に実データを供給する。
-YouTube APIから視聴者数・高評価数等を取得してリアルタイム表示。
+YouTube APIから同時接続者数・高評価数を取得してリアルタイム表示。
 
 ### 背景
 - KPIBlockコンポーネントは完成済み（UI、WebSocket受信、density対応）
 - WebSocket型定義 `kpi:update` も存在
-- **欠けているもの**: データ取得・送信するバックエンドロジック
+- **実装完了**: データ取得・ブロードキャストのバックエンドロジック
 
 ### チェックリスト
-- [ ] YouTube Data API v3 から視聴者数取得（`videos.list` の `liveStreamingDetails.concurrentViewers`）
-- [ ] 定期的な取得（30秒〜1分間隔）
-- [ ] `broadcast_kpi_update()` 関数実装
-- [ ] 設定UI: 表示するKPI項目の選択（視聴者数/高評価数/チャット速度等）
+- [x] YouTube Data API v3 から同時接続者数取得（`videos.list` の `liveStreamingDetails.concurrentViewers`）
+- [x] 定期的な取得（30秒間隔）
+- [x] `fetch_and_broadcast_viewer_count()` コマンド実装
+- [ ] 設定UI: 表示するKPI項目の選択（視聴者数/高評価数/チャット速度等）（将来対応）
 
 ### 技術仕様
-- 取得間隔: 30秒（クォータ節約のため）
-- 主数値: 視聴者数（デフォルト）
-- 副数値: 高評価数 or チャット速度（1分あたりコメント数）
+- 取得間隔: 30秒（クォータ節約とリアルタイム性のバランス）
+- 主数値: 同時接続者数
+- 副数値: 高評価数
+- InnerTubeモードではスキップ（YouTube Data API不使用のため）
 
 ### 成果物
-- `src-tauri/src/commands/kpi.rs` - KPI取得・ブロードキャストコマンド
-- `src/components/settings/KpiSettingsPanel.tsx` - 設定UI（オプション）
+- `src-tauri/src/commands/youtube.rs` - `fetch_and_broadcast_viewer_count` コマンド追加
+- `src/components/CommentControlPanel.tsx` - ポーリング中の定期取得ロジック追加
+- `src-tauri/overlays/components/kpi-block.js` - モックデータ削除、実データ待機に変更
 
 ---
 

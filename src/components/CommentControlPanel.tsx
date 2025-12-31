@@ -125,6 +125,37 @@ export function CommentControlPanel({
     }
   }, [isPolling]);
 
+  // ポーリング中は30秒ごとに視聴者数・高評価数を取得してブロードキャスト
+  // InnerTubeモードではAPIキー不要のためスキップ
+  useEffect(() => {
+    if (!isPolling || !videoId) return;
+    // InnerTubeモードではYouTube Data APIを使用しないためスキップ
+    if (apiMode === 'innertube') return;
+
+    // 初回は即座に取得
+    const fetchViewerCount = async () => {
+      try {
+        await invoke('fetch_and_broadcast_viewer_count', {
+          video_id: videoId,
+          use_bundled_key: useBundledKey,
+        });
+      } catch (err) {
+        console.warn('Failed to fetch viewer count:', err);
+        // 取得失敗はログのみ（KPI表示は必須機能ではない）
+      }
+    };
+
+    fetchViewerCount();
+
+    // 30秒ごとに定期取得（クォータ節約とリアルタイム性のバランス）
+    const VIEWER_COUNT_INTERVAL_MS = 30_000;
+    const intervalId = setInterval(fetchViewerCount, VIEWER_COUNT_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isPolling, videoId, apiMode, useBundledKey]);
+
   // 初期設定を読み込み（APIモード、useBundledKey）
   // NOTE: このuseEffectは初回マウント時のみ実行する意図のため、依存配列は空のままにする。
   // isPollingはマウント時の初期値（親から受け取った値）を参照している。

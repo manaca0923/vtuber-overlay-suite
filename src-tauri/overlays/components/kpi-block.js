@@ -108,11 +108,8 @@ class KPIBlock extends BaseComponent {
   }
 
   afterMount() {
-    // モックデータでデモ表示（初期値）
-    this.update({
-      main: Math.floor(Math.random() * 500) + 100,
-      sub: Math.floor(Math.random() * 50) + 10,
-    });
+    // 初期状態は「--」表示（WebSocketからデータが来るまで待機）
+    // 実データはfetch_and_broadcast_viewer_countコマンドから配信される
   }
 
   update(data) {

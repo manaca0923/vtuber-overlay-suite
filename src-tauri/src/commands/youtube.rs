@@ -1292,3 +1292,66 @@ pub async fn broadcast_kpi_update(
     Ok(())
 }
 
+/// 同時接続者数・高評価数を取得してブロードキャスト
+///
+/// YouTube APIから統計情報を取得し、WebSocketでオーバーレイに配信する。
+/// フロントエンドからの定期呼び出しを想定。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn fetch_and_broadcast_viewer_count(
+    video_id: String,
+    use_bundled_key: bool,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    log::debug!(
+        "Fetching and broadcasting viewer count: video_id={}, use_bundled_key={}",
+        video_id,
+        use_bundled_key
+    );
+
+    // APIキーを取得
+    let api_key = {
+        let manager = get_api_key_manager()
+            .read()
+            .map_err(|e| format!("Failed to read API key manager: {}", e))?;
+
+        manager
+            .get_active_key(use_bundled_key)
+            .map(|s| s.to_string())
+            .ok_or_else(|| "APIキーが設定されていません".to_string())?
+    };
+
+    // 統計情報を取得
+    let client = YouTubeClient::new(api_key);
+    let stats = client
+        .get_live_stream_stats(&video_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // KpiUpdatePayloadに変換
+    let payload = KpiUpdatePayload {
+        main: stats.concurrent_viewers.map(|v| v as i64),
+        label: Some("視聴者".to_string()),
+        sub: stats.like_count.map(|v| v as i64),
+        sub_label: if stats.like_count.is_some() {
+            Some("高評価".to_string())
+        } else {
+            None
+        },
+    };
+
+    log::debug!(
+        "Viewer count fetched: concurrent_viewers={:?}, like_count={:?}",
+        stats.concurrent_viewers,
+        stats.like_count
+    );
+
+    // ブロードキャスト
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
+        .await;
+
+    log::debug!("Viewer count broadcasted");
+    Ok(())
+}
+

@@ -34,8 +34,6 @@ function loadGoogleFont(fontSpec: string): void {
   link.href = url;
   document.head.appendChild(link);
   loadedGoogleFonts.add(fontSpec);
-
-  console.log('[FontSelector] Google Font loaded:', fontSpec);
 }
 
 /**

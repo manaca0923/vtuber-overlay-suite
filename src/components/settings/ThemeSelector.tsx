@@ -24,6 +24,9 @@ const WIDGET_DISPLAY_NAMES: Record<WidgetId, string> = {
   announcement: '告知',
 };
 
+// カスタムカラーの最大件数（issues/020: マジックナンバー定数化）
+const MAX_CUSTOM_COLORS = 3;
+
 interface ThemeSelectorProps {
   themeSettings: ThemeSettings;
   onChange: (settings: ThemeSettings) => void;
@@ -64,7 +67,7 @@ export function ThemeSelector({ themeSettings, onChange }: ThemeSelectorProps) {
 
   // カスタムカラーエントリ追加
   const handleAddCustomColor = () => {
-    if (themeSettings.customColors.length >= 3) return;
+    if (themeSettings.customColors.length >= MAX_CUSTOM_COLORS) return;
 
     const newEntry: CustomColorEntry = {
       id: crypto.randomUUID(),
@@ -184,7 +187,7 @@ export function ThemeSelector({ themeSettings, onChange }: ThemeSelectorProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-gray-700">保存済みカラー</p>
-          {themeSettings.customColors.length < 3 && (
+          {themeSettings.customColors.length < MAX_CUSTOM_COLORS && (
             <button
               type="button"
               onClick={handleAddCustomColor}
@@ -213,7 +216,22 @@ export function ThemeSelector({ themeSettings, onChange }: ThemeSelectorProps) {
                   type="text"
                   id={`custom-color-name-${index}`}
                   value={entry.name}
-                  onChange={(e) => handleUpdateCustomColor(entry.id, { name: e.target.value })}
+                  onChange={(e) => {
+                    // 空文字は許可しない（入力中の一時的な空文字は許可）
+                    const value = e.target.value;
+                    if (value.length > 0 || entry.name.length === 0) {
+                      handleUpdateCustomColor(entry.id, { name: value });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // フォーカス外れた時に空文字ならデフォルト名に戻す
+                    const trimmed = e.target.value.trim();
+                    if (trimmed.length === 0) {
+                      handleUpdateCustomColor(entry.id, { name: `カラー${index + 1}` });
+                    } else if (trimmed !== e.target.value) {
+                      handleUpdateCustomColor(entry.id, { name: trimmed });
+                    }
+                  }}
                   className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
                   aria-label={`カスタムカラー${index + 1}の名前`}
                   maxLength={20}

@@ -822,6 +822,12 @@
       // PostMessageハンドラのクリーンアップ
       postMessageHandler.cleanup();
 
+      // MutationObserverのクリーンアップ
+      if (commentColorObserver) {
+        commentColorObserver.disconnect();
+        commentColorObserver = null;
+      }
+
       if (densityManager) {
         densityManager.destroy();
       }

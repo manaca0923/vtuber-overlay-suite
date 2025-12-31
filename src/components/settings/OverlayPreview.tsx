@@ -145,18 +145,11 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
   useEffect(() => {
     const handleSuperchatAdd = (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('[OverlayPreview] superchat event received:', {
-        iframeLoaded: iframeLoadedRef.current,
-        hasDetail: !!customEvent.detail,
-        hasContentWindow: !!iframeRef.current?.contentWindow,
-      });
       // refを使って最新のiframeLoaded状態を参照（クロージャ問題回避）
       if (!iframeLoadedRef.current || !customEvent.detail || !iframeRef.current?.contentWindow) {
-        console.warn('[OverlayPreview] superchat event ignored - conditions not met');
         return;
       }
 
-      console.log('[OverlayPreview] sending postMessage to iframe:', customEvent.detail);
       iframeRef.current.contentWindow.postMessage({
         type: 'preview:superchat:add',
         payload: customEvent.detail,
@@ -176,12 +169,10 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
       }, PREVIEW_ORIGIN);
     };
 
-    console.log('[OverlayPreview] Registering superchat event listeners');
     window.addEventListener(SUPERCHAT_PREVIEW_EVENT, handleSuperchatAdd);
     window.addEventListener(SUPERCHAT_REMOVE_PREVIEW_EVENT, handleSuperchatRemove);
 
     return () => {
-      console.log('[OverlayPreview] Removing superchat event listeners');
       window.removeEventListener(SUPERCHAT_PREVIEW_EVENT, handleSuperchatAdd);
       window.removeEventListener(SUPERCHAT_REMOVE_PREVIEW_EVENT, handleSuperchatRemove);
     };

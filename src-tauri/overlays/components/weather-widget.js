@@ -96,23 +96,30 @@ class WeatherWidget extends BaseComponent {
    * @param {Object} data - { cities: CityWeatherData[], rotationIntervalSec: number }
    */
   updateMulti(data) {
+    console.log('[WeatherWidget] updateMulti called:', JSON.stringify(data));
+
     this.cities = data.cities || [];
     this.rotationInterval = (data.rotationIntervalSec || 5) * 1000;
     this.multiMode = true;
+
+    console.log('[WeatherWidget] cities count:', this.cities.length, 'interval:', this.rotationInterval);
 
     // 既存のタイマーをクリア
     this._stopRotation();
 
     if (this.cities.length === 0) {
+      console.warn('[WeatherWidget] No cities to display');
       return;
     }
 
     // 最初の都市を表示
     this.currentIndex = 0;
     this._displayCity(this.cities[0]);
+    console.log('[WeatherWidget] Displayed first city:', this.cities[0]?.cityName);
 
     // ローテーション開始（2都市以上の場合）
     if (this.cities.length > 1) {
+      console.log('[WeatherWidget] Starting rotation timer');
       this.rotationTimer = setInterval(() => {
         this._rotateNext();
       }, this.rotationInterval);
@@ -125,6 +132,7 @@ class WeatherWidget extends BaseComponent {
   _rotateNext() {
     this.currentIndex = (this.currentIndex + 1) % this.cities.length;
     const city = this.cities[this.currentIndex];
+    console.log('[WeatherWidget] Rotating to city:', this.currentIndex, city?.cityName);
     this._displayCityWithFade(city);
   }
 

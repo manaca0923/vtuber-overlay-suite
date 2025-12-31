@@ -709,9 +709,13 @@
           case 'weather:multi-update':
             // マルチシティモード: 複数都市の天気をローテーション表示
             {
-              const weatherWidget = ComponentRegistry.getInstance('left.topBelow');
+              // currentWeatherPositionを使用（設定で位置が変更されている可能性があるため）
+              const weatherPosition = currentWeatherPosition || 'left.topBelow';
+              const weatherWidget = ComponentRegistry.getInstance(weatherPosition);
               if (weatherWidget && typeof weatherWidget.updateMulti === 'function') {
                 weatherWidget.updateMulti(data.payload);
+              } else {
+                console.warn('[weather:multi-update] WeatherWidget not found at position:', weatherPosition);
               }
             }
             break;

@@ -446,6 +446,38 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応案: 表示テキストにコメントを追加するか、UIで自動更新までの時間も表示する
   - 優先度: 低（動作に問題なし、UX改善のみ）
 
+- [ ] **マルチシティ都市数の上限チェック** (PR#108レビューで提案)
+  - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
+  - 現状: カスタム都市追加で無制限に増える可能性
+  - 改善案: `MAX_CITIES = 20` 等の上限を設けてエラー表示
+  - 優先度: 低（実用上10-20都市で十分）
+
+- [ ] **ローテーション間隔の最小値検証** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/weather.rs`
+  - 現状: `rotation_interval_sec`が0の場合の挙動が未定義
+  - 改善案: `let interval = rotation_interval_sec.max(1);` で最低1秒に
+  - 優先度: 低（UIで最小3秒を設定しているため発生しにくい）
+
+- [ ] **updateMultiの型安全性強化** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/components/weather-widget.js`
+  - 現状: `data.cities`が配列かどうかの検証がない
+  - 改善案: `if (!Array.isArray(data.cities)) return;` を追加
+  - 優先度: 低（WebSocket経由で正しいデータが送られるため）
+
+- [ ] **マルチシティ機能のユニットテスト追加** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - テストケース:
+    - `get_weather_multi` - 正常系（複数都市取得）
+    - `get_weather_multi` - 一部都市が失敗した場合
+    - `broadcast_weather_multi` - 空の都市リストでエラーが返ること
+  - 優先度: 中（モック化が必要）
+
+- [ ] **WeatherWidget定数化** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/components/weather-widget.js`
+  - 対象: `5000`（デフォルト5秒）、`300`（フェードイン完了後）
+  - 改善案: クラス定数として定義
+  - 優先度: 低（将来的な調整の容易さのため）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

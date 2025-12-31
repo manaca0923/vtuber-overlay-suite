@@ -78,6 +78,7 @@
 | [018](018_eslint-overlay-config.md) | ESLint設定 |
 | [020](020_magic-number-constants.md) | 定数化パターン |
 | [022](022_animation-callback-patterns.md) | アニメーション |
+| [027](027_pr108-multi-city-weather-review.md) | setInterval/visibilitychange |
 
 </details>
 
@@ -104,6 +105,7 @@
 | [015](015_pr88-code-style.md) | 連続空行 |
 | [017](017_dead-code-warnings.md) | dead_code警告 |
 | [026](026_pr107-from-trait-duplication.md) | Fromトレイトで重複削減 |
+| [027](027_pr108-multi-city-weather-review.md) | マルチシティ天気、setInterval/visibility |
 
 </details>
 

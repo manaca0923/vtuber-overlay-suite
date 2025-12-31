@@ -141,20 +141,27 @@ class WeatherWidget extends BaseComponent {
    * @param {Object} cityData
    */
   _displayCityWithFade(cityData) {
+    // BaseComponentでは this.element を使用
+    if (!this.element) {
+      console.warn('[WeatherWidget] element is not initialized');
+      this._displayCity(cityData);
+      return;
+    }
+
     // フェードアウト
-    this.container.classList.add('weather-fade-out');
+    this.element.classList.add('weather-fade-out');
 
     setTimeout(() => {
       // データ更新
       this._displayCity(cityData);
 
       // フェードイン
-      this.container.classList.remove('weather-fade-out');
-      this.container.classList.add('weather-fade-in');
+      this.element.classList.remove('weather-fade-out');
+      this.element.classList.add('weather-fade-in');
 
       // フェードインクラスを削除
       setTimeout(() => {
-        this.container.classList.remove('weather-fade-in');
+        this.element.classList.remove('weather-fade-in');
       }, 300);
     }, 200);
   }

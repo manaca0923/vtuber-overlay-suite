@@ -82,7 +82,7 @@ class KPIBlock extends BaseComponent {
     });
 
     this.mainEl = this.createElement('div', {
-      className: 'kpi-value kpi-main dt-text-shadow',
+      className: 'kpi-value dt-text-shadow',
       textContent: '--',
     });
 
@@ -102,7 +102,7 @@ class KPIBlock extends BaseComponent {
       });
 
       this.subEl = this.createElement('div', {
-        className: 'kpi-value kpi-sub dt-text-shadow',
+        className: 'kpi-value dt-text-shadow',
         textContent: '--',
       });
 

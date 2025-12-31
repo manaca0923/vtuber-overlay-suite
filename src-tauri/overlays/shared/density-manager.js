@@ -6,7 +6,7 @@
  *
  * 使用例:
  *   const densityManager = new DensityManager();
- *   densityManager.recordUpdate('right.lowerLeft');
+ *   densityManager.recordUpdate('right.kpi');
  *   // 高負荷検出時に自動で ComponentRegistry.dispatch('density:high', {...}) が呼ばれる
  *   // 終了時には densityManager.destroy() を呼び出してタイマーをクリア
  */
@@ -30,8 +30,8 @@
      */
     constructor(options = {}) {
       this.monitoredSlots = options.slots || [
-        'right.lowerLeft', // KPIBlock
-        'right.lowerRight', // QueueList
+        'right.kpi', // KPIBlock
+        'right.tanzaku', // QueueList
         'right.bottom', // PromoPanel
       ];
 

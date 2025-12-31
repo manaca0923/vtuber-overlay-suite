@@ -38,18 +38,10 @@
   grid-template-rows: 1fr;
 }
 
-/* ===== 右カラム（4スロット + サブグリッド） ===== */
+/* ===== 右カラム（5スロット：縦並び） ===== */
 .col-right {
-  /* right.top / right.upper(1fr) / right-lower-grid(auto) / right.bottom */
-  grid-template-rows: auto 1fr auto auto;
-}
-
-/* ===== 右下サブグリッド ===== */
-.right-lower-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 16px;
-  align-items: end;
+  /* right.top / right.upper(1fr) / right.kpi / right.tanzaku / right.bottom */
+  grid-template-rows: auto 1fr auto auto auto;
 }
 
 /* ===== パネルスタイル ===== */

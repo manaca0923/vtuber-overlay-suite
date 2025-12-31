@@ -13,8 +13,8 @@ export const SLOT_IDS = [
   'center.full',
   'right.top',
   'right.upper',
-  'right.lowerLeft',
-  'right.lowerRight',
+  'right.kpi',
+  'right.tanzaku',
   'right.bottom',
 ] as const;
 
@@ -90,15 +90,15 @@ export const SLOT_INFO: Record<SlotId, SlotInfo> = {
     defaultHeight: '1fr',
     clampBox: true,
   },
-  'right.lowerLeft': {
-    id: 'right.lowerLeft',
+  'right.kpi': {
+    id: 'right.kpi',
     column: 'right',
     role: 'KPI',
     defaultHeight: 'auto',
     clampBox: false,
   },
-  'right.lowerRight': {
-    id: 'right.lowerRight',
+  'right.tanzaku': {
+    id: 'right.tanzaku',
     column: 'right',
     role: '短冊',
     defaultHeight: 'auto',

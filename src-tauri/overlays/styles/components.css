@@ -119,32 +119,26 @@
 /* 横長レイアウト: 数字を横に並べ、その下にラベル */
 .kpi-block--horizontal {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-start;
-  gap: var(--dt-spacing-lg, 24px);
+  gap: var(--dt-spacing-md, 12px);
 }
 
 .kpi-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 80px;
+  min-width: 60px;
 }
 
 .kpi-value {
+  font-size: 32px;
   font-weight: var(--dt-weight-heavy, 700);
   line-height: var(--dt-line-height-tight, 1.1);
   /* ウィジェット個別カラー適用（未設定時は--primary-colorにフォールバック） */
   color: var(--widget-kpi-color, var(--primary-color, #ffffff));
-}
-
-.kpi-main {
-  font-size: var(--dt-font-kpi-main, 48px);
-}
-
-.kpi-sub {
-  font-size: var(--dt-font-kpi-sub, 36px);
-  opacity: 0.95;
 }
 
 .kpi-label {

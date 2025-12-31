@@ -100,8 +100,8 @@ describe('DensityManager', () => {
     it('デフォルトのslots設定', () => {
       const manager = new DensityManager();
       expect(manager.monitoredSlots).toEqual([
-        'right.lowerLeft',
-        'right.lowerRight',
+        'right.kpi',
+        'right.tanzaku',
         'right.bottom',
       ]);
       manager.destroy();
@@ -141,9 +141,9 @@ describe('DensityManager', () => {
   describe('recordUpdate()', () => {
     it('監視対象slotの更新を記録する', () => {
       const manager = new DensityManager({ threshold: 10 });
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(1);
+      expect(debugInfo.slots['right.kpi']!.count).toBe(1);
       manager.destroy();
     });
 
@@ -157,11 +157,11 @@ describe('DensityManager', () => {
 
     it('複数回の更新が記録される', () => {
       const manager = new DensityManager({ threshold: 10 });
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.kpi');
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(3);
+      expect(debugInfo.slots['right.kpi']!.count).toBe(3);
       manager.destroy();
     });
   });
@@ -170,7 +170,7 @@ describe('DensityManager', () => {
     it('閾値未満では高密度にならない', () => {
       const manager = new DensityManager({ threshold: 5 });
       for (let i = 0; i < 4; i++) {
-        manager.recordUpdate('right.lowerLeft');
+        manager.recordUpdate('right.kpi');
       }
       expect(manager.isHighDensity()).toBe(false);
       manager.destroy();
@@ -179,7 +179,7 @@ describe('DensityManager', () => {
     it('閾値以上で高密度状態になる', () => {
       const manager = new DensityManager({ threshold: 5 });
       for (let i = 0; i < 5; i++) {
-        manager.recordUpdate('right.lowerLeft');
+        manager.recordUpdate('right.kpi');
       }
       expect(manager.isHighDensity()).toBe(true);
       expect(mockDispatch).toHaveBeenCalledWith('density:high', expect.any(Object));
@@ -188,10 +188,10 @@ describe('DensityManager', () => {
 
     it('複数slotの更新が合算される', () => {
       const manager = new DensityManager({ threshold: 5 });
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerRight');
-      manager.recordUpdate('right.lowerRight');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.tanzaku');
+      manager.recordUpdate('right.tanzaku');
       manager.recordUpdate('right.bottom');
       expect(manager.isHighDensity()).toBe(true);
       manager.destroy();
@@ -223,20 +223,20 @@ describe('DensityManager', () => {
   describe('clearHistory()', () => {
     it('履歴をクリアする', () => {
       const manager = new DensityManager({ threshold: 10 });
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerRight');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.tanzaku');
 
       manager.clearHistory();
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(0);
-      expect(debugInfo.slots['right.lowerRight']!.count).toBe(0);
+      expect(debugInfo.slots['right.kpi']!.count).toBe(0);
+      expect(debugInfo.slots['right.tanzaku']!.count).toBe(0);
       manager.destroy();
     });
 
     it('高密度状態をfalseにリセットする', () => {
       const manager = new DensityManager({ threshold: 2 });
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.kpi');
       expect(manager.isHighDensity()).toBe(true);
 
       manager.clearHistory();
@@ -254,11 +254,11 @@ describe('DensityManager', () => {
 
     it('履歴をクリアする', () => {
       const manager = new DensityManager({ threshold: 10 });
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
       manager.destroy();
 
       const debugInfo = manager.getDebugInfo();
-      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(0);
+      expect(debugInfo.slots['right.kpi']!.count).toBe(0);
     });
   });
 
@@ -336,13 +336,13 @@ describe('DensityManager', () => {
   describe('getDebugInfo()', () => {
     it('デバッグ情報を返す', () => {
       const manager = new DensityManager({ threshold: 10 });
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
 
       const info = manager.getDebugInfo();
       expect(info.isDense).toBe(false);
       expect(info.threshold).toBe(10);
       expect(info.windowMs).toBe(2000);
-      expect(info.slots['right.lowerLeft']!.count).toBe(1);
+      expect(info.slots['right.kpi']!.count).toBe(1);
       manager.destroy();
     });
   });
@@ -356,14 +356,14 @@ describe('DensityManager', () => {
 
       // 履歴に古いタイムスタンプを直接設定
       const oldTimestamp = Date.now() - 2000; // 2秒前（windowMs超過）
-      manager.updateHistory.set('right.lowerLeft', [oldTimestamp]);
+      manager.updateHistory.set('right.kpi', [oldTimestamp]);
 
       // 新しいrecordUpdateで古いエントリがフィルタリングされる
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
       const debugInfo = manager.getDebugInfo();
 
       // 古いエントリは削除され、新しいエントリのみ残る
-      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(1);
+      expect(debugInfo.slots['right.kpi']!.count).toBe(1);
       manager.destroy();
     });
 
@@ -375,14 +375,14 @@ describe('DensityManager', () => {
 
       // 履歴に新しいタイムスタンプを直接設定
       const recentTimestamp = Date.now() - 500; // 0.5秒前（windowMs内）
-      manager.updateHistory.set('right.lowerLeft', [recentTimestamp]);
+      manager.updateHistory.set('right.kpi', [recentTimestamp]);
 
       // 新しいrecordUpdateで新しいエントリは保持される
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
       const debugInfo = manager.getDebugInfo();
 
       // 新しいエントリ + recordUpdateのエントリ = 2つ
-      expect(debugInfo.slots['right.lowerLeft']!.count).toBe(2);
+      expect(debugInfo.slots['right.kpi']!.count).toBe(2);
       manager.destroy();
     });
 
@@ -392,9 +392,9 @@ describe('DensityManager', () => {
       });
 
       // 高密度状態にする
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerLeft');
-      manager.recordUpdate('right.lowerLeft');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.kpi');
+      manager.recordUpdate('right.kpi');
       expect(manager.isHighDensity()).toBe(true);
 
       // 履歴をクリア

@@ -21,8 +21,8 @@ const WIDGET_OPTIONS: WidgetOption[] = [
   { key: 'superchat', label: 'スパチャ', slot: 'left.lower', column: 'left' },
   { key: 'logo', label: 'ロゴ', slot: 'left.bottom', column: 'left' },
   { key: 'setlist', label: 'セトリ', slot: 'right.upper', column: 'right' },
-  { key: 'kpi', label: '視聴者数', slot: 'right.lowerLeft', column: 'right' },
-  { key: 'tanzaku', label: '短冊', slot: 'right.lowerRight', column: 'right' },
+  { key: 'kpi', label: '視聴者数', slot: 'right.kpi', column: 'right' },
+  { key: 'tanzaku', label: '短冊', slot: 'right.tanzaku', column: 'right' },
   { key: 'announcement', label: '告知', slot: 'right.bottom', column: 'right' },
 ];
 

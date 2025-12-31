@@ -304,6 +304,7 @@ class PostMessageHandler {
     this.onSettingsUpdate = options.onSettingsUpdate || (() => {});
     this.onSuperchatAdd = options.onSuperchatAdd || (() => {});
     this.onSuperchatRemove = options.onSuperchatRemove || (() => {});
+    this.onKpiUpdate = options.onKpiUpdate || (() => {});
     this._handleMessage = this._handleMessage.bind(this);
     this.isActive = true;
     window.addEventListener('message', this._handleMessage);
@@ -348,6 +349,14 @@ class PostMessageHandler {
         return;
       }
       this.onSuperchatRemove(data.payload.id);
+    } else if (data.type === 'preview:kpi:update') {
+      // KPI更新（プレビュー用）
+      console.log('[PostMessage] Received preview:kpi:update:', data.payload);
+      if (!data.payload || typeof data.payload !== 'object' || Array.isArray(data.payload)) {
+        console.warn('[PostMessage] Invalid kpi payload');
+        return;
+      }
+      this.onKpiUpdate(data.payload);
     }
   }
 

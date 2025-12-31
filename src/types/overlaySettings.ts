@@ -1,9 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 
-// テーマプリセット定義
+// テーマプリセット定義（4種類: 白、パープル、Sakura、Ocean）
 export const THEME_PRESETS = {
-  default: {
-    name: 'デフォルト',
+  white: {
+    name: 'ホワイト',
+    primaryColor: '#ffffff',
+    description: 'シンプルな白ベース',
+  },
+  purple: {
+    name: 'パープル',
     primaryColor: '#6366f1',
     description: 'パープル系の落ち着いたデザイン',
   },
@@ -20,6 +25,90 @@ export const THEME_PRESETS = {
 } as const;
 
 export type ThemeName = keyof typeof THEME_PRESETS | 'custom';
+
+// ウィジェットID定数（issues/020: マジックナンバー定数化）
+export const WIDGET_IDS = [
+  'clock',
+  'weather',
+  'comment',
+  'superchat',
+  'logo',
+  'setlist',
+  'kpi',
+  'tanzaku',
+  'announcement',
+] as const;
+export type WidgetId = (typeof WIDGET_IDS)[number];
+
+// カスタムカラー型（3件保存用）
+export interface CustomColorEntry {
+  id: string; // UUID
+  name: string; // ユーザー設定の名前
+  color: string; // HEXカラーコード
+}
+
+// ウィジェット個別カラー設定
+export type WidgetColorOverrides = Partial<Record<WidgetId, string>>;
+
+// フォントプリセット定数（issues/020: マジックナンバー定数化）
+export type FontPresetName =
+  | 'noto-sans-jp'
+  | 'm-plus-1'
+  | 'yu-gothic'
+  | 'meiryo'
+  | 'system';
+
+export const FONT_PRESETS: Record<
+  FontPresetName,
+  {
+    name: string;
+    fontFamily: string;
+    googleFont?: string;
+  }
+> = {
+  'noto-sans-jp': {
+    name: 'Noto Sans JP',
+    fontFamily: "'Noto Sans JP', sans-serif",
+    googleFont: 'Noto+Sans+JP:wght@400;500;700',
+  },
+  'm-plus-1': {
+    name: 'M PLUS 1',
+    fontFamily: "'M PLUS 1', sans-serif",
+    googleFont: 'M+PLUS+1:wght@400;500;700',
+  },
+  'yu-gothic': {
+    name: '游ゴシック',
+    fontFamily: "'Yu Gothic', 'YuGothic', sans-serif",
+  },
+  meiryo: {
+    name: 'メイリオ',
+    fontFamily: "'Meiryo', sans-serif",
+  },
+  system: {
+    name: 'システムフォント',
+    fontFamily: '', // customFontFamilyを使用
+  },
+};
+
+// テーマ設定統合型
+export interface ThemeSettings {
+  globalTheme: ThemeName;
+  globalPrimaryColor: string;
+  customColors: CustomColorEntry[]; // max 3
+  widgetColorOverrides: WidgetColorOverrides;
+  fontPreset: FontPresetName;
+  customFontFamily: string | null; // system選択時
+}
+
+// デフォルトテーマ設定
+export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
+  globalTheme: 'white',
+  globalPrimaryColor: '#ffffff',
+  customColors: [],
+  widgetColorOverrides: {},
+  fontPreset: 'yu-gothic',
+  customFontFamily: null,
+};
 
 // コメント位置
 export type CommentPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -134,14 +223,15 @@ export interface OverlaySettings {
   performance?: PerformanceSettings; // オプショナル（後方互換性のため）
   widget?: WidgetVisibilitySettings; // オプショナル（後方互換性のため）
   superchat?: SuperchatSettings; // オプショナル（後方互換性のため）
+  themeSettings?: ThemeSettings; // オプショナル（後方互換性のため）
 }
 
 // デフォルト設定
 export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
-  theme: 'default',
+  theme: 'white', // デフォルトテーマを白に変更
   layout: 'three-column',
   common: {
-    primaryColor: '#6366f1',
+    primaryColor: '#ffffff', // 白テーマに合わせて変更
     fontFamily: "'Yu Gothic', 'Meiryo', sans-serif",
     borderRadius: 8,
   },
@@ -180,6 +270,7 @@ export const DEFAULT_OVERLAY_SETTINGS: OverlaySettings = {
     displayDurationSec: 60, // 60秒表示
     queueEnabled: true, // キュー表示ON
   },
+  themeSettings: DEFAULT_THEME_SETTINGS, // テーマ設定を追加
 };
 
 // Tauri Commands

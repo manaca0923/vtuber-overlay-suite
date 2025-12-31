@@ -112,6 +112,9 @@ pub struct SettingsUpdatePayload {
     // スパチャウィジェット設定
     #[serde(skip_serializing_if = "Option::is_none")]
     pub superchat: Option<SuperchatSettings>,
+    // テーマ設定（カラー・フォント統合）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_settings: Option<ThemeSettings>,
 }
 
 /// 天気ウィジェット設定（共通型）
@@ -155,6 +158,65 @@ pub struct SuperchatSettings {
     pub display_duration_sec: u32,
     /// キュー表示ON/OFF（待機中のスパチャを順次表示）
     pub queue_enabled: bool,
+}
+
+/// カスタムカラーエントリ（最大3件保存）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomColorEntry {
+    /// ユニークID (UUID)
+    pub id: String,
+    /// ユーザー設定の名前
+    pub name: String,
+    /// HEXカラーコード (#RRGGBB)
+    pub color: String,
+}
+
+/// ウィジェット個別カラーオーバーライド
+/// 各ウィジェットのカラーを個別に設定可能
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetColorOverrides {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weather: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superchat: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setlist: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kpi: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tanzaku: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub announcement: Option<String>,
+}
+
+/// テーマ設定（カラー・フォント統合）
+/// - グローバルテーマ（white/purple/sakura/ocean/custom）
+/// - ウィジェット個別カラー
+/// - フォントプリセット・システムフォント
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSettings {
+    /// グローバルテーマ名 (white, purple, sakura, ocean, custom)
+    pub global_theme: String,
+    /// グローバルプライマリカラー (#RRGGBB)
+    pub global_primary_color: String,
+    /// カスタムカラー（最大3件）
+    pub custom_colors: Vec<CustomColorEntry>,
+    /// ウィジェット個別カラーオーバーライド
+    pub widget_color_overrides: WidgetColorOverrides,
+    /// フォントプリセット (noto-sans-jp, m-plus-1, yu-gothic, meiryo, system)
+    pub font_preset: String,
+    /// システムフォント選択時のフォントファミリー
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_font_family: Option<String>,
 }
 
 /// 天気ウィジェットの表示位置

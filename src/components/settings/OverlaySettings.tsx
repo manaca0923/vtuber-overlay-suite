@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ThemeSelector } from './ThemeSelector';
+import { FontSelector } from './FontSelector';
 import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
 import { SuperchatSettingsPanel } from './SuperchatSettingsPanel';
@@ -11,12 +12,14 @@ import { WidgetSettingsPanel } from './WidgetSettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
   DEFAULT_OVERLAY_SETTINGS,
+  DEFAULT_THEME_SETTINGS,
+  THEME_PRESETS,
   loadOverlaySettings,
   saveOverlaySettings,
   broadcastSettingsUpdate,
   LAYOUT_PRESETS,
   type OverlaySettings as Settings,
-  type ThemeName,
+  type ThemeSettings,
   type LayoutPreset,
   type WidgetVisibilitySettings,
 } from '../../types/overlaySettings';
@@ -73,12 +76,31 @@ export function OverlaySettings() {
                 announcement: true,
               };
 
+          // themeSettingsのマイグレーション（issues/016: 後方互換性）
+          // themeSettingsがない場合は既存のtheme/primaryColorから生成
+          const migratedThemeSettings: ThemeSettings = saved.themeSettings
+            ? { ...DEFAULT_THEME_SETTINGS, ...saved.themeSettings }
+            : {
+                // 旧themeをglobalThemeにマッピング
+                // 'default'は旧プリセット（現在は'purple'に相当）
+                globalTheme: saved.theme && saved.theme in THEME_PRESETS
+                  ? (saved.theme as keyof typeof THEME_PRESETS)
+                  : (saved.theme as string) === 'default' ? 'purple' : 'white',
+                globalPrimaryColor: saved.common?.primaryColor || DEFAULT_THEME_SETTINGS.globalPrimaryColor,
+                customColors: [],
+                widgetColorOverrides: {},
+                fontPreset: 'yu-gothic',
+                customFontFamily: null,
+              };
+
           const merged: Settings = {
-            theme: saved.theme ?? DEFAULT_OVERLAY_SETTINGS.theme,
+            theme: migratedThemeSettings.globalTheme,
             layout: migratedLayout,
             common: {
               ...DEFAULT_OVERLAY_SETTINGS.common,
               ...saved.common,
+              // themeSettingsからprimaryColorを同期
+              primaryColor: migratedThemeSettings.globalPrimaryColor,
             },
             comment: {
               ...DEFAULT_OVERLAY_SETTINGS.comment,
@@ -102,6 +124,8 @@ export function OverlaySettings() {
             superchat: saved.superchat
               ? { ...DEFAULT_OVERLAY_SETTINGS.superchat, ...saved.superchat }
               : DEFAULT_OVERLAY_SETTINGS.superchat,
+            // テーマ設定
+            themeSettings: migratedThemeSettings,
           };
           setSettings(merged);
           setOriginalSettings(merged); // 元設定を保存（リセット機能用）
@@ -137,11 +161,13 @@ export function OverlaySettings() {
     }
   };
 
-  const handleThemeChange = (theme: ThemeName, primaryColor: string) => {
+  // テーマ設定変更ハンドラ（ThemeSettings統合版）
+  const handleThemeSettingsChange = (themeSettings: ThemeSettings) => {
     setSettings((prev) => ({
       ...prev,
-      theme,
-      common: { ...prev.common, primaryColor },
+      theme: themeSettings.globalTheme,
+      common: { ...prev.common, primaryColor: themeSettings.globalPrimaryColor },
+      themeSettings,
     }));
   };
 
@@ -194,12 +220,19 @@ export function OverlaySettings() {
             />
           </div>
 
-          {/* テーマ選択 */}
+          {/* テーマ設定 */}
           <div className="bg-white rounded-lg shadow p-6">
             <ThemeSelector
-              theme={settings.theme}
-              primaryColor={settings.common.primaryColor}
-              onChange={handleThemeChange}
+              themeSettings={settings.themeSettings ?? DEFAULT_THEME_SETTINGS}
+              onChange={handleThemeSettingsChange}
+            />
+          </div>
+
+          {/* フォント設定 */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <FontSelector
+              themeSettings={settings.themeSettings ?? DEFAULT_THEME_SETTINGS}
+              onChange={handleThemeSettingsChange}
             />
           </div>
 

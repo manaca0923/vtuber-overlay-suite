@@ -106,6 +106,28 @@ ws.onopen = () => {
       kpi: boolean,            // KPI（right.lowerLeft）
       tanzaku: boolean,        // 短冊（right.lowerRight）
       announcement: boolean    // 告知（right.bottom）
+    },
+    themeSettings?: {          // テーマ設定（issues/016対応）
+      globalTheme: 'white' | 'purple' | 'sakura' | 'ocean' | 'custom',
+      globalPrimaryColor: string,      // #RRGGBB形式
+      customColors: Array<{            // 保存済みカスタムカラー（最大3件）
+        id: string,
+        name: string,
+        color: string
+      }>,
+      widgetColorOverrides: {          // ウィジェット個別カラー（省略時はglobalを使用）
+        clock?: string,
+        weather?: string,
+        comment?: string,
+        superchat?: string,
+        logo?: string,
+        setlist?: string,
+        kpi?: string,
+        tanzaku?: string,
+        announcement?: string
+      },
+      fontPreset: 'noto-sans-jp' | 'm-plus-1' | 'yu-gothic' | 'meiryo' | 'system',
+      customFontFamily: string | null  // fontPreset='system'時のフォント名
     }
   }
 }
@@ -263,10 +285,24 @@ class WebSocketManager {
 ```css
 :root {
   /* カラー */
-  --primary-color: #6366f1;
+  --primary-color: #ffffff;        /* デフォルトは白（issues/016対応） */
   --background-color: transparent;
   --text-color: #ffffff;
   --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+
+  /* ウィジェット個別カラー（issues/016対応） */
+  --widget-clock-color: var(--primary-color, #ffffff);
+  --widget-weather-color: var(--primary-color, #ffffff);
+  --widget-comment-color: var(--primary-color, #ffffff);
+  --widget-superchat-color: var(--primary-color, #ffffff);
+  --widget-logo-color: var(--primary-color, #ffffff);
+  --widget-setlist-color: var(--primary-color, #ffffff);
+  --widget-kpi-color: var(--primary-color, #ffffff);
+  --widget-tanzaku-color: var(--primary-color, #ffffff);
+  --widget-announcement-color: var(--primary-color, #ffffff);
+
+  /* フォント */
+  --font-family: 'Yu Gothic', 'YuGothic', sans-serif;
 
   /* サイズ */
   --avatar-size: 48px;

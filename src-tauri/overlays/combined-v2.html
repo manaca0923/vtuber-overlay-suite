@@ -167,6 +167,209 @@
       setlist: true, kpi: true, tanzaku: true, announcement: true
     };
 
+    // ウィジェットID定数（issues/020: マジックナンバー定数化）
+    const WIDGET_IDS = ['clock', 'weather', 'comment', 'superchat', 'logo', 'setlist', 'kpi', 'tanzaku', 'announcement'];
+
+    // Google Fonts読み込み済みフラグ（重複読み込み防止）
+    const loadedGoogleFonts = new Set();
+
+    // フォントプリセット定義（issues/020: マジックナンバー定数化）
+    const FONT_GOOGLE_MAP = {
+      'noto-sans-jp': 'Noto+Sans+JP:wght@400;500;700',
+      'm-plus-1': 'M+PLUS+1:wght@400;500;700',
+    };
+    const FONT_FAMILY_MAP = {
+      'noto-sans-jp': "'Noto Sans JP', sans-serif",
+      'm-plus-1': "'M PLUS 1', sans-serif",
+      'yu-gothic': "'Yu Gothic', 'YuGothic', sans-serif",
+      'meiryo': "'Meiryo', sans-serif",
+      'system': null, // customFontFamilyを使用
+    };
+
+    // issues/001: URLバリデーション（Google Fonts専用）
+    function validateGoogleFontsUrl(url) {
+      if (!url || typeof url !== 'string') return false;
+      try {
+        const parsed = new URL(url);
+        return parsed.hostname === 'fonts.googleapis.com';
+      } catch {
+        return false;
+      }
+    }
+
+    // Google Fonts動的読み込み
+    function loadGoogleFont(fontSpec) {
+      if (!fontSpec || loadedGoogleFonts.has(fontSpec)) return;
+
+      const url = `https://fonts.googleapis.com/css2?family=${fontSpec}&display=swap`;
+      if (!validateGoogleFontsUrl(url)) return;
+
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      document.head.appendChild(link);
+      loadedGoogleFonts.add(fontSpec);
+      if (DEBUG) console.log(`[Font] Loaded Google Font: ${fontSpec}`);
+    }
+
+    // issues/013: 防御的プログラミング - テーマ設定適用
+    function applyThemeSettings(themeSettings) {
+      if (!themeSettings || typeof themeSettings !== 'object' || Array.isArray(themeSettings)) {
+        if (DEBUG) console.warn('[Theme] Invalid themeSettings, skipping');
+        return;
+      }
+
+      const root = document.documentElement;
+
+      // グローバルカラー
+      if (themeSettings.globalPrimaryColor && isValidHexColor(themeSettings.globalPrimaryColor)) {
+        root.style.setProperty('--primary-color', themeSettings.globalPrimaryColor);
+      }
+
+      // ウィジェット個別カラー
+      const overrides = themeSettings.widgetColorOverrides || {};
+      WIDGET_IDS.forEach(id => {
+        const color = overrides[id] || themeSettings.globalPrimaryColor;
+        if (color && isValidHexColor(color)) {
+          root.style.setProperty(`--widget-${id}-color`, color);
+        }
+      });
+
+      // CSS変数が反映されない場合のフォールバック: 直接スタイルを適用
+      // (ブラウザキャッシュの古いCSSファイル対策)
+      applyDirectWidgetColors(themeSettings);
+
+      // フォント設定
+      applyFontSettings(themeSettings);
+    }
+
+    // ウィジェットに直接カラーを適用（CSS変数フォールバック）
+    // ブラウザキャッシュの古いCSSファイル対策
+    function applyDirectWidgetColors(themeSettings) {
+      if (!themeSettings || typeof themeSettings !== 'object') return;
+
+      const overrides = themeSettings.widgetColorOverrides || {};
+      const globalColor = themeSettings.globalPrimaryColor;
+
+      // ウィジェットIDとCSSセレクタのマッピング（テキストカラー用）
+      const WIDGET_SELECTORS = {
+        clock: ['.clock-time', '.clock-date'],
+        weather: ['.weather-widget'],
+        comment: ['#comment-container'], // コンテナに設定し、子要素は継承
+        superchat: [], // スパチャはTierカラーを使用
+        logo: ['.brand-block', '.brand-text'],
+        setlist: ['.song-title', '.song-artist', '.song-number'],
+        kpi: ['.kpi-main', '.kpi-sub'],
+        tanzaku: ['.queue-list', '.queue-item'],
+        announcement: ['.promo-panel', '.promo-content'],
+      };
+
+      // 背景色を適用する要素のマッピング
+      const WIDGET_BG_SELECTORS = {
+        setlist: ['.song-status'],
+      };
+
+      WIDGET_IDS.forEach(id => {
+        const color = overrides[id] || globalColor;
+        if (!color || !isValidHexColor(color)) return;
+
+        // テキストカラーを適用
+        const selectors = WIDGET_SELECTORS[id] || [];
+        selectors.forEach(selector => {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            el.style.color = color;
+          });
+        });
+
+        // 背景色を適用
+        const bgSelectors = WIDGET_BG_SELECTORS[id] || [];
+        bgSelectors.forEach(selector => {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach(el => {
+            el.style.backgroundColor = color;
+          });
+        });
+      });
+
+      // コメントコンテナとその子要素にカラーを適用
+      const commentColor = overrides['comment'] || globalColor;
+      if (commentColor && isValidHexColor(commentColor)) {
+        // グローバル変数を更新（MutationObserver用）
+        currentCommentColor = commentColor;
+
+        const commentContainer = document.getElementById('comment-container');
+        if (commentContainer) {
+          // コンテナにカラーを設定（継承用）
+          commentContainer.style.color = commentColor;
+          commentContainer.style.setProperty('--widget-comment-color', commentColor);
+
+          // 既存のコメント要素にも直接適用（キャッシュ対策）
+          commentContainer.querySelectorAll('.name, .message').forEach(el => {
+            el.style.color = commentColor;
+          });
+        }
+
+        // MutationObserverをセットアップ（初回のみ）
+        setupCommentColorObserver();
+      }
+    }
+
+    // コメント用MutationObserver（新規コメントにテーマカラーを適用）
+    let commentColorObserver = null;
+    let currentCommentColor = null;
+
+    function setupCommentColorObserver() {
+      const commentContainer = document.getElementById('comment-container');
+      if (!commentContainer || commentColorObserver) return;
+
+      commentColorObserver = new MutationObserver((mutations) => {
+        if (!currentCommentColor) return;
+
+        mutations.forEach(mutation => {
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // 追加された要素内の.nameと.messageにカラーを適用
+              if (node.classList?.contains('name') || node.classList?.contains('message')) {
+                node.style.color = currentCommentColor;
+              }
+              node.querySelectorAll?.('.name, .message').forEach(el => {
+                el.style.color = currentCommentColor;
+              });
+            }
+          });
+        });
+      });
+
+      commentColorObserver.observe(commentContainer, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    // フォント設定適用
+    function applyFontSettings(themeSettings) {
+      if (!themeSettings || typeof themeSettings !== 'object') return;
+
+      const root = document.documentElement;
+      const fontPreset = themeSettings.fontPreset || 'yu-gothic';
+
+      // Google Fonts読み込み
+      if (FONT_GOOGLE_MAP[fontPreset]) {
+        loadGoogleFont(FONT_GOOGLE_MAP[fontPreset]);
+      }
+
+      // フォントファミリー適用
+      let fontFamily = FONT_FAMILY_MAP[fontPreset];
+      if (fontPreset === 'system' && themeSettings.customFontFamily) {
+        fontFamily = sanitizeFontFamily(themeSettings.customFontFamily);
+      }
+
+      if (fontFamily) {
+        root.style.setProperty('--font-family', fontFamily);
+      }
+    }
+
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
     // letを使用: bfcache復元時に再初期化するため
     let updateBatcher = new UpdateBatcher({ batchInterval: 150 });
@@ -309,6 +512,11 @@
       // スパチャ設定
       if (settings.superchat) {
         applySuperchatSettings(settings.superchat);
+      }
+
+      // テーマ設定（カラー・フォント統合）
+      if (settings.themeSettings) {
+        applyThemeSettings(settings.themeSettings);
       }
     }
 
@@ -613,6 +821,12 @@
 
       // PostMessageハンドラのクリーンアップ
       postMessageHandler.cleanup();
+
+      // MutationObserverのクリーンアップ
+      if (commentColorObserver) {
+        commentColorObserver.disconnect();
+        commentColorObserver = null;
+      }
 
       if (densityManager) {
         densityManager.destroy();

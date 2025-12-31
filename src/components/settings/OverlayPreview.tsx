@@ -77,19 +77,14 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
   const layoutVersion = LAYOUT_PRESETS[settings.layout]?.version || 'v1';
   const isV2Layout = layoutVersion === 'v2';
 
+  // previewUrl: iframeの再作成を最小限にするため、URLパラメータは最小限に
+  // 他の設定（カラー、フォントサイズ等）はpostMessageで即時反映
   const previewUrl = useMemo(() => {
     if (mode === 'combined') {
-      // 統合オーバーレイ
+      // 統合オーバーレイ: layoutのみURLで指定、他はpostMessageで反映
       const params = new URLSearchParams({
         preview: 'true',
         layout: settings.layout,
-        primaryColor: settings.common.primaryColor,
-        commentFontSize: String(settings.comment.fontSize),
-        showAvatar: String(settings.comment.showAvatar),
-        commentEnabled: String(settings.comment.enabled),
-        setlistFontSize: String(settings.setlist.fontSize),
-        showArtist: String(settings.setlist.showArtist),
-        setlistEnabled: String(settings.setlist.enabled),
       });
       // v2レイアウトの場合はcombined-v2を使用
       const endpoint = isV2Layout ? '/overlay/combined-v2' : '/overlay/combined';
@@ -102,26 +97,13 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
         ? 'http://localhost:19800/overlay/comment'
         : 'http://localhost:19800/overlay/setlist';
 
+    // 個別オーバーレイも最小限のパラメータのみ
     const params = new URLSearchParams({
       preview: 'true',
-      primaryColor: settings.common.primaryColor,
-      borderRadius: String(settings.common.borderRadius),
     });
 
-    if (activePanel === 'comment') {
-      params.set('fontSize', String(settings.comment.fontSize));
-      params.set('showAvatar', String(settings.comment.showAvatar));
-      params.set('position', settings.comment.position);
-      params.set('enabled', String(settings.comment.enabled));
-    } else {
-      params.set('fontSize', String(settings.setlist.fontSize));
-      params.set('showArtist', String(settings.setlist.showArtist));
-      params.set('position', settings.setlist.position);
-      params.set('enabled', String(settings.setlist.enabled));
-    }
-
     return `${base}?${params.toString()}`;
-  }, [settings, activePanel, mode, isV2Layout]);
+  }, [settings.layout, activePanel, mode, isV2Layout]);
 
   // loadedUrlとpreviewUrlを比較してiframeがロード済みかを判定
   // これによりuseEffect内でsetStateを呼ぶ必要がなくなる（react-hooks/set-state-in-effect回避）
@@ -150,6 +132,7 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
         widget: debouncedSettings.widget,
         performance: debouncedSettings.performance,
         superchat: debouncedSettings.superchat,
+        themeSettings: debouncedSettings.themeSettings,
       }
     };
 
@@ -162,18 +145,11 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
   useEffect(() => {
     const handleSuperchatAdd = (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('[OverlayPreview] superchat event received:', {
-        iframeLoaded: iframeLoadedRef.current,
-        hasDetail: !!customEvent.detail,
-        hasContentWindow: !!iframeRef.current?.contentWindow,
-      });
       // refを使って最新のiframeLoaded状態を参照（クロージャ問題回避）
       if (!iframeLoadedRef.current || !customEvent.detail || !iframeRef.current?.contentWindow) {
-        console.warn('[OverlayPreview] superchat event ignored - conditions not met');
         return;
       }
 
-      console.log('[OverlayPreview] sending postMessage to iframe:', customEvent.detail);
       iframeRef.current.contentWindow.postMessage({
         type: 'preview:superchat:add',
         payload: customEvent.detail,
@@ -193,12 +169,10 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
       }, PREVIEW_ORIGIN);
     };
 
-    console.log('[OverlayPreview] Registering superchat event listeners');
     window.addEventListener(SUPERCHAT_PREVIEW_EVENT, handleSuperchatAdd);
     window.addEventListener(SUPERCHAT_REMOVE_PREVIEW_EVENT, handleSuperchatRemove);
 
     return () => {
-      console.log('[OverlayPreview] Removing superchat event listeners');
       window.removeEventListener(SUPERCHAT_PREVIEW_EVENT, handleSuperchatAdd);
       window.removeEventListener(SUPERCHAT_REMOVE_PREVIEW_EVENT, handleSuperchatRemove);
     };

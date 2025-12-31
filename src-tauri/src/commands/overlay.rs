@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::server::types::{
     CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, SuperchatSettings,
-    WeatherSettings, WidgetVisibilitySettings, WsMessage,
+    ThemeSettings, WeatherSettings, WidgetVisibilitySettings, WsMessage,
 };
 use crate::AppState;
 
@@ -64,6 +64,37 @@ fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
         }
     }
 
+    // テーマ設定の検証
+    if let Some(ref theme) = settings.theme_settings {
+        // カスタムカラーの上限チェック（最大3件）
+        const MAX_CUSTOM_COLORS: usize = 3;
+        if theme.custom_colors.len() > MAX_CUSTOM_COLORS {
+            return Err(format!(
+                "Too many custom colors: {}. Maximum is {}.",
+                theme.custom_colors.len(),
+                MAX_CUSTOM_COLORS
+            ));
+        }
+
+        // グローバルプライマリカラーの検証
+        if !is_valid_hex_color(&theme.global_primary_color) {
+            return Err(format!(
+                "Invalid globalPrimaryColor: {}. Expected #RRGGBB format.",
+                theme.global_primary_color
+            ));
+        }
+
+        // カスタムカラーの各色を検証
+        for (i, color_entry) in theme.custom_colors.iter().enumerate() {
+            if !is_valid_hex_color(&color_entry.color) {
+                return Err(format!(
+                    "Invalid custom color at index {}: {}. Expected #RRGGBB format.",
+                    i, color_entry.color
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -92,6 +123,9 @@ pub struct OverlaySettings {
     pub widget: Option<WidgetVisibilitySettings>,
     #[serde(default)]
     pub superchat: Option<SuperchatSettings>,
+    /// テーマ設定（カラー・フォント統合）
+    #[serde(default)]
+    pub theme_settings: Option<ThemeSettings>,
 }
 
 /// オーバーレイ設定を保存
@@ -169,6 +203,7 @@ pub async fn broadcast_settings_update(
         weather: settings.weather,
         widget: settings.widget,
         superchat: settings.superchat,
+        theme_settings: settings.theme_settings,
     };
 
     let server_state = state.server.read().await;

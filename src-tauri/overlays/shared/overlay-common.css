@@ -5,7 +5,7 @@
 
 /* ===== CSS変数（デフォルト値） ===== */
 :root {
-  --primary-color: #6366f1;
+  --primary-color: #ffffff;
   --background-color: transparent;
   --text-color: #ffffff;
   --text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
@@ -16,6 +16,10 @@
   --animation-duration: 0.3s;
   --animation-easing: ease-out;
   --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+
+  /* ===== ウィジェット個別カラー ===== */
+  /* 各ウィジェットのカラーはapplyThemeSettings()で動的に設定 */
+  /* 未設定時はCSSのフォールバック（--primary-color）が使用される */
 
   /* ===== 3カラムレイアウト用CSS変数（v2） ===== */
   --gutter: 24px;
@@ -116,12 +120,16 @@ body {
   font-size: var(--font-size-name);
   font-weight: bold;
   text-shadow: var(--text-shadow);
+  /* 親要素（#comment-container）からカラーを継承 */
+  color: inherit;
 }
 
 .message {
   font-size: var(--font-size-message);
   word-wrap: break-word;
   text-shadow: var(--text-shadow);
+  /* 親要素（#comment-container）からカラーを継承 */
+  color: inherit;
 }
 
 .amount {

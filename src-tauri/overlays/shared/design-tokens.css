@@ -11,7 +11,14 @@
   /* ===== カラー ===== */
   --dt-text-primary: #ffffff;
   --dt-text-secondary: rgba(255, 255, 255, 0.7);
-  --dt-accent: var(--primary-color, #6366f1);
+  --dt-accent: var(--primary-color, #ffffff);
+
+  /* ===== ウィジェット個別カラー（issues/020: 定数化） ===== */
+  /* 各ウィジェットのアクセントカラーはapplyThemeSettings()で動的に設定 */
+  /* 定義しない場合、components.cssのフォールバック（--primary-color）が使用される */
+
+  /* ===== フォントファミリー ===== */
+  --font-family: 'Yu Gothic', 'YuGothic', sans-serif;
 
   /* ===== タイポグラフィ（1920x1080基準） ===== */
   /* Clock（時刻） - 推奨: 64〜80px */

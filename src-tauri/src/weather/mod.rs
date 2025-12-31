@@ -13,9 +13,11 @@
 // - Open-Meteo Weather API: https://open-meteo.com/en/docs
 // =============================================================================
 
+mod auto_updater;
 mod cache;
 mod types;
 
+pub use auto_updater::WeatherAutoUpdater;
 pub use cache::WeatherCache;
 pub use types::{GeocodingResponse, OpenMeteoResponse, WeatherData};
 

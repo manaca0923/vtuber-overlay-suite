@@ -89,3 +89,82 @@ pub async fn clear_weather_cache(state: State<'_, AppState>) -> Result<(), Strin
 pub async fn get_weather_cache_ttl(state: State<'_, AppState>) -> Result<u64, String> {
     Ok(state.weather.cache_ttl_remaining().await)
 }
+
+// =============================================================================
+// 新UI用コマンド（2ボタン化対応）
+// =============================================================================
+
+/// 天気を手動更新（キャッシュクリア + 取得 + タイマーリセット）
+///
+/// UIの「更新」ボタン用。最新の天気データを取得し、自動更新タイマーをリセットする。
+#[tauri::command]
+pub async fn refresh_weather(state: State<'_, AppState>) -> Result<WeatherData, String> {
+    state.weather.clear_cache().await;
+    let data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
+    state.weather_updater.reset_timer();
+    log::info!("Weather manually refreshed: {}°C, timer reset", data.temp);
+    Ok(data)
+}
+
+/// 天気をオーバーレイに配信
+///
+/// UIの「配信」ボタン用。現在の天気データ（キャッシュ優先）をWebSocketでブロードキャストする。
+#[tauri::command]
+pub async fn broadcast_weather(state: State<'_, AppState>) -> Result<(), String> {
+    let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
+
+    let payload = WeatherUpdatePayload {
+        icon: weather_data.icon,
+        temp: weather_data.temp,
+        description: weather_data.description,
+        location: weather_data.location,
+        humidity: Some(weather_data.humidity),
+    };
+
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(WsMessage::WeatherUpdate { payload })
+        .await;
+
+    log::info!("Weather broadcasted to overlay: {}°C", weather_data.temp);
+    Ok(())
+}
+
+/// 都市名設定 + 更新 + 配信（一括処理）
+///
+/// 都市名変更時に使用。都市名を保存し、最新の天気を取得してオーバーレイにも配信する。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_weather_city_and_broadcast(
+    state: State<'_, AppState>,
+    city: String,
+) -> Result<WeatherData, String> {
+    // 都市名を設定（キャッシュは自動クリアされる）
+    state.weather.set_city(city.clone()).await;
+
+    // 最新の天気を取得
+    let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
+
+    // WebSocketでブロードキャスト
+    let payload = WeatherUpdatePayload {
+        icon: weather_data.icon.clone(),
+        temp: weather_data.temp,
+        description: weather_data.description.clone(),
+        location: weather_data.location.clone(),
+        humidity: Some(weather_data.humidity),
+    };
+
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(WsMessage::WeatherUpdate { payload })
+        .await;
+
+    // タイマーリセット
+    state.weather_updater.reset_timer();
+
+    log::info!(
+        "Weather city set to '{}', fetched and broadcasted: {}°C",
+        city,
+        weather_data.temp
+    );
+    Ok(weather_data)
+}

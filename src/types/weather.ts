@@ -40,6 +40,20 @@ export const clearWeatherCache = () =>
 export const getWeatherCacheTtl = () =>
   invoke<number>('get_weather_cache_ttl');
 
+// 新UI用コマンド（2ボタン化対応）
+
+/** 天気を手動更新（キャッシュクリア + 取得 + タイマーリセット） */
+export const refreshWeather = () =>
+  invoke<WeatherData>('refresh_weather');
+
+/** 天気をオーバーレイに配信 */
+export const broadcastWeather = () =>
+  invoke<void>('broadcast_weather');
+
+/** 都市名設定 + 更新 + 配信（一括処理） */
+export const setWeatherCityAndBroadcast = (city: string) =>
+  invoke<WeatherData>('set_weather_city_and_broadcast', { city });
+
 // Tauri Commands - KPI/視聴者数
 // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
 export const getLiveStreamStats = (videoId: string, useBundledKey: boolean) =>

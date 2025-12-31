@@ -22,6 +22,7 @@ pub struct AppState {
     pub server: server::ServerState,
     pub db: SqlitePool,
     pub weather: Arc<weather::WeatherClient>,
+    pub weather_updater: Arc<weather::WeatherAutoUpdater>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -104,11 +105,18 @@ pub fn run() {
       // 天気クライアントを作成（Open-Meteo APIはAPIキー不要）
       let weather_client = Arc::new(weather::WeatherClient::new());
 
+      // 天気自動更新タスクを開始（15分ごとにブロードキャスト）
+      let weather_updater = Arc::new(weather::WeatherAutoUpdater::start(
+        Arc::clone(&weather_client),
+        Arc::clone(&server_state_for_manage),
+      ));
+
       AppState {
         poller: Arc::new(Mutex::new(None)),
         server: server_state_for_manage,
         db: db_pool,
         weather: weather_client,
+        weather_updater,
       }
     })
     .invoke_handler({
@@ -178,6 +186,9 @@ pub fn run() {
           commands::weather::broadcast_weather_update,
           commands::weather::clear_weather_cache,
           commands::weather::get_weather_cache_ttl,
+          commands::weather::refresh_weather,
+          commands::weather::broadcast_weather,
+          commands::weather::set_weather_city_and_broadcast,
           commands::system::get_system_fonts,
         ]
       }
@@ -246,6 +257,9 @@ pub fn run() {
           commands::weather::broadcast_weather_update,
           commands::weather::clear_weather_cache,
           commands::weather::get_weather_cache_ttl,
+          commands::weather::refresh_weather,
+          commands::weather::broadcast_weather,
+          commands::weather::set_weather_city_and_broadcast,
           commands::system::get_system_fonts,
         ]
       }

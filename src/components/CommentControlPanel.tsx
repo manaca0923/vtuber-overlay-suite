@@ -104,14 +104,39 @@ export function CommentControlPanel({
     };
   }, []);
 
-  // 初期設定を読み込み（APIモード、useBundledKey）
+  // 初期設定を読み込み（APIモード、useBundledKey、ポーリング状態）
   useEffect(() => {
     async function loadInitialSettings() {
-      // APIモードを読み込み
+      // ポーリング状態を読み込み（タブ切り替え対応）
+      try {
+        const running = await invoke<boolean>('is_unified_polling_running');
+        if (isMountedRef.current && running) {
+          setIsPolling(true);
+          setConnectionStatus('connected');
+          // 現在のAPIモードも取得
+          const currentMode = await invoke<ApiMode | null>('get_unified_polling_mode');
+          if (isMountedRef.current && currentMode) {
+            setApiMode(currentMode);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check polling status:', err);
+      }
+
+      // APIモードを読み込み（ポーリング中でない場合のみ更新）
       try {
         const savedMode = await invoke<ApiMode>('load_api_mode');
         if (isMountedRef.current) {
-          setApiMode(savedMode);
+          // ポーリング中の場合は現在のモードを維持
+          setApiMode((current) => {
+            // 既にポーリング中で設定されている場合は変更しない
+            return current;
+          });
+          // ポーリング中でなければ保存されたモードを使用
+          const running = await invoke<boolean>('is_unified_polling_running');
+          if (!running && isMountedRef.current) {
+            setApiMode(savedMode);
+          }
         }
       } catch (err) {
         console.error('Failed to load API mode:', err);

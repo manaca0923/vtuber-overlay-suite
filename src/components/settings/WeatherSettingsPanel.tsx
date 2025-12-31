@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   getWeatherCity,
-  setWeatherCity,
-  getWeather,
-  fetchWeather,
-  broadcastWeatherUpdate,
   getWeatherCacheTtl,
+  refreshWeather,
+  broadcastWeather,
+  setWeatherCityAndBroadcast,
   type WeatherData,
 } from '../../types/weather';
 import type { WeatherSettings, WeatherPosition } from '../../types/overlaySettings';
@@ -62,42 +61,28 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     return () => clearInterval(interval);
   }, []);
 
-  // 都市名保存
+  // 都市名設定 + 更新 + 配信（一括処理）
   const handleSaveCity = useCallback(async () => {
     if (!city.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      await setWeatherCity(city.trim());
+      const data = await setWeatherCityAndBroadcast(city.trim());
+      setWeather(data);
     } catch (err) {
-      setError('都市名の保存に失敗しました');
+      setError('都市名の設定に失敗しました');
       console.error(err);
     } finally {
       setLoading(false);
     }
   }, [city]);
 
-  // 天気取得
-  const handleFetchWeather = useCallback(async () => {
+  // 更新（キャッシュクリア + 取得 + タイマーリセット）
+  const handleRefresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getWeather();
-      setWeather(data);
-    } catch (err) {
-      setError('天気情報の取得に失敗しました');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // 強制更新
-  const handleForceRefresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchWeather();
+      const data = await refreshWeather();
       setWeather(data);
     } catch (err) {
       setError('天気情報の更新に失敗しました');
@@ -107,32 +92,14 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     }
   }, []);
 
-  // ブロードキャスト（キャッシュ優先）
+  // 配信（オーバーレイに送信）
   const handleBroadcast = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await broadcastWeatherUpdate(false);
+      await broadcastWeather();
     } catch (err) {
-      setError('ブロードキャストに失敗しました');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // 強制更新＋ブロードキャスト（都市変更後に使用）
-  const handleForceRefreshAndBroadcast = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // 強制リフレッシュでブロードキャスト
-      await broadcastWeatherUpdate(true);
-      // ローカル表示も更新
-      const data = await getWeather();
-      setWeather(data);
-    } catch (err) {
-      setError('強制更新・ブロードキャストに失敗しました');
+      setError('配信に失敗しました');
       console.error(err);
     } finally {
       setLoading(false);
@@ -140,10 +107,10 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
   }, []);
 
   const formatTtl = (seconds: number) => {
-    if (seconds === 0) return 'キャッシュなし';
+    if (seconds === 0) return '次回更新まで: --:--';
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    return `次回更新まで: ${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
   // 設定変更ハンドラ
@@ -166,7 +133,7 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       )}
 
       <p className="text-sm text-gray-500">
-        表示ON/OFFは「ウィジェット」タブで設定できます
+        表示ON/OFFは「ウィジェット」タブで設定できます。天気は15分ごとに自動更新されます。
       </p>
 
       {/* 配置位置 */}
@@ -205,13 +172,13 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
             type="button"
             onClick={handleSaveCity}
             disabled={loading || !city.trim()}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             設定
           </button>
         </div>
         <p className="text-xs text-gray-500">
-          都市名を入力してください（例: Tokyo, Osaka, New York）。APIキーは不要です。
+          都市名を入力して「設定」を押すと、天気を取得してオーバーレイに反映します。APIキーは不要です。
         </p>
       </div>
 
@@ -219,7 +186,7 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-gray-700">天気プレビュー</span>
-          <span className="text-xs text-gray-500">キャッシュ残り: {formatTtl(cacheTtl)}</span>
+          <span className="text-xs text-gray-500">{formatTtl(cacheTtl)}</span>
         </div>
 
         {weather ? (
@@ -235,45 +202,31 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
           </div>
         ) : (
           <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-500">
-            天気情報なし（「取得」ボタンを押してください）
+            天気情報なし（「更新」ボタンを押してください）
           </div>
         )}
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2">
           <button
             type="button"
-            onClick={handleFetchWeather}
+            onClick={handleRefresh}
             disabled={loading}
-            className="flex-1 min-w-[80px] px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
           >
-            取得
-          </button>
-          <button
-            type="button"
-            onClick={handleForceRefresh}
-            disabled={loading}
-            className="flex-1 min-w-[80px] px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50"
-          >
-            強制更新
+            更新
           </button>
           <button
             type="button"
             onClick={handleBroadcast}
             disabled={loading || !weather}
-            className="flex-1 min-w-[80px] px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
           >
             配信
           </button>
-          <button
-            type="button"
-            onClick={handleForceRefreshAndBroadcast}
-            disabled={loading}
-            className="flex-1 min-w-[80px] px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50"
-            title="キャッシュを無視して最新データを取得・配信"
-          >
-            強制配信
-          </button>
         </div>
+        <p className="text-xs text-gray-400 text-center">
+          更新: 最新の天気を取得 / 配信: オーバーレイに送信
+        </p>
       </div>
     </div>
   );

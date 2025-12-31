@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::websocket::WebSocketState;
+use crate::weather::WeatherData;
 
 /// サーバー共有状態
 pub type ServerState = Arc<RwLock<WebSocketState>>;
@@ -387,6 +388,18 @@ pub struct WeatherUpdatePayload {
     pub location: String,
     /// 湿度（%）
     pub humidity: Option<i32>,
+}
+
+impl From<&WeatherData> for WeatherUpdatePayload {
+    fn from(data: &WeatherData) -> Self {
+        Self {
+            icon: data.icon.clone(),
+            temp: data.temp,
+            description: data.description.clone(),
+            location: data.location.clone(),
+            humidity: Some(data.humidity),
+        }
+    }
 }
 
 /// スパチャペイロード（専用ウィジェット表示用）

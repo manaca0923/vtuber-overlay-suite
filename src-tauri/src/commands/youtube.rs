@@ -1295,14 +1295,15 @@ pub async fn broadcast_kpi_update(
 /// 同時接続者数・高評価数を取得してブロードキャスト
 ///
 /// YouTube APIから統計情報を取得し、WebSocketでオーバーレイに配信する。
-/// フロントエンドからの定期呼び出しを想定。
+/// フロントエンドからの定期呼び出し（30秒間隔）を想定。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fetch_and_broadcast_viewer_count(
     video_id: String,
     use_bundled_key: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    log::debug!(
+    // 定期呼び出しのためtraceレベル
+    log::trace!(
         "Fetching and broadcasting viewer count: video_id={}, use_bundled_key={}",
         video_id,
         use_bundled_key
@@ -1339,7 +1340,7 @@ pub async fn fetch_and_broadcast_viewer_count(
         },
     };
 
-    log::debug!(
+    log::trace!(
         "Viewer count fetched: concurrent_viewers={:?}, like_count={:?}",
         stats.concurrent_viewers,
         stats.like_count
@@ -1351,7 +1352,7 @@ pub async fn fetch_and_broadcast_viewer_count(
         .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
         .await;
 
-    log::debug!("Viewer count broadcasted");
+    log::trace!("Viewer count broadcasted");
     Ok(())
 }
 
@@ -1362,12 +1363,14 @@ pub async fn fetch_and_broadcast_viewer_count(
 ///
 /// 注意: InnerTube APIで取得できるのは総視聴回数（viewCount）であり、
 /// ライブ配信の同時接続者数（concurrentViewers）とは異なる可能性があります。
+/// ラベルを「視聴中」「再生回数」として、Data APIの「視聴者」と区別しています。
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fetch_viewer_count_innertube(
     video_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    log::debug!(
+    // 定期呼び出しのためtraceレベル
+    log::trace!(
         "Fetching viewer count via InnerTube: video_id={}",
         video_id
     );
@@ -1385,7 +1388,7 @@ pub async fn fetch_viewer_count_innertube(
     let view_count = video_details.get_view_count();
     let is_live = video_details.is_currently_live();
 
-    log::debug!(
+    log::trace!(
         "InnerTube video details: view_count={:?}, is_live={}, title={:?}",
         view_count,
         is_live,
@@ -1393,10 +1396,11 @@ pub async fn fetch_viewer_count_innertube(
     );
 
     // KpiUpdatePayloadに変換
-    // ライブ配信中の場合、viewCountは同時接続者数を表す可能性がある
+    // ラベルを「視聴中」「再生回数」としてData APIの「視聴者」と区別
+    // InnerTubeのviewCountは総視聴回数であり、同時接続者数とは異なる可能性がある
     let payload = KpiUpdatePayload {
         main: view_count.map(|v| v as i64),
-        label: Some(if is_live { "視聴者" } else { "再生回数" }.to_string()),
+        label: Some(if is_live { "視聴中" } else { "再生回数" }.to_string()),
         sub: None, // InnerTubeでは高評価数は取得できない
         sub_label: None,
     };
@@ -1407,7 +1411,7 @@ pub async fn fetch_viewer_count_innertube(
         .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
         .await;
 
-    log::debug!("InnerTube viewer count broadcasted");
+    log::trace!("InnerTube viewer count broadcasted");
     Ok(())
 }
 

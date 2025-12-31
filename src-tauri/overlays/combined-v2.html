@@ -34,34 +34,34 @@
     <!-- 左カラム -->
     <div class="col-left">
       <section id="slot-left-top">
-        <!-- 時刻ウィジェット（T21以降で実装） -->
+        <!-- 時刻ウィジェット（ClockWidget: 実装済み） -->
       </section>
       <section id="slot-left-topBelow">
-        <!-- 天気ウィジェット（T21以降で実装） -->
+        <!-- 天気ウィジェット（WeatherWidget: Open-Meteo API連携済み） -->
       </section>
       <section id="slot-left-middle" class="clamp-box">
         <!-- コメント表示 -->
         <div class="comment-container" id="comment-container"></div>
       </section>
       <section id="slot-left-lower">
-        <!-- スーパーチャット（T21以降で実装） -->
+        <!-- スーパーチャット（SuperchatCard: 実装済み） -->
       </section>
       <section id="slot-left-bottom">
-        <!-- ロゴ（T21以降で実装） -->
+        <!-- ロゴ（BrandBlock: UI実装済み、設定UIはT29で実装予定） -->
       </section>
     </div>
 
     <!-- 中央カラム -->
     <div class="col-center">
       <section id="slot-center-full">
-        <!-- 主役ステージ（T21以降で実装） -->
+        <!-- 主役ステージ（MainAvatarStage: 透明プレースホルダー実装済み） -->
       </section>
     </div>
 
     <!-- 右カラム -->
     <div class="col-right">
       <section id="slot-right-top">
-        <!-- チャンネルバッジ（T21以降で実装） -->
+        <!-- チャンネルバッジ（ChannelBadge: 実装済み） -->
       </section>
       <section id="slot-right-upper" class="clamp-box">
         <!-- セットリスト表示 -->
@@ -92,14 +92,14 @@
       </section>
       <div class="right-lower-grid">
         <section id="slot-right-lowerLeft">
-          <!-- KPI（T21以降で実装） -->
+          <!-- KPI（KPIBlock: UI実装済み、データ連携はT26で実装予定） -->
         </section>
         <section id="slot-right-lowerRight">
-          <!-- 待機キュー（T21以降で実装） -->
+          <!-- 待機キュー（QueueList: UI実装済み、キュー管理はT27で実装予定） -->
         </section>
       </div>
       <section id="slot-right-bottom">
-        <!-- 告知（T21以降で実装） -->
+        <!-- 告知（PromoPanel: UI実装済み、コンテンツ管理はT28で実装予定） -->
       </section>
     </div>
   </div>
@@ -127,6 +127,7 @@
   <script src="components/kpi-block.js"></script>
   <script src="components/promo-panel.js"></script>
   <script src="components/queue-list.js"></script>
+  <script src="components/superchat-card.js"></script>
 
   <script>
     // 共通モジュールから関数を取得
@@ -149,6 +150,9 @@
       updateSetlistDisplay,
       fetchLatestSetlist
     } = window.OverlayCore;
+
+    // プレビューモード判定（設定画面のiframeプレビュー時はtrue）
+    const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
 
     // ===== 設定 =====
     let showAvatar = true;
@@ -300,6 +304,21 @@
       // ウィジェット表示設定（issues/016: 新フィールドはオプショナル、デフォルト値を設定）
       // settings.widget が undefined/null の場合はデフォルト（全表示）を適用
       applyWidgetVisibility(settings.widget || DEFAULT_WIDGET_SETTINGS);
+
+      // スパチャ設定
+      if (settings.superchat) {
+        applySuperchatSettings(settings.superchat);
+      }
+    }
+
+    // スパチャ設定を適用
+    function applySuperchatSettings(superchatSettings) {
+      if (!superchatSettings || typeof superchatSettings !== 'object') return;
+
+      const superchatComponent = ComponentRegistry.getInstance('left.lower');
+      if (superchatComponent && typeof superchatComponent.updateSettings === 'function') {
+        superchatComponent.updateSettings(superchatSettings);
+      }
     }
 
     // ウィジェット表示/非表示を適用
@@ -483,6 +502,25 @@
               ComponentRegistry.applyTemplate(data.payload.components);
             }
             break;
+
+          // スパチャウィジェット
+          // プレビューモードではpostMessage経由で受信するため、WebSocket経由はスキップ
+          case 'superchat:add':
+            if (!isPreviewMode) {
+              const superchatCard = ComponentRegistry.getInstance('left.lower');
+              if (superchatCard && typeof superchatCard.addSuperchat === 'function') {
+                superchatCard.addSuperchat(data.payload);
+              }
+            }
+            break;
+          case 'superchat:remove':
+            if (!isPreviewMode) {
+              const superchatCardForRemove = ComponentRegistry.getInstance('left.lower');
+              if (superchatCardForRemove && typeof superchatCardForRemove.removeSuperchat === 'function') {
+                superchatCardForRemove.removeSuperchat(data.payload?.id);
+              }
+            }
+            break;
         }
       }
     });
@@ -494,6 +532,20 @@
       onSettingsUpdate: (payload) => {
         // issues/013: 各フィールドの存在チェックはapplySettingsUpdate内で実施
         applySettingsUpdate(payload);
+      },
+      onSuperchatAdd: (payload) => {
+        // スパチャ追加（プレビュー用）
+        const superchatCard = ComponentRegistry.getInstance('left.lower');
+        if (superchatCard && typeof superchatCard.addSuperchat === 'function') {
+          superchatCard.addSuperchat(payload);
+        }
+      },
+      onSuperchatRemove: (id) => {
+        // スパチャ削除（プレビュー用）
+        const superchatCard = ComponentRegistry.getInstance('left.lower');
+        if (superchatCard && typeof superchatCard.removeSuperchat === 'function') {
+          superchatCard.removeSuperchat(id);
+        }
       }
     });
 
@@ -511,6 +563,7 @@
       // 左カラム
       ComponentRegistry.mount('left.top', 'ClockWidget', {});
       // WeatherWidgetは設定に基づいて配置されるため、ここではマウントしない
+      ComponentRegistry.mount('left.lower', 'SuperchatCard', {});
       ComponentRegistry.mount('left.bottom', 'BrandBlock', {});
 
       // 中央カラム

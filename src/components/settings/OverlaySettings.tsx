@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ThemeSelector } from './ThemeSelector';
 import { LayoutPresetSelector } from './LayoutPresetSelector';
 import { CommentSettingsPanel } from './CommentSettingsPanel';
+import { SuperchatSettingsPanel } from './SuperchatSettingsPanel';
 import { SetlistSettingsPanel } from './SetlistSettingsPanel';
 import { WeatherSettingsPanel } from './WeatherSettingsPanel';
 import { PerformanceSettingsPanel } from './PerformanceSettingsPanel';
@@ -29,7 +30,7 @@ export function OverlaySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activePanel, setActivePanel] = useState<'widget' | 'comment' | 'setlist' | 'weather' | 'performance'>('widget');
+  const [activePanel, setActivePanel] = useState<'widget' | 'comment' | 'superchat' | 'setlist' | 'weather' | 'performance'>('widget');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
 
   // 変更検出（リセットボタンの表示/非表示制御用）
@@ -97,6 +98,10 @@ export function OverlaySettings() {
               : DEFAULT_OVERLAY_SETTINGS.performance,
             // widget設定
             widget: migratedWidget,
+            // saved.superchatがundefinedの場合はデフォルト値を使用
+            superchat: saved.superchat
+              ? { ...DEFAULT_OVERLAY_SETTINGS.superchat, ...saved.superchat }
+              : DEFAULT_OVERLAY_SETTINGS.superchat,
           };
           setSettings(merged);
           setOriginalSettings(merged); // 元設定を保存（リセット機能用）
@@ -222,6 +227,16 @@ export function OverlaySettings() {
                 コメント
               </button>
               <button
+                onClick={() => setActivePanel('superchat')}
+                className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
+                  activePanel === 'superchat'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                スパチャ
+              </button>
+              <button
                 onClick={() => setActivePanel('setlist')}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
                   activePanel === 'setlist'
@@ -276,6 +291,14 @@ export function OverlaySettings() {
                   settings={settings.comment}
                   onChange={(comment) => {
                     setSettings((prev) => ({ ...prev, comment, layout: 'custom' }));
+                  }}
+                />
+              )}
+              {activePanel === 'superchat' && (
+                <SuperchatSettingsPanel
+                  settings={settings.superchat ?? DEFAULT_OVERLAY_SETTINGS.superchat!}
+                  onChange={(superchat) => {
+                    setSettings((prev) => ({ ...prev, superchat }));
                   }}
                 />
               )}
@@ -376,7 +399,7 @@ export function OverlaySettings() {
           <div className="h-[500px]">
             <OverlayPreview
               settings={settings}
-              activePanel={activePanel === 'widget' || activePanel === 'weather' || activePanel === 'performance' ? 'comment' : activePanel}
+              activePanel={activePanel === 'widget' || activePanel === 'weather' || activePanel === 'performance' || activePanel === 'superchat' ? 'comment' : activePanel}
               mode={previewMode}
             />
           </div>

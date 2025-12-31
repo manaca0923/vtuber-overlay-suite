@@ -299,6 +299,8 @@ class PostMessageHandler {
   constructor(options = {}) {
     this.trustedOrigins = options.trustedOrigins || TRUSTED_ORIGINS;
     this.onSettingsUpdate = options.onSettingsUpdate || (() => {});
+    this.onSuperchatAdd = options.onSuperchatAdd || (() => {});
+    this.onSuperchatRemove = options.onSuperchatRemove || (() => {});
     this._handleMessage = this._handleMessage.bind(this);
     this.isActive = true;
     window.addEventListener('message', this._handleMessage);
@@ -329,6 +331,20 @@ class PostMessageHandler {
         return;
       }
       this.onSettingsUpdate(data.payload);
+    } else if (data.type === 'preview:superchat:add') {
+      // スパチャ追加（プレビュー用）
+      if (!data.payload || typeof data.payload !== 'object' || Array.isArray(data.payload)) {
+        console.warn('[PostMessage] Invalid superchat payload');
+        return;
+      }
+      this.onSuperchatAdd(data.payload);
+    } else if (data.type === 'preview:superchat:remove') {
+      // スパチャ削除（プレビュー用）
+      if (!data.payload || typeof data.payload !== 'object' || Array.isArray(data.payload)) {
+        console.warn('[PostMessage] Invalid superchat remove payload');
+        return;
+      }
+      this.onSuperchatRemove(data.payload.id);
     }
   }
 

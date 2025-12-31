@@ -1,8 +1,13 @@
 /**
- * WeatherWidget - 天気情報コンポーネント（スタブ実装）
+ * WeatherWidget - 天気情報コンポーネント
  *
  * 配置: left.topBelow
- * 機能: 天気情報を表示（T25でAPI連携予定）
+ * 機能: 天気情報を表示（Open-Meteo API連携済み）
+ *
+ * バックエンド連携:
+ *   - src-tauri/src/weather/mod.rs - Open-Meteo API連携
+ *   - src-tauri/src/commands/weather.rs - Tauriコマンド
+ *   - WebSocket: weather:update メッセージで更新
  *
  * style設定:
  *   - icon: string (天気アイコン、デフォルト: '☀️')
@@ -62,7 +67,7 @@ class WeatherWidget extends BaseComponent {
   }
 
   update(data) {
-    // T25でAPI連携時に使用
+    // weather:update WebSocketメッセージで呼び出される
     if (data.icon !== undefined) {
       this.icon = data.icon;
       this.iconEl.textContent = data.icon;

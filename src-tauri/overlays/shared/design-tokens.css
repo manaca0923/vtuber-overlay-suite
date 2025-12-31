@@ -14,16 +14,8 @@
   --dt-accent: var(--primary-color, #ffffff);
 
   /* ===== ウィジェット個別カラー（issues/020: 定数化） ===== */
-  /* 各ウィジェットのアクセントカラー。未設定時はグローバルカラーを継承 */
-  --widget-clock-color: var(--primary-color, #ffffff);
-  --widget-weather-color: var(--primary-color, #ffffff);
-  --widget-comment-color: var(--primary-color, #ffffff);
-  --widget-superchat-color: var(--primary-color, #ffffff);
-  --widget-logo-color: var(--primary-color, #ffffff);
-  --widget-setlist-color: var(--primary-color, #ffffff);
-  --widget-kpi-color: var(--primary-color, #ffffff);
-  --widget-tanzaku-color: var(--primary-color, #ffffff);
-  --widget-announcement-color: var(--primary-color, #ffffff);
+  /* 各ウィジェットのアクセントカラーはapplyThemeSettings()で動的に設定 */
+  /* 定義しない場合、components.cssのフォールバック（--primary-color）が使用される */
 
   /* ===== フォントファミリー ===== */
   --font-family: 'Yu Gothic', 'YuGothic', sans-serif;

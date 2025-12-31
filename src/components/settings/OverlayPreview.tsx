@@ -136,9 +136,6 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
       }
     };
 
-    // デバッグログ: themeSettingsの内容を確認
-    console.log('[OverlayPreview] Sending postMessage with themeSettings:', debouncedSettings.themeSettings);
-
     // iframeのcontentWindowに送信（セキュリティ: targetOriginを明示）
     iframeRef.current.contentWindow.postMessage(message, PREVIEW_ORIGIN);
   }, [debouncedSettings, iframeLoaded]);

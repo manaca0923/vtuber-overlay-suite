@@ -17,8 +17,9 @@
   --animation-easing: ease-out;
   --font-family: 'Yu Gothic', 'Meiryo', sans-serif;
 
-  /* ===== ウィジェット個別カラー（デフォルト値はprimary-colorを継承） ===== */
-  --widget-comment-color: var(--primary-color, #ffffff);
+  /* ===== ウィジェット個別カラー ===== */
+  /* 各ウィジェットのカラーはapplyThemeSettings()で動的に設定 */
+  /* 未設定時はCSSのフォールバック（--primary-color）が使用される */
 
   /* ===== 3カラムレイアウト用CSS変数（v2） ===== */
   --gutter: 24px;

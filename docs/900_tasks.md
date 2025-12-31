@@ -416,6 +416,30 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 追記内容: `preview:settings:update`メッセージ型の仕様
   - 優先度: 低（ドキュメント改善）
 
+- [ ] **システムフォント取得のエラーハンドリング強化** (PR#106レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/system.rs`
+  - 現在: フォント一覧が空の場合のハンドリングが不明確
+  - 改善案: 空リストを許容するか、エラーとして扱うかを明示
+  - 優先度: 低（空リストでも動作に問題なし）
+
+- [ ] **フォントプレビューの読み込み待機** (PR#106レビューで提案)
+  - 対象ファイル: `src/components/settings/FontSelector.tsx`
+  - 現在: Google Fonts選択時、フォント読み込み中でもプレビューが表示される
+  - 改善案: `document.fonts.ready`で読み込み完了を待つ or ローディング表示
+  - 優先度: 低（UX改善のみ）
+
+- [ ] **Rust側ThemeSettings型のenum化** (PR#106レビューで提案)
+  - 対象ファイル: `src-tauri/src/server/types.rs`
+  - 現在: `global_theme`と`font_preset`がString型
+  - 改善案: enumを使用して型安全性を向上
+  - 優先度: 低（後方互換性を考慮すると現状維持でも問題なし）
+
+- [ ] **CSS変数のフォールバック値の統一** (PR#106レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/shared/design-tokens.css`
+  - 現在: フォールバック値が`#ffffff`で一部重複
+  - 改善案: CSS変数として定義し一箇所にまとめる
+  - 優先度: 低（保守性改善のみ）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

@@ -64,6 +64,37 @@ fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
         }
     }
 
+    // テーマ設定の検証
+    if let Some(ref theme) = settings.theme_settings {
+        // カスタムカラーの上限チェック（最大3件）
+        const MAX_CUSTOM_COLORS: usize = 3;
+        if theme.custom_colors.len() > MAX_CUSTOM_COLORS {
+            return Err(format!(
+                "Too many custom colors: {}. Maximum is {}.",
+                theme.custom_colors.len(),
+                MAX_CUSTOM_COLORS
+            ));
+        }
+
+        // グローバルプライマリカラーの検証
+        if !is_valid_hex_color(&theme.global_primary_color) {
+            return Err(format!(
+                "Invalid globalPrimaryColor: {}. Expected #RRGGBB format.",
+                theme.global_primary_color
+            ));
+        }
+
+        // カスタムカラーの各色を検証
+        for (i, color_entry) in theme.custom_colors.iter().enumerate() {
+            if !is_valid_hex_color(&color_entry.color) {
+                return Err(format!(
+                    "Invalid custom color at index {}: {}. Expected #RRGGBB format.",
+                    i, color_entry.color
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 

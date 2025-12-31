@@ -200,6 +200,8 @@ pub fn run() {
         ]
       }
       // リリースビルドではtest_innertube_connection, fetch_viewer_count_innertubeを除外
+      // 理由: KPI取得は常に同梱APIキーを使用するため、InnerTube経由のviewCount取得は不要
+      //       test_innertube_connectionは開発時の接続テスト専用
       #[cfg(not(debug_assertions))]
       {
         tauri::generate_handler![

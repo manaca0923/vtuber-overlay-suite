@@ -354,6 +354,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（現状でも動作に問題なし）
 
+- [ ] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+  - 現状: `?v=2`, `?v=3`などを手動で追加
+  - 改善案: ビルドツールで自動生成するか、一貫したルールを設ける
+  - 優先度: 低（現状でも動作に問題なし）
+
 - [ ] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
   - `MAX_POLLING_INTERVAL_MS`, `MIN_POLLING_INTERVAL_MS` になぜこの値を選んだか追記

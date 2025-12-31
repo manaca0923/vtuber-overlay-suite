@@ -115,3 +115,73 @@ applyWidgetVisibility(widgetSettings) {
 
 > **Note**: `typeof` だけでは配列とオブジェクトを区別できない。
 > 純粋なオブジェクトのみを許可する場合は `Array.isArray()` チェックを追加する。
+
+**設定オブジェクトのフォールバック処理**（PR#102, PR#103で追加）:
+```javascript
+// 問題: settings.widgetがundefinedの場合、処理がスキップされる
+function applySettingsUpdate(settings) {
+  if (settings.widget) {
+    applyWidgetVisibility(settings.widget);  // settings.widget === undefined でスキップ
+  }
+}
+
+// 解決: デフォルト値へのフォールバック
+const DEFAULT_WIDGET_SETTINGS = {
+  clock: true,
+  weather: true,
+  comment: true,
+  setlist: true,
+  kpi: true,
+  queue: true,
+  promo: true,
+  brand: true,
+  superchat: true,
+};
+
+function applySettingsUpdate(settings) {
+  // デフォルト値を使用（undefined/nullでも動作）
+  applyWidgetVisibility(settings.widget || DEFAULT_WIDGET_SETTINGS);
+}
+```
+
+> **Note**: デフォルト値オブジェクトはグローバルスコープで定義し、
+> 関数呼び出しごとに再作成されないようにする（issues/020参照）。
+
+**postMessageペイロードの検証**（PR#103で追加）:
+```javascript
+// 受信側（オーバーレイ）でのpostMessage検証
+class PostMessageHandler {
+  constructor(trustedOrigins = []) {
+    this.trustedOrigins = trustedOrigins;
+  }
+
+  _handleMessage(event) {
+    // 1. origin検証（issues/002参照）
+    if (!this.trustedOrigins.includes(event.origin)) {
+      console.warn('Untrusted origin:', event.origin);
+      return;
+    }
+
+    // 2. data構造の検証
+    const data = event.data;
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    // 3. 必須フィールドの検証
+    if (typeof data.type !== 'string') {
+      return;
+    }
+
+    // 4. payload検証（存在する場合）
+    if (data.payload !== undefined && typeof data.payload !== 'object') {
+      return;
+    }
+
+    this._dispatch(data);
+  }
+}
+```
+
+> **Note**: postMessage通信は外部からのデータ受信のため、
+> 複数レイヤーでの検証が必要（深層防御、issues/002セクション6参照）。

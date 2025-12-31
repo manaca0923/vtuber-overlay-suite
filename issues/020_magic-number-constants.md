@@ -95,3 +95,80 @@ function applySettingsUpdate(settings) {
 2. **コメントで根拠を明記**: なぜこの値を選んだか後からわかるように
 3. **適切なモジュールに配置**: 関連する型や定数と同じ場所に置く
 4. **publicにしてエクスポート**: 複数ファイルから参照できるように
+
+## デバウンス・スロットル値の定数化（PR#103で追加）
+
+### 問題例
+
+```typescript
+// 悪い例: デバウンス値がハードコード
+useEffect(() => {
+  const timer = setTimeout(() => {
+    sendUpdate(settings);
+  }, 50);  // 50msの根拠が不明
+  return () => clearTimeout(timer);
+}, [settings]);
+```
+
+### 解決方法
+
+```typescript
+// 良い例: 定数化して意図を明確に
+/**
+ * 設定変更のデバウンス間隔（ミリ秒）
+ * スライダー操作時の過剰なpostMessage送信を防止
+ * 50ms: 人間の操作速度を考慮した値（連続操作でも最後の値のみ送信）
+ */
+const SETTINGS_UPDATE_DEBOUNCE_MS = 50;
+
+useEffect(() => {
+  const timer = setTimeout(() => {
+    sendUpdate(settings);
+  }, SETTINGS_UPDATE_DEBOUNCE_MS);
+  return () => clearTimeout(timer);
+}, [settings]);
+```
+
+### よく使うデバウンス・スロットル値
+
+| 用途 | 推奨値 | 根拠 |
+|------|--------|------|
+| スライダー操作 | 50ms | 連続操作の最後のみ反映 |
+| 入力フィールド | 300ms | 入力完了を待つ |
+| ウィンドウリサイズ | 100-200ms | 過剰なレイアウト再計算を防止 |
+| スクロール | 16ms (1フレーム) | 60FPS相当 |
+| API呼び出し | 1000ms | レート制限対策 |
+
+## TypeScript/Rust間の定数同期パターン（PR#106で追加）
+
+### 問題
+
+フロントエンドとバックエンドで同じ定数を使う場合、一方を変更すると不整合が発生。
+
+### 解決方法
+
+```typescript
+// types/overlaySettings.ts - TypeScript側
+export const MAX_CUSTOM_COLORS = 3;
+export const MAX_FONT_NAME_LENGTH = 200;
+
+// コメントでRust側との対応を明記
+/**
+ * カスタムカラーの最大数
+ * @see src-tauri/src/commands/overlay.rs MAX_CUSTOM_COLORS
+ */
+```
+
+```rust
+// overlay.rs - Rust側
+// コメントでTypeScript側との対応を明記
+/// カスタムカラーの最大数
+/// @see src/types/overlaySettings.ts MAX_CUSTOM_COLORS
+const MAX_CUSTOM_COLORS: usize = 3;
+```
+
+### チェックリスト
+
+- [ ] 定数をフロントエンド・バックエンド両方で定義したか
+- [ ] コメントで相互参照を明記したか
+- [ ] 値を変更する場合、両方を更新したか

@@ -60,6 +60,39 @@ ws.onopen = () => {
   payload: { id: string }
 }
 
+// スパチャ追加（T25: スパチャ専用ウィジェット）
+{
+  type: 'superchat:add',
+  payload: {
+    id: string,
+    authorName: string,
+    authorImageUrl: string,
+    amount: string,           // 表示用金額文字列（例: "¥1,000"）
+    amountMicros: number,     // マイクロ単位の金額（1円 = 1,000,000マイクロ）
+    currency: string,         // 通貨コード（"JPY", "USD", "EUR"等）
+    message: string,          // スパチャメッセージ
+    tier: number,             // 金額帯 1-7（YouTube公式Tier準拠）
+    displayDurationMs: number // 表示時間（ミリ秒）
+  }
+}
+
+// スパチャ削除（表示時間終了）
+{
+  type: 'superchat:remove',
+  payload: { id: string }
+}
+
+// スパチャTierとカラー（YouTube公式準拠）
+// | Tier | 金額 (JPY) | 表示時間 | 背景色 |
+// |------|-----------|---------|--------|
+// | 1 | ¥100-199   | 10秒 | #1565C0 (Blue) |
+// | 2 | ¥200-499   | 20秒 | #00B8D4 (Cyan) |
+// | 3 | ¥500-999   | 30秒 | #00BFA5 (Teal) |
+// | 4 | ¥1,000-1,999 | 1分 | #FFB300 (Yellow) |
+// | 5 | ¥2,000-4,999 | 2分 | #F57C00 (Orange) |
+// | 6 | ¥5,000-9,999 | 3分 | #E91E63 (Pink) |
+// | 7 | ¥10,000+   | 5分 | #E62117 (Red) |
+
 // セットリスト更新
 {
   type: 'setlist:update',
@@ -199,6 +232,87 @@ ws.onopen = () => {
   }
 }
 ```
+
+---
+
+## postMessage プロトコル（プレビュー用）
+
+設定画面のプレビューiframe用のpostMessage通信仕様。
+
+### 送信元（React設定画面）
+
+```typescript
+// OverlayPreview.tsx
+const PREVIEW_ORIGIN = 'http://localhost:19800';
+
+// 設定変更時にiframeへ送信
+iframeRef.current.contentWindow.postMessage({
+  type: 'preview:settings:update',
+  payload: {
+    widget?: WidgetVisibilitySettings,
+    comment?: CommentSettings,
+    setlist?: SetlistSettings,
+    weather?: WeatherSettings,
+    themeSettings?: ThemeSettings
+  }
+}, PREVIEW_ORIGIN);
+```
+
+### 受信側（オーバーレイHTML）
+
+```javascript
+// overlay-core.js - PostMessageHandler
+const TRUSTED_ORIGINS = [
+  'http://localhost:1420',   // Vite開発サーバー
+  'http://localhost:19800',  // プレビュー用
+  'tauri://localhost'        // Tauri WebView
+];
+
+class PostMessageHandler {
+  constructor(trustedOrigins = TRUSTED_ORIGINS) {
+    this.trustedOrigins = trustedOrigins;
+    this.handlers = {};
+    window.addEventListener('message', (e) => this._handleMessage(e));
+  }
+
+  _handleMessage(event) {
+    // 1. origin検証（issues/002参照）
+    if (!this.trustedOrigins.includes(event.origin)) {
+      console.warn('Untrusted origin:', event.origin);
+      return;
+    }
+
+    // 2. ペイロード検証（issues/013参照）
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+    if (typeof data.type !== 'string') return;
+
+    // 3. ハンドラ実行
+    const handler = this.handlers[data.type];
+    if (handler) {
+      handler(data.payload);
+    }
+  }
+
+  on(type, callback) {
+    this.handlers[type] = callback;
+  }
+}
+
+// 使用例
+const postMessageHandler = new PostMessageHandler();
+postMessageHandler.on('preview:settings:update', (payload) => {
+  applySettingsUpdate(payload);
+});
+```
+
+### セキュリティ考慮事項
+
+- **targetOrigin明示**: 送信側は`'*'`ではなく具体的なオリジンを指定（issues/002参照）
+- **origin検証**: 受信側はTRUSTED_ORIGINSでホワイトリスト検証（issues/002参照）
+- **ペイロード検証**: 型チェックで不正なデータを排除（issues/013参照）
+
+---
 
 ### 再接続ロジック
 

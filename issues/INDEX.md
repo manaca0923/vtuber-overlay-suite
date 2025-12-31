@@ -54,6 +54,7 @@
 | [007](007_tauri-invoke-snake-case.md) | invoke snake_case |
 | [019](019_innertube-polling-interval.md) | ポーリング間隔 |
 | [021](021_serde-field-naming.md) | serde命名規則 |
+| [028](028_pr109-log-level-trace.md) | 定期実行ログは`trace` |
 
 </details>
 

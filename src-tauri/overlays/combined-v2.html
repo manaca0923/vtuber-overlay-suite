@@ -770,11 +770,8 @@
       onKpiUpdate: (payload) => {
         // KPI更新（プレビュー用）
         // Video IDがあれば実データ、なければダミーデータが送られてくる
-        console.log('[combined-v2] onKpiUpdate called with:', payload);
         const kpiBlock = ComponentRegistry.getInstance('right.kpi');
-        console.log('[combined-v2] kpiBlock:', kpiBlock);
         if (kpiBlock && typeof kpiBlock.update === 'function') {
-          console.log('[combined-v2] Calling kpiBlock.update()');
           kpiBlock.update({
             main: payload.main,
             label: payload.label,

@@ -178,7 +178,6 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
       };
 
       const sendKpiMessage = (kpiData: KpiData) => {
-        console.log('[OverlayPreview] Sending KPI data:', kpiData);
         iframeRef.current?.contentWindow?.postMessage({
           type: 'preview:kpi:update',
           payload: kpiData,
@@ -188,7 +187,6 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
       try {
         // ウィザード設定からvideo_idを取得
         const wizardSettings = await invoke<WizardSettingsData | null>('load_wizard_settings');
-        console.log('[OverlayPreview] Wizard settings:', wizardSettings);
 
         if (wizardSettings?.video_id) {
           // video_idがあれば実データを取得
@@ -199,7 +197,6 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
               video_id: wizardSettings.video_id,
               use_bundled_key: useBundledKey,
             });
-            console.log('[OverlayPreview] Live stream stats:', stats);
 
             // 実データでKPIを更新
             const realKpi: KpiData = {

@@ -342,6 +342,18 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - client.rsの初期化コメントが不要になる
   - 優先度: 低（任意の改善提案）
 
+- [ ] **WizardSettingsData型の一元化** (PR#110レビューで提案)
+  - 対象ファイル: `src/components/settings/OverlayPreview.tsx`, `src/components/CommentControlPanel.tsx`
+  - 現状: `WizardSettingsData`がローカル定義されている（OverlayPreview.tsx:16-20）
+  - 改善案: `src/types/wizard.ts`に一元化して再利用
+  - 優先度: 低（現状でも動作に問題なし）
+
+- [ ] **lib.rsのコマンドリスト重複削減** (PR#110レビューで提案)
+  - 対象ファイル: `src-tauri/src/lib.rs`
+  - 現状: デバッグビルドとリリースビルドで大量のコマンドリストが重複
+  - 改善案: マクロやcfg-ifクレートで共通部分を抽出
+  - 優先度: 低（現状でも動作に問題なし）
+
 - [ ] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
   - `MAX_POLLING_INTERVAL_MS`, `MIN_POLLING_INTERVAL_MS` になぜこの値を選んだか追記

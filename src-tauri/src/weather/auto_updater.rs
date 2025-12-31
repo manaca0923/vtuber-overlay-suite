@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 
-use crate::server::types::{ServerState, WeatherUpdatePayload, WsMessage};
+use crate::server::types::{ServerState, WsMessage};
 
 use super::WeatherClient;
 
@@ -96,17 +96,11 @@ impl WeatherAutoUpdater {
         weather.clear_cache().await;
         let data = weather.get_weather().await.map_err(|e| e.to_string())?;
 
-        let payload = WeatherUpdatePayload {
-            icon: data.icon,
-            temp: data.temp,
-            description: data.description,
-            location: data.location,
-            humidity: Some(data.humidity),
-        };
-
         let ws_state = server.read().await;
         ws_state
-            .broadcast(WsMessage::WeatherUpdate { payload })
+            .broadcast(WsMessage::WeatherUpdate {
+                payload: (&data).into(),
+            })
             .await;
 
         log::info!("Weather auto-update broadcasted: {}°C", data.temp);
@@ -128,6 +122,9 @@ impl WeatherAutoUpdater {
     }
 
     /// 実行中かどうかを確認
+    ///
+    /// NOTE: 現在未使用だが、将来の状態確認UI等で使用予定（PR#107: 天気自動更新機能）
+    #[allow(dead_code)]
     pub fn is_running(&self) -> bool {
         self.is_running.load(Ordering::SeqCst)
     }

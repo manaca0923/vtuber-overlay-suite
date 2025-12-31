@@ -440,6 +440,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: CSS変数として定義し一箇所にまとめる
   - 優先度: 低（保守性改善のみ）
 
+- [ ] **キャッシュTTLと自動更新間隔の表示整理** (PR#107レビューで提案)
+  - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
+  - 現在: `cache_ttl_remaining`（APIキャッシュ残り時間）を表示しているが、自動更新間隔（15分）は`WeatherAutoUpdater`で管理されており別の値
+  - 対応案: 表示テキストにコメントを追加するか、UIで自動更新までの時間も表示する
+  - 優先度: 低（動作に問題なし、UX改善のみ）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

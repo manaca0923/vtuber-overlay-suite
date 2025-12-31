@@ -57,17 +57,11 @@ pub async fn broadcast_weather_update(
         state.weather.get_weather().await.map_err(|e| e.to_string())?
     };
 
-    let payload = WeatherUpdatePayload {
-        icon: weather_data.icon,
-        temp: weather_data.temp,
-        description: weather_data.description,
-        location: weather_data.location,
-        humidity: Some(weather_data.humidity),
-    };
-
     let ws_state = state.server.read().await;
     ws_state
-        .broadcast(WsMessage::WeatherUpdate { payload })
+        .broadcast(WsMessage::WeatherUpdate {
+            payload: WeatherUpdatePayload::from(&weather_data),
+        })
         .await;
 
     log::info!(
@@ -113,17 +107,11 @@ pub async fn refresh_weather(state: State<'_, AppState>) -> Result<WeatherData, 
 pub async fn broadcast_weather(state: State<'_, AppState>) -> Result<(), String> {
     let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
 
-    let payload = WeatherUpdatePayload {
-        icon: weather_data.icon,
-        temp: weather_data.temp,
-        description: weather_data.description,
-        location: weather_data.location,
-        humidity: Some(weather_data.humidity),
-    };
-
     let ws_state = state.server.read().await;
     ws_state
-        .broadcast(WsMessage::WeatherUpdate { payload })
+        .broadcast(WsMessage::WeatherUpdate {
+            payload: WeatherUpdatePayload::from(&weather_data),
+        })
         .await;
 
     log::info!("Weather broadcasted to overlay: {}°C", weather_data.temp);
@@ -145,17 +133,11 @@ pub async fn set_weather_city_and_broadcast(
     let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
 
     // WebSocketでブロードキャスト
-    let payload = WeatherUpdatePayload {
-        icon: weather_data.icon.clone(),
-        temp: weather_data.temp,
-        description: weather_data.description.clone(),
-        location: weather_data.location.clone(),
-        humidity: Some(weather_data.humidity),
-    };
-
     let ws_state = state.server.read().await;
     ws_state
-        .broadcast(WsMessage::WeatherUpdate { payload })
+        .broadcast(WsMessage::WeatherUpdate {
+            payload: WeatherUpdatePayload::from(&weather_data),
+        })
         .await;
 
     // タイマーリセット

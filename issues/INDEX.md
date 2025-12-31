@@ -103,6 +103,7 @@
 | [014](014_pr84-http-mock-patterns.md) | mockitoパターン |
 | [015](015_pr88-code-style.md) | 連続空行 |
 | [017](017_dead-code-warnings.md) | dead_code警告 |
+| [026](026_pr107-from-trait-duplication.md) | Fromトレイトで重複削減 |
 
 </details>
 

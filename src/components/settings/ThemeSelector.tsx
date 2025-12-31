@@ -38,7 +38,10 @@ interface ThemeSelectorProps {
  * issues/013: アクセシビリティ対応（id, htmlFor, aria-label）
  */
 export function ThemeSelector({ themeSettings, onChange }: ThemeSelectorProps) {
-  const [showWidgetColors, setShowWidgetColors] = useState(false);
+  // 既存のwidgetColorOverridesがある場合は初期表示をtrueに
+  const [showWidgetColors, setShowWidgetColors] = useState(
+    Object.keys(themeSettings.widgetColorOverrides).length > 0
+  );
 
   // プリセット選択ハンドラ
   const handlePresetSelect = (presetKey: keyof typeof THEME_PRESETS) => {
@@ -244,7 +247,18 @@ export function ThemeSelector({ themeSettings, onChange }: ThemeSelectorProps) {
             type="checkbox"
             id="widget-color-toggle"
             checked={showWidgetColors}
-            onChange={(e) => setShowWidgetColors(e.target.checked)}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setShowWidgetColors(checked);
+              // チェックを外した時はwidgetColorOverridesをクリアして
+              // グローバルプリセットカラーを適用
+              if (!checked) {
+                onChange({
+                  ...themeSettings,
+                  widgetColorOverrides: {},
+                });
+              }
+            }}
             className="w-4 h-4 text-blue-600 rounded"
           />
           <label htmlFor="widget-color-toggle" className="text-sm font-medium text-gray-700">

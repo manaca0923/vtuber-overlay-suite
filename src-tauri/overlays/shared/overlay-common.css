@@ -120,12 +120,16 @@ body {
   font-size: var(--font-size-name);
   font-weight: bold;
   text-shadow: var(--text-shadow);
+  /* 親要素（#comment-container）からカラーを継承 */
+  color: inherit;
 }
 
 .message {
   font-size: var(--font-size-message);
   word-wrap: break-word;
   text-shadow: var(--text-shadow);
+  /* 親要素（#comment-container）からカラーを継承 */
+  color: inherit;
 }
 
 .amount {

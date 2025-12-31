@@ -478,6 +478,36 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: クラス定数として定義
   - 優先度: 低（将来的な調整の容易さのため）
 
+- [ ] **set_multi_city_config の非同期設計の改善** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/src/weather/auto_updater.rs`
+  - 問題: 関数は同期的に戻るが、設定の更新は非同期で行われる
+  - 改善案A: 関数をasyncにしてawait
+  - 改善案B: ドキュメントに「設定は非同期で反映される」旨を記載
+  - 優先度: 中（競合状態の可能性があるが、実用上は問題なし）
+
+- [ ] **マルチシティ並列取得のレート制限対応** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - 問題: 10都市同時リクエストでAPI制限に引っかかる可能性
+  - 改善案: `futures::stream::buffer_unordered(3)` で同時3リクエストに制限
+  - 優先度: 低（Open-Meteo APIは寛容だが、将来的に都市数が増える場合に備えて）
+
+- [ ] **CityTuple型エイリアスの追加** (PR#108レビューで提案)
+  - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
+  - 問題: `Array<[string, string, string]>` が不明瞭
+  - 改善案: `type CityTuple = [id: string, name: string, displayName: string];`
+  - 優先度: 低（可読性改善のみ）
+
+- [ ] **マルチシティ部分的成功時のUI通知** (PR#108レビューで提案)
+  - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
+  - 問題: 一部都市のみ取得成功した場合のフロントエンド通知がない
+  - 改善案: 「X/Y 都市の天気を取得しました」等の通知を表示
+  - 優先度: 低（ログには記録されているため運用上は問題なし）
+
+- [ ] **天気ウィジェットCSSトランジションの確認** (PR#108レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/styles/components.css`
+  - 確認事項: `.weather-widget`とフェードクラスにトランジションが重複していないか
+  - 優先度: 低（動作に問題なし、意図した設計か確認）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

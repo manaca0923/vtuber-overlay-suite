@@ -471,6 +471,27 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/superchat/mod.rs`
   - 優先度: 低（高額スパチャ複数時以外は問題なし）
 
+- [ ] **スパチャキュー上限の追加** (PR#104)
+  - 現在: `superchat-card.js`の`queue`配列に上限がない
+  - 問題: 短時間に大量のスパチャが来た場合にメモリを圧迫する可能性
+  - 対応: 100件程度の上限を設けて古いものからドロップする
+  - 対象ファイル: `src-tauri/overlays/components/superchat-card.js`
+  - 優先度: 低（極端なケースのみ）
+
+- [ ] **スパチャコンポーネントのデバッグログ整理** (PR#104)
+  - 現在: 開発用の`console.log`がそのまま残っている
+  - 対応: 本番リリース前に`LOG_LEVEL`設定導入または削除
+  - 対象ファイル: `src-tauri/overlays/components/superchat-card.js`
+  - 優先度: 低（デバッグログ共通対応時に検討）
+
+- [ ] **displayDurationSecとTier別表示時間の整合性** (PR#104)
+  - 現在: フロントエンドで`displayDurationSec`を設定できるが、バックエンドはTierベースの固定値
+  - 説明: 設定UIの`displayDurationSec`はプレビュー用にのみ使用される
+  - 対応案A: 設定UIに「※実際の表示時間はTierに応じて自動設定されます」の注記を追加
+  - 対応案B: 将来的に設定で上書き可能にする（WebSocket経由で設定を受け取る）
+  - 対象ファイル: `src/components/settings/SuperchatSettingsPanel.tsx`
+  - 優先度: 低（UIのみの改善）
+
 - [ ] **レイアウト比率の合計チェックUI** (PR#51)
   - 現在: レイアウト比率の合計が1.0から離れている場合はwarningログのみ
   - 対応: 将来的にユーザーへのフィードバックとして合計値を表示することを検討

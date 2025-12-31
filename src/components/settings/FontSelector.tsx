@@ -7,6 +7,33 @@ interface FontSelectorProps {
   onChange: (settings: ThemeSettings) => void;
 }
 
+// Google Fontsの読み込み済みフラグ（重複読み込み防止）
+const loadedGoogleFonts = new Set<string>();
+
+/**
+ * Google Fontsを動的に読み込む
+ * @param fontSpec フォント指定（例: 'Noto+Sans+JP:wght@400;500;700'）
+ */
+function loadGoogleFont(fontSpec: string): void {
+  if (!fontSpec || loadedGoogleFonts.has(fontSpec)) return;
+
+  const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontSpec)}&display=swap`;
+
+  // セキュリティチェック
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'fonts.googleapis.com') return;
+  } catch {
+    return;
+  }
+
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = url;
+  document.head.appendChild(link);
+  loadedGoogleFonts.add(fontSpec);
+}
+
 /**
  * フォント設定コンポーネント
  * - プリセット選択（Noto Sans JP, M PLUS 1, 游ゴシック, メイリオ）
@@ -46,6 +73,14 @@ export function FontSelector({ themeSettings, onChange }: FontSelectorProps) {
       loadSystemFonts();
     }
   }, [themeSettings.fontPreset, loadSystemFonts]);
+
+  // Google Fontsを読み込む（プリセット変更時）
+  useEffect(() => {
+    const preset = FONT_PRESETS[themeSettings.fontPreset];
+    if (preset?.googleFont) {
+      loadGoogleFont(preset.googleFont);
+    }
+  }, [themeSettings.fontPreset]);
 
   // フォントプリセット変更ハンドラ
   const handlePresetChange = (preset: FontPresetName) => {

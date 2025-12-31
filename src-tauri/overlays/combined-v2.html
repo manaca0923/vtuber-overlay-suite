@@ -214,8 +214,10 @@
 
     // issues/013: 防御的プログラミング - テーマ設定適用
     function applyThemeSettings(themeSettings) {
+      console.log('[Theme] applyThemeSettings called:', themeSettings);
+
       if (!themeSettings || typeof themeSettings !== 'object' || Array.isArray(themeSettings)) {
-        if (DEBUG) console.warn('[Theme] Invalid themeSettings, skipping');
+        console.warn('[Theme] Invalid themeSettings, skipping');
         return;
       }
 
@@ -224,14 +226,22 @@
       // グローバルカラー
       if (themeSettings.globalPrimaryColor && isValidHexColor(themeSettings.globalPrimaryColor)) {
         root.style.setProperty('--primary-color', themeSettings.globalPrimaryColor);
+        console.log('[Theme] Set --primary-color:', themeSettings.globalPrimaryColor);
+      } else {
+        console.warn('[Theme] Invalid globalPrimaryColor:', themeSettings.globalPrimaryColor);
       }
 
       // ウィジェット個別カラー
       const overrides = themeSettings.widgetColorOverrides || {};
+      console.log('[Theme] widgetColorOverrides:', overrides);
+
       WIDGET_IDS.forEach(id => {
         const color = overrides[id] || themeSettings.globalPrimaryColor;
         if (color && isValidHexColor(color)) {
           root.style.setProperty(`--widget-${id}-color`, color);
+          console.log(`[Theme] Set --widget-${id}-color:`, color);
+        } else {
+          console.warn(`[Theme] Invalid color for widget ${id}:`, color);
         }
       });
 
@@ -407,8 +417,11 @@
       }
 
       // テーマ設定（カラー・フォント統合）
+      console.log('[Settings] themeSettings in applySettingsUpdate:', settings.themeSettings);
       if (settings.themeSettings) {
         applyThemeSettings(settings.themeSettings);
+      } else {
+        console.warn('[Settings] themeSettings is missing or falsy');
       }
     }
 

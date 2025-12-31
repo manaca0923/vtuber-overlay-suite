@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::server::types::{
-    CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, WeatherSettings,
-    WidgetVisibilitySettings, WsMessage,
+    CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, SuperchatSettings,
+    WeatherSettings, WidgetVisibilitySettings, WsMessage,
 };
 use crate::AppState;
 
@@ -74,6 +74,8 @@ pub struct OverlaySettings {
     pub weather: Option<WeatherSettings>,
     #[serde(default)]
     pub widget: Option<WidgetVisibilitySettings>,
+    #[serde(default)]
+    pub superchat: Option<SuperchatSettings>,
 }
 
 /// オーバーレイ設定を保存
@@ -150,6 +152,7 @@ pub async fn broadcast_settings_update(
         setlist: settings.setlist,
         weather: settings.weather,
         widget: settings.widget,
+        superchat: settings.superchat,
     };
 
     let server_state = state.server.read().await;

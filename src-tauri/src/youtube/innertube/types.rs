@@ -270,6 +270,44 @@ pub struct AuthorBadge {
     pub live_chat_author_badge_renderer: Option<BadgeRenderer>,
 }
 
+// ============================================================
+// InnerTube Player API 型定義（視聴者数取得用）
+// ============================================================
+
+/// InnerTube Player APIレスポンス
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InnerTubePlayerResponse {
+    pub video_details: Option<VideoDetails>,
+}
+
+/// 動画詳細情報
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoDetails {
+    pub video_id: String,
+    pub title: Option<String>,
+    pub length_seconds: Option<String>,
+    pub channel_id: Option<String>,
+    pub short_description: Option<String>,
+    pub view_count: Option<String>,
+    pub author: Option<String>,
+    pub is_live_content: Option<bool>,
+    pub is_live: Option<bool>,
+}
+
+impl VideoDetails {
+    /// 視聴回数を数値として取得
+    pub fn get_view_count(&self) -> Option<u64> {
+        self.view_count.as_ref()?.parse().ok()
+    }
+
+    /// ライブ配信中かどうか
+    pub fn is_currently_live(&self) -> bool {
+        self.is_live.unwrap_or(false)
+    }
+}
+
 /// バッジレンダラー
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

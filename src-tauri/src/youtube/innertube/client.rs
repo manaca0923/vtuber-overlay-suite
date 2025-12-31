@@ -5,10 +5,11 @@ use reqwest::Client;
 use serde_json::json;
 use std::sync::OnceLock;
 
-use super::types::{ContinuationType, InnerTubeChatResponse};
+use super::types::{ContinuationType, InnerTubeChatResponse, InnerTubePlayerResponse, VideoDetails};
 use crate::youtube::errors::YouTubeError;
 
 const INNERTUBE_API_URL: &str = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
+const INNERTUBE_PLAYER_URL: &str = "https://www.youtube.com/youtubei/v1/player";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /// InnerTubeクライアントバージョン（フォールバック用）
@@ -393,6 +394,72 @@ impl InnerTubeClient {
                 }
             },
             "continuation": continuation
+        })
+    }
+
+    /// 動画情報を取得（視聴者数を含む）
+    ///
+    /// InnerTube `/player` エンドポイントを使用して動画の詳細情報を取得。
+    /// APIキー不要で視聴回数などの統計情報にアクセス可能。
+    ///
+    /// # Returns
+    /// - `VideoDetails` - 動画の詳細情報（視聴回数、タイトル等）
+    pub async fn get_video_details(&self) -> Result<VideoDetails, YouTubeError> {
+        let request_body = self.build_player_request_body();
+
+        // URLにAPI keyを追加（あれば）
+        let url = if let Some(api_key) = &self.api_key {
+            format!("{}?key={}", INNERTUBE_PLAYER_URL, api_key)
+        } else {
+            INNERTUBE_PLAYER_URL.to_string()
+        };
+
+        log::debug!("Fetching video details from InnerTube Player API");
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Origin", "https://www.youtube.com")
+            .header("Referer", format!("https://www.youtube.com/watch?v={}", self.video_id))
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| YouTubeError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            log::error!("InnerTube Player API error: {} - {}", status, body);
+            return Err(YouTubeError::ApiError(format!(
+                "InnerTube Player API error: {}",
+                status
+            )));
+        }
+
+        let data: InnerTubePlayerResponse = response
+            .json()
+            .await
+            .map_err(|e| YouTubeError::ParseError(format!("InnerTube Player parse error: {}", e)))?;
+
+        data.video_details.ok_or_else(|| {
+            YouTubeError::ParseError("video_details not found in response".to_string())
+        })
+    }
+
+    /// Player APIリクエストボディを構築
+    fn build_player_request_body(&self) -> serde_json::Value {
+        json!({
+            "context": {
+                "client": {
+                    "clientName": "WEB",
+                    "clientVersion": &self.client_version,
+                    "hl": "ja",
+                    "gl": "JP",
+                    "timeZone": "Asia/Tokyo"
+                }
+            },
+            "videoId": &self.video_id
         })
     }
 

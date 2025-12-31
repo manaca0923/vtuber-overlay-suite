@@ -1355,3 +1355,59 @@ pub async fn fetch_and_broadcast_viewer_count(
     Ok(())
 }
 
+/// InnerTube APIで視聴者数を取得してブロードキャスト
+///
+/// YouTube Data APIを使用せずに、InnerTube（内部API）で視聴情報を取得。
+/// APIキー不要のため、InnerTubeモードでの視聴者数表示に使用。
+///
+/// 注意: InnerTube APIで取得できるのは総視聴回数（viewCount）であり、
+/// ライブ配信の同時接続者数（concurrentViewers）とは異なる可能性があります。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn fetch_viewer_count_innertube(
+    video_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    log::debug!(
+        "Fetching viewer count via InnerTube: video_id={}",
+        video_id
+    );
+
+    // InnerTubeクライアントを作成して動画情報を取得
+    let client = innertube::InnerTubeClient::new(video_id.clone())
+        .map_err(|e| format!("Failed to create InnerTube client: {}", e))?;
+
+    let video_details = client
+        .get_video_details()
+        .await
+        .map_err(|e| format!("Failed to get video details: {}", e))?;
+
+    // viewCountを取得
+    let view_count = video_details.get_view_count();
+    let is_live = video_details.is_currently_live();
+
+    log::debug!(
+        "InnerTube video details: view_count={:?}, is_live={}, title={:?}",
+        view_count,
+        is_live,
+        video_details.title
+    );
+
+    // KpiUpdatePayloadに変換
+    // ライブ配信中の場合、viewCountは同時接続者数を表す可能性がある
+    let payload = KpiUpdatePayload {
+        main: view_count.map(|v| v as i64),
+        label: Some(if is_live { "視聴者" } else { "再生回数" }.to_string()),
+        sub: None, // InnerTubeでは高評価数は取得できない
+        sub_label: None,
+    };
+
+    // ブロードキャスト
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
+        .await;
+
+    log::debug!("InnerTube viewer count broadcasted");
+    Ok(())
+}
+

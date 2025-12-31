@@ -126,28 +126,34 @@ export function CommentControlPanel({
   }, [isPolling]);
 
   // ポーリング中は30秒ごとに視聴者数・高評価数を取得してブロードキャスト
-  // InnerTubeモードではAPIキー不要のためスキップ
+  // InnerTubeモードでは専用のコマンドを使用（APIキー不要）
   useEffect(() => {
     if (!isPolling || !videoId) return;
-    // InnerTubeモードではYouTube Data APIを使用しないためスキップ
-    if (apiMode === 'innertube') return;
 
     // 初回は即座に取得
     const fetchViewerCount = async () => {
       try {
-        await invoke('fetch_and_broadcast_viewer_count', {
-          video_id: videoId,
-          use_bundled_key: useBundledKey,
-        });
+        if (apiMode === 'innertube') {
+          // InnerTubeモード: APIキー不要の専用コマンドを使用
+          await invoke('fetch_viewer_count_innertube', {
+            video_id: videoId,
+          });
+        } else {
+          // YouTube Data APIモード: APIキーを使用
+          await invoke('fetch_and_broadcast_viewer_count', {
+            video_id: videoId,
+            use_bundled_key: useBundledKey,
+          });
+        }
       } catch (err) {
         console.warn('Failed to fetch viewer count:', err);
-        // 取得失敗はログのみ（KPI表示は必須機能ではない）
+        // 取得失敗はログのみ（視聴者数表示は必須機能ではない）
       }
     };
 
     fetchViewerCount();
 
-    // 30秒ごとに定期取得（クォータ節約とリアルタイム性のバランス）
+    // 30秒ごとに定期取得（リアルタイム性とパフォーマンスのバランス）
     const VIEWER_COUNT_INTERVAL_MS = 30_000;
     const intervalId = setInterval(fetchViewerCount, VIEWER_COUNT_INTERVAL_MS);
 

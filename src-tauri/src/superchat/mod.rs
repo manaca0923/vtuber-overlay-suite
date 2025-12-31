@@ -58,12 +58,18 @@ fn micros_to_amount(micros: u64) -> f64 {
 }
 
 /// 通貨コードから為替レートを取得
+///
+/// ## 未対応通貨の挙動
+/// 未対応通貨（INR, BRL等）は1.0（等価）として処理される。
+/// これは意図的な設計で、未対応通貨でもTier判定が破綻しないようにするため。
+/// 例: INR 500 → 500円相当としてTier 3扱い
+/// 実際のレートと異なる場合があるが、スパチャ表示機能としては許容範囲。
 fn get_exchange_rate(currency: &str) -> f64 {
     EXCHANGE_RATES
         .iter()
         .find(|(c, _)| *c == currency)
         .map(|(_, rate)| *rate)
-        .unwrap_or(1.0) // 不明な通貨はそのまま
+        .unwrap_or(1.0) // 未対応通貨は等価として処理（意図的な設計）
 }
 
 /// 金額（マイクロ単位）と通貨から日本円換算額を計算
@@ -221,6 +227,23 @@ mod tests {
 
         // ユーロ（欧州形式）
         assert_eq!(parse_amount_micros("€5,00"), 5_000_000);
+
+        // 欧州形式（千単位区切りあり）
+        assert_eq!(parse_amount_micros("€1.000,50"), 1_000_500_000);
+        assert_eq!(parse_amount_micros("€10.000,00"), 10_000_000_000);
+
+        // オーストラリアドル（複数記号）
+        assert_eq!(parse_amount_micros("A$100.00"), 100_000_000);
+    }
+
+    #[test]
+    fn test_parse_amount_micros_edge_cases() {
+        // 空文字列や記号のみの場合は0（Tier 1扱い）
+        assert_eq!(parse_amount_micros(""), 0);
+        assert_eq!(parse_amount_micros("¥"), 0);
+        assert_eq!(parse_amount_micros("$"), 0);
+        assert_eq!(parse_amount_micros("€"), 0);
+        assert_eq!(parse_amount_micros("   "), 0);
     }
 
     #[test]

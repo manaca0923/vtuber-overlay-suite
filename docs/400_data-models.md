@@ -272,8 +272,83 @@ export interface SetlistSettings {
   position: 'top' | 'bottom' | 'left' | 'right';
 }
 
-export type ThemeName = 'default' | 'sakura' | 'ocean' | 'custom';
+// テーマ名（issues/016対応: white追加、defaultはpurpleに変更）
+export type ThemeName = 'white' | 'purple' | 'sakura' | 'ocean' | 'custom';
 export type Position = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+// テーマプリセット定数（issues/020: マジックナンバー定数化）
+export const THEME_PRESETS = {
+  white: { name: 'ホワイト', primaryColor: '#ffffff', description: 'シンプルな白ベース' },
+  purple: { name: 'パープル', primaryColor: '#6366f1', description: 'パープル系の落ち着いたデザイン' },
+  sakura: { name: 'Sakura', primaryColor: '#ec4899', description: 'ピンク系の可愛らしいデザイン' },
+  ocean: { name: 'Ocean', primaryColor: '#0ea5e9', description: 'ブルー系の爽やかなデザイン' },
+} as const;
+
+// ウィジェットID定数（issues/020: マジックナンバー定数化）
+export const WIDGET_IDS = ['clock', 'weather', 'comment', 'superchat', 'logo', 'setlist', 'kpi', 'tanzaku', 'announcement'] as const;
+export type WidgetId = typeof WIDGET_IDS[number];
+
+// カスタムカラー型（最大3件保存）
+export interface CustomColorEntry {
+  id: string;      // UUID
+  name: string;    // ユーザー設定の名前
+  color: string;   // HEXカラーコード
+}
+
+// ウィジェット個別カラー設定
+export type WidgetColorOverrides = Partial<Record<WidgetId, string>>;
+
+// フォントプリセット
+export type FontPresetName = 'noto-sans-jp' | 'm-plus-1' | 'yu-gothic' | 'meiryo' | 'system';
+
+export const FONT_PRESETS: Record<FontPresetName, {
+  name: string;
+  fontFamily: string;
+  googleFont?: string;
+}> = {
+  'noto-sans-jp': {
+    name: 'Noto Sans JP',
+    fontFamily: "'Noto Sans JP', sans-serif",
+    googleFont: 'Noto+Sans+JP:wght@400;500;700'
+  },
+  'm-plus-1': {
+    name: 'M PLUS 1',
+    fontFamily: "'M PLUS 1', sans-serif",
+    googleFont: 'M+PLUS+1:wght@400;500;700'
+  },
+  'yu-gothic': {
+    name: '游ゴシック',
+    fontFamily: "'Yu Gothic', 'YuGothic', sans-serif",
+  },
+  'meiryo': {
+    name: 'メイリオ',
+    fontFamily: "'Meiryo', sans-serif",
+  },
+  'system': {
+    name: 'システムフォント',
+    fontFamily: '',  // customFontFamilyを使用
+  },
+};
+
+// テーマ設定統合型（issues/016対応）
+export interface ThemeSettings {
+  globalTheme: ThemeName;
+  globalPrimaryColor: string;
+  customColors: CustomColorEntry[];  // max 3
+  widgetColorOverrides: WidgetColorOverrides;
+  fontPreset: FontPresetName;
+  customFontFamily: string | null;  // system選択時
+}
+
+// デフォルトテーマ設定
+export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
+  globalTheme: 'white',
+  globalPrimaryColor: '#ffffff',
+  customColors: [],
+  widgetColorOverrides: {},
+  fontPreset: 'yu-gothic',
+  customFontFamily: null,
+};
 ```
 
 ### 楽曲

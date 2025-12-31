@@ -16,6 +16,8 @@
   font-weight: var(--dt-weight-heavy, 700);
   line-height: var(--dt-line-height-tight, 1.1);
   letter-spacing: 0.02em;
+  /* ウィジェット個別カラー適用 */
+  color: var(--widget-clock-color, var(--dt-text-primary));
 }
 
 .clock-date {
@@ -31,6 +33,8 @@
   align-items: center;
   gap: var(--dt-spacing-sm, 8px);
   padding: var(--dt-spacing-sm, 8px) var(--dt-spacing-md, 12px);
+  /* ウィジェット個別カラー適用 */
+  color: var(--widget-weather-color, var(--dt-text-primary));
 }
 
 .weather-icon {
@@ -51,6 +55,8 @@
   justify-content: center;
   align-items: center;
   padding: var(--dt-spacing-sm, 8px);
+  /* ウィジェット個別カラー適用 */
+  color: var(--widget-logo-color, var(--dt-text-primary));
 }
 
 .brand-logo {
@@ -101,6 +107,8 @@
   font-size: var(--dt-font-kpi-main, 64px);
   font-weight: var(--dt-weight-heavy, 700);
   line-height: var(--dt-line-height-tight, 1.1);
+  /* ウィジェット個別カラー適用 */
+  color: var(--widget-kpi-color, var(--dt-text-primary));
 }
 
 .kpi-label {
@@ -128,6 +136,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* ウィジェット個別カラー適用（announcement） */
+  color: var(--widget-announcement-color, var(--dt-text-primary));
 }
 
 .promo-content {
@@ -153,6 +163,8 @@
 /* ===== QueueList ===== */
 .queue-list {
   padding: var(--dt-spacing-sm, 8px) var(--dt-spacing-md, 12px);
+  /* ウィジェット個別カラー適用（tanzaku） */
+  color: var(--widget-tanzaku-color, var(--dt-text-primary));
 }
 
 .queue-title {

@@ -178,6 +178,7 @@ pub fn run() {
           commands::weather::broadcast_weather_update,
           commands::weather::clear_weather_cache,
           commands::weather::get_weather_cache_ttl,
+          commands::system::get_system_fonts,
         ]
       }
       // リリースビルドではtest_innertube_connectionを除外
@@ -245,6 +246,7 @@ pub fn run() {
           commands::weather::broadcast_weather_update,
           commands::weather::clear_weather_cache,
           commands::weather::get_weather_cache_ttl,
+          commands::system::get_system_fonts,
         ]
       }
     })

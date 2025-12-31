@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::server::types::{
     CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, SuperchatSettings,
-    WeatherSettings, WidgetVisibilitySettings, WsMessage,
+    ThemeSettings, WeatherSettings, WidgetVisibilitySettings, WsMessage,
 };
 use crate::AppState;
 
@@ -92,6 +92,9 @@ pub struct OverlaySettings {
     pub widget: Option<WidgetVisibilitySettings>,
     #[serde(default)]
     pub superchat: Option<SuperchatSettings>,
+    /// テーマ設定（カラー・フォント統合）
+    #[serde(default)]
+    pub theme_settings: Option<ThemeSettings>,
 }
 
 /// オーバーレイ設定を保存
@@ -169,6 +172,7 @@ pub async fn broadcast_settings_update(
         weather: settings.weather,
         widget: settings.widget,
         superchat: settings.superchat,
+        theme_settings: settings.theme_settings,
     };
 
     let server_state = state.server.read().await;

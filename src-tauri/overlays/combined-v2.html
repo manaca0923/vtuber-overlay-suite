@@ -167,6 +167,101 @@
       setlist: true, kpi: true, tanzaku: true, announcement: true
     };
 
+    // ウィジェットID定数（issues/020: マジックナンバー定数化）
+    const WIDGET_IDS = ['clock', 'weather', 'comment', 'superchat', 'logo', 'setlist', 'kpi', 'tanzaku', 'announcement'];
+
+    // Google Fonts読み込み済みフラグ（重複読み込み防止）
+    const loadedGoogleFonts = new Set();
+
+    // フォントプリセット定義（issues/020: マジックナンバー定数化）
+    const FONT_GOOGLE_MAP = {
+      'noto-sans-jp': 'Noto+Sans+JP:wght@400;500;700',
+      'm-plus-1': 'M+PLUS+1:wght@400;500;700',
+    };
+    const FONT_FAMILY_MAP = {
+      'noto-sans-jp': "'Noto Sans JP', sans-serif",
+      'm-plus-1': "'M PLUS 1', sans-serif",
+      'yu-gothic': "'Yu Gothic', 'YuGothic', sans-serif",
+      'meiryo': "'Meiryo', sans-serif",
+      'system': null, // customFontFamilyを使用
+    };
+
+    // issues/001: URLバリデーション（Google Fonts専用）
+    function validateGoogleFontsUrl(url) {
+      if (!url || typeof url !== 'string') return false;
+      try {
+        const parsed = new URL(url);
+        return parsed.hostname === 'fonts.googleapis.com';
+      } catch {
+        return false;
+      }
+    }
+
+    // Google Fonts動的読み込み
+    function loadGoogleFont(fontSpec) {
+      if (!fontSpec || loadedGoogleFonts.has(fontSpec)) return;
+
+      const url = `https://fonts.googleapis.com/css2?family=${fontSpec}&display=swap`;
+      if (!validateGoogleFontsUrl(url)) return;
+
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      document.head.appendChild(link);
+      loadedGoogleFonts.add(fontSpec);
+      if (DEBUG) console.log(`[Font] Loaded Google Font: ${fontSpec}`);
+    }
+
+    // issues/013: 防御的プログラミング - テーマ設定適用
+    function applyThemeSettings(themeSettings) {
+      if (!themeSettings || typeof themeSettings !== 'object' || Array.isArray(themeSettings)) {
+        if (DEBUG) console.warn('[Theme] Invalid themeSettings, skipping');
+        return;
+      }
+
+      const root = document.documentElement;
+
+      // グローバルカラー
+      if (themeSettings.globalPrimaryColor && isValidHexColor(themeSettings.globalPrimaryColor)) {
+        root.style.setProperty('--primary-color', themeSettings.globalPrimaryColor);
+      }
+
+      // ウィジェット個別カラー
+      const overrides = themeSettings.widgetColorOverrides || {};
+      WIDGET_IDS.forEach(id => {
+        const color = overrides[id] || themeSettings.globalPrimaryColor;
+        if (color && isValidHexColor(color)) {
+          root.style.setProperty(`--widget-${id}-color`, color);
+        }
+      });
+
+      // フォント設定
+      applyFontSettings(themeSettings);
+    }
+
+    // フォント設定適用
+    function applyFontSettings(themeSettings) {
+      if (!themeSettings || typeof themeSettings !== 'object') return;
+
+      const root = document.documentElement;
+      const fontPreset = themeSettings.fontPreset || 'yu-gothic';
+
+      // Google Fonts読み込み
+      if (FONT_GOOGLE_MAP[fontPreset]) {
+        loadGoogleFont(FONT_GOOGLE_MAP[fontPreset]);
+      }
+
+      // フォントファミリー適用
+      let fontFamily = FONT_FAMILY_MAP[fontPreset];
+      if (fontPreset === 'system' && themeSettings.customFontFamily) {
+        fontFamily = sanitizeFontFamily(themeSettings.customFontFamily);
+      }
+
+      if (fontFamily) {
+        root.style.setProperty('--font-family', fontFamily);
+      }
+    }
+
     // パフォーマンス最適化（T24）: バッチ更新と過密検出
     // letを使用: bfcache復元時に再初期化するため
     let updateBatcher = new UpdateBatcher({ batchInterval: 150 });
@@ -309,6 +404,11 @@
       // スパチャ設定
       if (settings.superchat) {
         applySuperchatSettings(settings.superchat);
+      }
+
+      // テーマ設定（カラー・フォント統合）
+      if (settings.themeSettings) {
+        applyThemeSettings(settings.themeSettings);
       }
     }
 

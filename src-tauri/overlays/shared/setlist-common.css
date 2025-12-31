@@ -19,7 +19,7 @@
 }
 
 .setlist-item.current .song-title {
-  color: var(--primary-color);
+  color: var(--widget-setlist-color, var(--primary-color));
 }
 
 .song-number {
@@ -27,7 +27,7 @@
   font-weight: bold;
   min-width: 24px;
   text-align: center;
-  color: var(--primary-color);
+  color: var(--widget-setlist-color, var(--primary-color));
 }
 
 .song-info {
@@ -55,5 +55,5 @@
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--primary-color);
+  background: var(--widget-setlist-color, var(--primary-color));
 }

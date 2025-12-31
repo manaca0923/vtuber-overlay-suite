@@ -348,6 +348,23 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - メンテナンス性向上のため
   - 優先度: 低（任意の改善提案）
 
+- [ ] **SuperchatSettingsのDefault trait実装** (PR#105レビューで提案)
+  - 対象ファイル: `src-tauri/src/server/types.rs`
+  - 実装例:
+    ```rust
+    impl Default for SuperchatSettings {
+        fn default() -> Self {
+            Self {
+                max_display: 1,
+                display_duration_sec: 60,
+                queue_enabled: true,
+            }
+        }
+    }
+    ```
+  - 将来的にデフォルト値が必要になった場合に備えて
+  - 優先度: 低（現時点では全フィールドがオプショナル）
+
 - [ ] **commentEnabled/setlistEnabledとwidget設定の統合検討** (PR#102レビューで提案)
   - 対象ファイル: `src-tauri/overlays/combined-v2.html`
   - 現状: 2つの異なる仕組みが同じスロット（left.middle, right.upper）を制御

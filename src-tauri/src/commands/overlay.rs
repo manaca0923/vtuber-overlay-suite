@@ -48,6 +48,22 @@ fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
         ));
     }
 
+    // スパチャ設定の検証
+    if let Some(ref superchat) = settings.superchat {
+        if superchat.max_display < 1 || superchat.max_display > 3 {
+            return Err(format!(
+                "Invalid superchat maxDisplay: {}. Expected 1-3.",
+                superchat.max_display
+            ));
+        }
+        if superchat.display_duration_sec < 10 || superchat.display_duration_sec > 120 {
+            return Err(format!(
+                "Invalid superchat displayDurationSec: {}. Expected 10-120.",
+                superchat.display_duration_sec
+            ));
+        }
+    }
+
     Ok(())
 }
 

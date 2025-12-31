@@ -179,6 +179,105 @@ iframeRef.current.contentWindow.postMessage(message, PREVIEW_ORIGIN);
 
 ---
 
+## 6. 深層防御（フロントエンド・バックエンド両方でのバリデーション）
+
+### 指摘内容 (PR#106)
+フロントエンドでバリデーションしていても、バックエンドでもバリデーションが必要。
+
+### 解決方法
+
+**フロントエンド側（TypeScript）**
+```typescript
+// FontSelector.tsx
+function sanitizeFontFamily(fontFamily: string | null | undefined): string | null {
+  if (typeof fontFamily !== 'string' || fontFamily.length === 0 || fontFamily.length > 200) {
+    return null;
+  }
+  // 危険な文字を除去
+  return fontFamily.replace(/[<>"'`;{}]/g, '');
+}
+```
+
+**バックエンド側（Rust）**
+```rust
+// system.rs - システムフォント取得時のフィルタリング
+const MAX_FONT_NAME_LENGTH: usize = 200;
+
+let mut fonts: Vec<String> = families
+    .into_iter()
+    .filter(|name| {
+        !name.is_empty()
+            && name.len() <= MAX_FONT_NAME_LENGTH
+            && !name.chars().any(|c| c.is_control())
+    })
+    .collect();
+```
+
+**バックエンド検証（Rust）**
+```rust
+// overlay.rs - 設定保存時の検証
+fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
+    if let Some(ref theme) = settings.theme_settings {
+        // カスタムカラーの上限チェック（最大3件）
+        const MAX_CUSTOM_COLORS: usize = 3;
+        if theme.custom_colors.len() > MAX_CUSTOM_COLORS {
+            return Err(format!("Too many custom colors: {}. Maximum is {}.",
+                theme.custom_colors.len(), MAX_CUSTOM_COLORS));
+        }
+
+        // グローバルプライマリカラーの検証
+        if !is_valid_hex_color(&theme.global_primary_color) {
+            return Err(format!("Invalid globalPrimaryColor: {}.",
+                theme.global_primary_color));
+        }
+    }
+    Ok(())
+}
+```
+
+### 今後の対策
+- フロントエンドでバリデーションしていても、バックエンドでも必ず検証
+- 「深層防御」の原則: 複数レイヤーでセキュリティ対策
+- 定数（上限値など）はフロントエンド・バックエンド両方で定義
+
+---
+
+## 7. Google Fonts URLのバリデーション
+
+### 指摘内容 (PR#106)
+Google Fontsを動的に読み込む際、URLのホスト名を検証する必要がある。
+
+### 解決方法
+```typescript
+// FontSelector.tsx / combined-v2.html
+function loadGoogleFont(fontSpec: string): void {
+  if (!fontSpec || loadedGoogleFonts.has(fontSpec)) return;
+
+  const url = `https://fonts.googleapis.com/css2?family=${fontSpec}&display=swap`;
+
+  // セキュリティチェック: ホスト名を検証
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'fonts.googleapis.com') return;
+  } catch {
+    return;
+  }
+
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = url;
+  document.head.appendChild(link);
+  loadedGoogleFonts.add(fontSpec);
+}
+```
+
+### 今後の対策
+- 外部リソース読み込み時はホスト名を検証
+- 許可するドメインをホワイトリストで管理
+- 重複読み込み防止のためSetで管理
+
+---
+
 ## チェックリスト（オーバーレイ実装時）
 
 - [ ] URLパラメータはバリデーション済みか
@@ -188,3 +287,6 @@ iframeRef.current.contentWindow.postMessage(message, PREVIEW_ORIGIN);
 - [ ] `textContent`と`innerHTML`の使い分けは正しいか
 - [ ] `escapeHtml`は必要な箇所のみで使用しているか
 - [ ] `postMessage`のtargetOriginは明示されているか
+- [ ] フロントエンド・バックエンド両方でバリデーションしているか（深層防御）
+- [ ] カスタム値の上限はバックエンドでも検証しているか
+- [ ] 外部リソース（Google Fonts等）のURLホスト名を検証しているか

@@ -66,6 +66,8 @@ interface CommentControlPanelProps {
   apiKey: string;
   videoId: string;
   liveChatId: string;
+  isPolling: boolean;
+  setIsPolling: React.Dispatch<React.SetStateAction<boolean>>;
   onSettingsChange?: (settings: { videoId: string; liveChatId: string }) => void;
 }
 
@@ -73,9 +75,13 @@ export function CommentControlPanel({
   apiKey,
   videoId,
   liveChatId,
+  isPolling,
+  setIsPolling,
   onSettingsChange,
 }: CommentControlPanelProps) {
-  const [isPolling, setIsPolling] = useState(false);
+  // isPollingは親コンポーネント（App.tsx）から受け取る
+  // これによりタブ切り替え時も状態が維持される
+
   const [pollingState, setPollingState] = useState<PollingState | null>(null);
   // NOTE: savedState は「続きから開始」ボタン用（現在統合ポーラー未サポートのためUI非表示）
   // 将来的に保存状態復元機能を実装する際に復活させる
@@ -104,39 +110,29 @@ export function CommentControlPanel({
     };
   }, []);
 
-  // 初期設定を読み込み（APIモード、useBundledKey、ポーリング状態）
+  // isPollingが変化したらconnectionStatusを同期
+  useEffect(() => {
+    if (isPolling) {
+      setConnectionStatus('connected');
+      // ポーリング中のAPIモードを取得
+      invoke<ApiMode | null>('get_unified_polling_mode')
+        .then((mode) => {
+          if (isMountedRef.current && mode) {
+            setApiMode(mode);
+          }
+        })
+        .catch((err) => console.error('Failed to get unified polling mode:', err));
+    }
+  }, [isPolling]);
+
+  // 初期設定を読み込み（APIモード、useBundledKey）
   useEffect(() => {
     async function loadInitialSettings() {
-      // ポーリング状態を読み込み（タブ切り替え対応）
-      try {
-        const running = await invoke<boolean>('is_unified_polling_running');
-        if (isMountedRef.current && running) {
-          setIsPolling(true);
-          setConnectionStatus('connected');
-          // 現在のAPIモードも取得
-          const currentMode = await invoke<ApiMode | null>('get_unified_polling_mode');
-          if (isMountedRef.current && currentMode) {
-            setApiMode(currentMode);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to check polling status:', err);
-      }
-
       // APIモードを読み込み（ポーリング中でない場合のみ更新）
       try {
         const savedMode = await invoke<ApiMode>('load_api_mode');
-        if (isMountedRef.current) {
-          // ポーリング中の場合は現在のモードを維持
-          setApiMode((current) => {
-            // 既にポーリング中で設定されている場合は変更しない
-            return current;
-          });
-          // ポーリング中でなければ保存されたモードを使用
-          const running = await invoke<boolean>('is_unified_polling_running');
-          if (!running && isMountedRef.current) {
-            setApiMode(savedMode);
-          }
+        if (isMountedRef.current && !isPolling) {
+          setApiMode(savedMode);
         }
       } catch (err) {
         console.error('Failed to load API mode:', err);
@@ -306,26 +302,8 @@ export function CommentControlPanel({
     };
   }, [liveChatId]);
 
-  // 現在のポーリング状態を確認
-  useEffect(() => {
-    async function checkPollingStatus() {
-      try {
-        const running = await invoke<boolean>('is_polling_running');
-        if (isMountedRef.current) {
-          setIsPolling(running);
-        }
-        if (running) {
-          const state = await invoke<PollingState | null>('get_polling_state');
-          if (isMountedRef.current && state) {
-            setPollingState(state);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to check polling status:', err);
-      }
-    }
-    checkPollingStatus();
-  }, []);
+  // NOTE: ポーリング状態はApp.tsxで管理（is_unified_polling_running）
+  // 以下の古いuseEffectは削除：is_polling_running（旧API）を使用していたためバグの原因だった
 
   // 保存されたポーリング状態を読み込む（有効期限チェック付き）
   useEffect(() => {

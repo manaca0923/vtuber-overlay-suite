@@ -508,6 +508,20 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 確認事項: `.weather-widget`とフェードクラスにトランジションが重複していないか
   - 優先度: 低（動作に問題なし、意図した設計か確認）
 
+- [ ] **InnerTubeクライアントの再作成コスト最適化** (PR#109レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/youtube.rs:1378-1380`
+  - 現在: `fetch_viewer_count_innertube`で毎回`InnerTubeClient::new()`を呼び出し
+  - 問題: 30秒ごとに新しいクライアントを作成し、コネクションプールの再利用ができない
+  - 改善案: 既存のポーリングで使用している`InnerTubeClient`を再利用するか、`AppState`にキャッシュ
+  - 優先度: 低（現状でも動作上の問題なし、パフォーマンス最適化として）
+
+- [ ] **InnerTubeモードの制限についてのUIフィードバック** (PR#109レビューで提案)
+  - 対象ファイル: `src/components/settings/` (設定画面)
+  - 現在: InnerTubeモードでは高評価数が取得できない（`sub: None`）
+  - 問題: ユーザーがなぜ高評価数が表示されないのか分からない
+  - 改善案: 設定画面やウィジェット表示でInnerTubeモードの制限事項を表示
+  - 優先度: 低（UX改善のみ）
+
 ### テスト（推奨）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

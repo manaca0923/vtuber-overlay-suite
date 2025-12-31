@@ -414,7 +414,8 @@ impl InnerTubeClient {
             INNERTUBE_PLAYER_URL.to_string()
         };
 
-        log::debug!("Fetching video details from InnerTube Player API");
+        // 定期呼び出し（30秒ごと）のためtraceレベル
+        log::trace!("Fetching video details from InnerTube Player API");
 
         let response = self
             .client

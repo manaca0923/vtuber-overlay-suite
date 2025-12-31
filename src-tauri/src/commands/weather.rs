@@ -7,7 +7,9 @@
 
 use tauri::State;
 
-use crate::server::types::{WeatherUpdatePayload, WsMessage};
+use crate::server::types::{
+    CityWeatherData, WeatherMultiUpdatePayload, WeatherUpdatePayload, WsMessage,
+};
 use crate::weather::WeatherData;
 use crate::AppState;
 
@@ -149,4 +151,94 @@ pub async fn set_weather_city_and_broadcast(
         weather_data.temp
     );
     Ok(weather_data)
+}
+
+// =============================================================================
+// マルチシティモード用コマンド
+// =============================================================================
+
+/// 複数都市のマルチシティ天気データを取得
+///
+/// # Arguments
+/// * `cities` - 都市リスト [(id, name, displayName), ...]
+///
+/// # Returns
+/// 各都市の天気データ（失敗した都市は含まれない）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_weather_multi(
+    state: State<'_, AppState>,
+    cities: Vec<(String, String, String)>, // (id, name, displayName)
+) -> Result<Vec<CityWeatherData>, String> {
+    let city_pairs: Vec<(String, String)> = cities
+        .iter()
+        .map(|(id, name, _)| (id.clone(), name.clone()))
+        .collect();
+
+    let results = state.weather.get_weather_multi(&city_pairs).await;
+
+    // 成功した都市のみ返す（displayNameをマップから取得）
+    let display_name_map: std::collections::HashMap<String, String> = cities
+        .iter()
+        .map(|(id, _, display_name)| (id.clone(), display_name.clone()))
+        .collect();
+
+    let weather_data: Vec<CityWeatherData> = results
+        .into_iter()
+        .filter_map(|(id, _name, result)| {
+            result.ok().map(|data| {
+                let display_name = display_name_map.get(&id).cloned().unwrap_or(data.location.clone());
+                CityWeatherData {
+                    city_id: id,
+                    city_name: display_name,
+                    icon: data.icon,
+                    temp: data.temp,
+                    description: data.description,
+                    location: data.location,
+                    humidity: Some(data.humidity),
+                }
+            })
+        })
+        .collect();
+
+    log::info!(
+        "Multi-city weather fetched: {} cities succeeded",
+        weather_data.len()
+    );
+    Ok(weather_data)
+}
+
+/// 複数都市の天気をWebSocketでブロードキャスト
+///
+/// # Arguments
+/// * `cities` - 都市リスト [(id, name, displayName), ...]
+/// * `rotation_interval_sec` - ローテーション間隔（秒）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn broadcast_weather_multi(
+    state: State<'_, AppState>,
+    cities: Vec<(String, String, String)>, // (id, name, displayName)
+    rotation_interval_sec: u32,
+) -> Result<(), String> {
+    // 天気データを取得
+    let weather_data = get_weather_multi(state.clone(), cities).await?;
+
+    if weather_data.is_empty() {
+        return Err("No weather data available for any city".to_string());
+    }
+
+    // WebSocketでブロードキャスト
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(WsMessage::WeatherMultiUpdate {
+            payload: WeatherMultiUpdatePayload {
+                cities: weather_data,
+                rotation_interval_sec,
+            },
+        })
+        .await;
+
+    log::info!(
+        "Multi-city weather broadcasted (interval: {}s)",
+        rotation_interval_sec
+    );
+    Ok(())
 }

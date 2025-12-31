@@ -49,6 +49,19 @@
   opacity: 0.8;
 }
 
+/* 天気ウィジェット マルチシティモード フェードアニメーション */
+.weather-widget {
+  transition: opacity 0.2s ease-in-out;
+}
+
+.weather-fade-out {
+  opacity: 0;
+}
+
+.weather-fade-in {
+  opacity: 1;
+}
+
 /* ===== BrandBlock ===== */
 .brand-block {
   display: flex;

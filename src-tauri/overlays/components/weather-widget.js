@@ -7,7 +7,8 @@
  * バックエンド連携:
  *   - src-tauri/src/weather/mod.rs - Open-Meteo API連携
  *   - src-tauri/src/commands/weather.rs - Tauriコマンド
- *   - WebSocket: weather:update メッセージで更新
+ *   - WebSocket: weather:update メッセージで単一都市更新
+ *   - WebSocket: weather:multi-update メッセージでマルチシティ更新
  *
  * style設定:
  *   - icon: string (天気アイコン、デフォルト: '☀️')
@@ -20,6 +21,10 @@
  *   - temp: number
  *   - description: string
  *   - location: string
+ *
+ * updateMulti()で受け取るデータ:
+ *   - cities: CityWeatherData[]
+ *   - rotationIntervalSec: number
  */
 class WeatherWidget extends BaseComponent {
   constructor(config) {
@@ -29,6 +34,13 @@ class WeatherWidget extends BaseComponent {
     this.temp = this.style.temp ?? 25;
     this.description = this.style.description || '晴れ';
     this.location = this.style.location || '';
+
+    // マルチシティモード用
+    this.multiMode = false;
+    this.cities = [];
+    this.currentIndex = 0;
+    this.rotationInterval = 5000; // デフォルト5秒
+    this.rotationTimer = null;
   }
 
   render() {
@@ -66,8 +78,97 @@ class WeatherWidget extends BaseComponent {
     return container;
   }
 
+  /**
+   * 単一都市モードの更新
+   * weather:update WebSocketメッセージで呼び出される
+   */
   update(data) {
-    // weather:update WebSocketメッセージで呼び出される
+    // マルチシティモードを無効化
+    this._stopRotation();
+    this.multiMode = false;
+
+    this._updateDisplay(data);
+  }
+
+  /**
+   * マルチシティモードの更新
+   * weather:multi-update WebSocketメッセージで呼び出される
+   * @param {Object} data - { cities: CityWeatherData[], rotationIntervalSec: number }
+   */
+  updateMulti(data) {
+    this.cities = data.cities || [];
+    this.rotationInterval = (data.rotationIntervalSec || 5) * 1000;
+    this.multiMode = true;
+
+    // 既存のタイマーをクリア
+    this._stopRotation();
+
+    if (this.cities.length === 0) {
+      return;
+    }
+
+    // 最初の都市を表示
+    this.currentIndex = 0;
+    this._displayCity(this.cities[0]);
+
+    // ローテーション開始（2都市以上の場合）
+    if (this.cities.length > 1) {
+      this.rotationTimer = setInterval(() => {
+        this._rotateNext();
+      }, this.rotationInterval);
+    }
+  }
+
+  /**
+   * 次の都市にローテーション
+   */
+  _rotateNext() {
+    this.currentIndex = (this.currentIndex + 1) % this.cities.length;
+    const city = this.cities[this.currentIndex];
+    this._displayCityWithFade(city);
+  }
+
+  /**
+   * 都市の天気を表示（フェードアニメーション付き）
+   * @param {Object} cityData
+   */
+  _displayCityWithFade(cityData) {
+    // フェードアウト
+    this.container.classList.add('weather-fade-out');
+
+    setTimeout(() => {
+      // データ更新
+      this._displayCity(cityData);
+
+      // フェードイン
+      this.container.classList.remove('weather-fade-out');
+      this.container.classList.add('weather-fade-in');
+
+      // フェードインクラスを削除
+      setTimeout(() => {
+        this.container.classList.remove('weather-fade-in');
+      }, 300);
+    }, 200);
+  }
+
+  /**
+   * 都市の天気を即座に表示
+   * @param {Object} cityData
+   */
+  _displayCity(cityData) {
+    this._updateDisplay({
+      icon: cityData.icon,
+      temp: cityData.temp,
+      description: cityData.description,
+      location: cityData.cityName, // 表示名を使用
+    });
+  }
+
+  /**
+   * 表示を更新（共通処理）
+   * @param {Object} data
+   */
+  _updateDisplay(data) {
     if (data.icon !== undefined) {
       this.icon = data.icon;
       this.iconEl.textContent = data.icon;
@@ -86,6 +187,26 @@ class WeatherWidget extends BaseComponent {
       if (this.locationEl) {
         this.locationEl.textContent = this.location;
       }
+    }
+  }
+
+  /**
+   * ローテーションを停止
+   */
+  _stopRotation() {
+    if (this.rotationTimer) {
+      clearInterval(this.rotationTimer);
+      this.rotationTimer = null;
+    }
+  }
+
+  /**
+   * コンポーネント破棄時
+   */
+  destroy() {
+    this._stopRotation();
+    if (super.destroy) {
+      super.destroy();
     }
   }
 

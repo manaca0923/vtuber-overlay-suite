@@ -325,6 +325,7 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
         weather: Some(WeatherSettings {
             enabled: true,
             position: WeatherPosition::LeftTop,
+            multi_city: None,
         }),
         widget: Some(WidgetVisibilitySettings {
             clock: true,
@@ -397,12 +398,14 @@ async fn get_overlay_settings_api(
                             position: parse_weather_position(
                                 settings["weather"]["position"].as_str().unwrap_or("left-top")
                             ),
+                            multi_city: None, // マルチシティ設定は後で別途パース可能
                         })
                     } else {
                         // デフォルト値
                         Some(WeatherSettings {
                             enabled: true,
                             position: WeatherPosition::LeftTop,
+                            multi_city: None,
                         })
                     };
 

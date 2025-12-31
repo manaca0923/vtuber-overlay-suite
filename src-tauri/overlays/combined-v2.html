@@ -706,6 +706,15 @@
             // 右下エリア: right.lowerLeft, right.lowerRight, right.bottom のみが対象
             updateBatcher.queue('WeatherWidget', data.payload);
             break;
+          case 'weather:multi-update':
+            // マルチシティモード: 複数都市の天気をローテーション表示
+            {
+              const weatherWidget = ComponentRegistry.getInstance('left.topBelow');
+              if (weatherWidget && typeof weatherWidget.updateMulti === 'function') {
+                weatherWidget.updateMulti(data.payload);
+              }
+            }
+            break;
           case 'template:update':
             if (data.payload && data.payload.components) {
               ComponentRegistry.applyTemplate(data.payload.components);

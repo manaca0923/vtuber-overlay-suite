@@ -181,10 +181,57 @@ export interface SetlistSettings {
   fontSize: number;
 }
 
+// マルチシティ用都市エントリ
+export interface CityEntry {
+  id: string; // ユニークID
+  name: string; // API用都市名（英語）
+  displayName: string; // 表示用都市名（日本語）
+  enabled: boolean; // 有効/無効
+  order: number; // 並び順
+}
+
+// マルチシティ設定
+export interface MultiCitySettings {
+  enabled: boolean; // マルチシティモード有効
+  rotationIntervalSec: number; // ローテーション間隔（秒）
+  cities: CityEntry[]; // 都市リスト
+}
+
+// ローテーション間隔オプション
+export const ROTATION_INTERVAL_OPTIONS = [
+  { value: 3, label: '3秒' },
+  { value: 5, label: '5秒' },
+  { value: 10, label: '10秒' },
+  { value: 15, label: '15秒' },
+  { value: 30, label: '30秒' },
+] as const;
+
+// デフォルト都市リスト（北から南へ）
+export const DEFAULT_MULTI_CITIES: CityEntry[] = [
+  { id: 'sapporo', name: 'Sapporo', displayName: '札幌', enabled: true, order: 0 },
+  { id: 'sendai', name: 'Sendai', displayName: '仙台', enabled: true, order: 1 },
+  { id: 'tokyo', name: 'Tokyo', displayName: '東京', enabled: true, order: 2 },
+  { id: 'yokohama', name: 'Yokohama', displayName: '横浜', enabled: true, order: 3 },
+  { id: 'nagoya', name: 'Nagoya', displayName: '名古屋', enabled: true, order: 4 },
+  { id: 'osaka', name: 'Osaka', displayName: '大阪', enabled: true, order: 5 },
+  { id: 'hiroshima', name: 'Hiroshima', displayName: '広島', enabled: true, order: 6 },
+  { id: 'takamatsu', name: 'Takamatsu', displayName: '高松', enabled: true, order: 7 },
+  { id: 'fukuoka', name: 'Fukuoka', displayName: '福岡', enabled: true, order: 8 },
+  { id: 'naha', name: 'Naha', displayName: '那覇', enabled: true, order: 9 },
+];
+
+// デフォルトマルチシティ設定
+export const DEFAULT_MULTI_CITY_SETTINGS: MultiCitySettings = {
+  enabled: false,
+  rotationIntervalSec: 5,
+  cities: DEFAULT_MULTI_CITIES,
+};
+
 // 天気ウィジェット設定
 export interface WeatherSettings {
   enabled: boolean;
   position: WeatherPosition;
+  multiCity?: MultiCitySettings; // マルチシティモード設定（オプション）
 }
 
 // パフォーマンス設定

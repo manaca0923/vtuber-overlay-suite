@@ -54,6 +54,37 @@ if let Some(ref superchat) = settings.superchat {
 - 非同期関数の呼び出し結果は変数に保持して再利用すること
 - `setXxx((current) => current)`のような無意味な状態更新を書かないこと（不要なレンダリングの原因）
 
+### 4. useEffectの依存配列問題（対応済み）
+
+**問題**: `isPolling`を参照しているのに依存配列に含まれていない（eslint警告の可能性）。
+
+**解決策**: 意図的な設計のためコメントとeslint-disableを追加。
+
+```typescript
+// NOTE: このuseEffectは初回マウント時のみ実行する意図のため、依存配列は空のままにする。
+// isPollingはマウント時の初期値（親から受け取った値）を参照している。
+// マウント時にポーリング中であれば保存されたモードで上書きしない（現在のモードを維持）。
+// eslint-disable-next-line react-hooks/exhaustive-deps
+useEffect(() => {
+  // ...
+}, []);
+```
+
+**ノウハウ**:
+- 依存配列を意図的に空にする場合は必ずコメントで理由を明記する
+- `eslint-disable-next-line`を使用する場合は、なぜそれが正当なのかを説明する
+- propsを参照するが初回のみ使用したい場合は、useRefパターンも検討
+
+### 5. DEBUG定数の重複定義（後回し）
+
+**問題**: 複数のオーバーレイJSファイルで同じDEBUG定数が重複定義されている。
+
+**解決策**: 低優先度のため`docs/900_tasks.md`に追記。
+
+**ノウハウ**:
+- 共通の定数は可能な限り1箇所で定義してexportする
+- ただし、スタンドアロンで動作する必要があるファイルは例外
+
 ## 関連ファイル
 
 - `src-tauri/src/commands/overlay.rs` - バリデーション追加

@@ -126,6 +126,10 @@ export function CommentControlPanel({
   }, [isPolling]);
 
   // 初期設定を読み込み（APIモード、useBundledKey）
+  // NOTE: このuseEffectは初回マウント時のみ実行する意図のため、依存配列は空のままにする。
+  // isPollingはマウント時の初期値（親から受け取った値）を参照している。
+  // マウント時にポーリング中であれば保存されたモードで上書きしない（現在のモードを維持）。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     async function loadInitialSettings() {
       // APIモードを読み込み（ポーリング中でない場合のみ更新）

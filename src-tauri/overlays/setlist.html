@@ -195,6 +195,9 @@
   </div>
 
   <script>
+    // デバッグモード: URLパラメータ ?debug=true で有効化
+    const DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
     const WS_URL = 'ws://localhost:19801/ws';
     const API_BASE_URL = 'http://localhost:19800/api';
     let ws = null;
@@ -377,7 +380,7 @@
       // 既にリクエスト中の場合は再試行フラグを立ててスキップ
       if (fetchInFlight) {
         retryPending = true;
-        console.log('Settings fetch already in flight, will retry after');
+        if (DEBUG) console.log('Settings fetch already in flight, will retry after');
         return;
       }
       fetchInFlight = true;
@@ -400,11 +403,11 @@
 
           // レース条件チェック: リクエスト中にWSで設定が更新されていたらスキップ
           if (settingsVersion > requestVersion) {
-            console.log('Skipping HTTP settings (newer WS settings already applied)');
+            if (DEBUG) console.log('Skipping HTTP settings (newer WS settings already applied)');
             return;
           }
 
-          console.log('Fetched overlay settings:', settings);
+          if (DEBUG) console.log('Fetched overlay settings:', settings);
           applySettingsUpdate(settings);
           // URLパラメータを再適用（URL優先）
           applyUrlSettings();
@@ -412,16 +415,16 @@
         }
       } catch (e) {
         if (e.name === 'AbortError') {
-          console.log('Settings API timeout, using defaults');
+          if (DEBUG) console.log('Settings API timeout, using defaults');
         } else {
-          console.log('Settings API not available, using defaults');
+          if (DEBUG) console.log('Settings API not available, using defaults');
         }
       } finally {
         fetchInFlight = false;
         // 再試行が要求されていて、まだ設定取得が成功していない場合は再試行
         if (retryPending && !settingsFetchSucceeded) {
           retryPending = false;
-          console.log('Retrying settings fetch');
+          if (DEBUG) console.log('Retrying settings fetch');
           fetchAndApplySettings();
         }
       }
@@ -454,7 +457,7 @@
         const response = await fetch(apiUrl);
         if (!response.ok) {
           if (response.status === 404) {
-            console.log('No setlist found, waiting for WebSocket updates');
+            if (DEBUG) console.log('No setlist found, waiting for WebSocket updates');
             return;
           }
           console.error('Failed to fetch setlist:', response.status);
@@ -462,7 +465,7 @@
           return;
         }
         const data = await response.json();
-        console.log('Fetched setlist data:', data);
+        if (DEBUG) console.log('Fetched setlist data:', data);
         updateSetlist(data);
       } catch (e) {
         console.error('Error fetching setlist:', e);
@@ -477,7 +480,7 @@
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        if (DEBUG) console.log('WebSocket connected');
         reconnectDelay = 1000;
         // 再接続時はセットリストを常に再取得（データが変わっている可能性）
         if (!isFirstConnection) {
@@ -505,7 +508,7 @@
       };
 
       ws.onclose = () => {
-        console.log('WebSocket closed. Reconnecting in', reconnectDelay, 'ms');
+        if (DEBUG) console.log('WebSocket closed. Reconnecting in', reconnectDelay, 'ms');
         setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
           connectWebSocket();
@@ -521,7 +524,7 @@
         // URLでsetlist_idが指定されている場合は、そのIDとマッチするメッセージのみ処理
         // 指定されていない場合（最新モード）は全てのWS更新を受け入れる
         if (urlSetlistId && messageSetlistId && urlSetlistId !== messageSetlistId) {
-          console.log('Ignoring setlist update for different setlist:', messageSetlistId, 'expected:', urlSetlistId);
+          if (DEBUG) console.log('Ignoring setlist update for different setlist:', messageSetlistId, 'expected:', urlSetlistId);
           return;
         }
 

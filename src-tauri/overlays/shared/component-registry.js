@@ -10,6 +10,9 @@
 (function () {
   'use strict';
 
+  // デバッグモード: URLパラメータ ?debug=true で有効化
+  const DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
   // コンポーネントクラスレジストリ
   const componentClasses = {};
 
@@ -74,7 +77,7 @@
         const instance = new ComponentClass(config);
         instance.init(slot);
         mountedComponents[slotId] = { type, instance };
-        console.log(`[ComponentRegistry] Mounted ${type} to ${slotId}`);
+        if (DEBUG) console.log(`[ComponentRegistry] Mounted ${type} to ${slotId}`);
         return instance;
       } catch (e) {
         console.error(`[ComponentRegistry] Failed to mount ${type}:`, e);
@@ -107,7 +110,7 @@
         }
 
         delete mountedComponents[slotId];
-        console.log(`[ComponentRegistry] Unmounted component from ${slotId}`);
+        if (DEBUG) console.log(`[ComponentRegistry] Unmounted component from ${slotId}`);
       }
     },
 

@@ -11,6 +11,20 @@ interface FontSelectorProps {
 const loadedGoogleFonts = new Set<string>();
 
 /**
+ * フォントファミリー名をサニタイズ（XSS対策）
+ * issues/002: オーバーレイセキュリティ対応
+ * @param fontFamily フォントファミリー名
+ * @returns サニタイズ済みのフォントファミリー名、無効な場合はnull
+ */
+function sanitizeFontFamily(fontFamily: string | null | undefined): string | null {
+  if (typeof fontFamily !== 'string' || fontFamily.length === 0 || fontFamily.length > 200) {
+    return null;
+  }
+  // 危険な文字を除去（comment-renderer.jsと同じロジック）
+  return fontFamily.replace(/[<>"'`;{}]/g, '');
+}
+
+/**
  * Google Fontsを動的に読み込む
  * @param fontSpec フォント指定（例: 'Noto+Sans+JP:wght@400;500;700'）
  */
@@ -115,10 +129,12 @@ export function FontSelector({ themeSettings, onChange }: FontSelectorProps) {
     });
   };
 
-  // 現在のフォントファミリーを取得
+  // 現在のフォントファミリーを取得（サニタイズ済み）
   const getCurrentFontFamily = (): string => {
     if (themeSettings.fontPreset === 'system' && themeSettings.customFontFamily) {
-      return themeSettings.customFontFamily;
+      // カスタムフォントファミリーはサニタイズして使用
+      const sanitized = sanitizeFontFamily(themeSettings.customFontFamily);
+      return sanitized || FONT_PRESETS['yu-gothic'].fontFamily;
     }
     return FONT_PRESETS[themeSettings.fontPreset]?.fontFamily || FONT_PRESETS['yu-gothic'].fontFamily;
   };

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::server::types::{
-    CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, WeatherSettings,
-    WidgetVisibilitySettings, WsMessage,
+    CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, SuperchatSettings,
+    WeatherSettings, WidgetVisibilitySettings, WsMessage,
 };
 use crate::AppState;
 
@@ -48,6 +48,22 @@ fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
         ));
     }
 
+    // スパチャ設定の検証
+    if let Some(ref superchat) = settings.superchat {
+        if superchat.max_display < 1 || superchat.max_display > 3 {
+            return Err(format!(
+                "Invalid superchat maxDisplay: {}. Expected 1-3.",
+                superchat.max_display
+            ));
+        }
+        if superchat.display_duration_sec < 10 || superchat.display_duration_sec > 120 {
+            return Err(format!(
+                "Invalid superchat displayDurationSec: {}. Expected 10-120.",
+                superchat.display_duration_sec
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -74,6 +90,8 @@ pub struct OverlaySettings {
     pub weather: Option<WeatherSettings>,
     #[serde(default)]
     pub widget: Option<WidgetVisibilitySettings>,
+    #[serde(default)]
+    pub superchat: Option<SuperchatSettings>,
 }
 
 /// オーバーレイ設定を保存
@@ -150,6 +168,7 @@ pub async fn broadcast_settings_update(
         setlist: settings.setlist,
         weather: settings.weather,
         widget: settings.widget,
+        superchat: settings.superchat,
     };
 
     let server_state = state.server.read().await;

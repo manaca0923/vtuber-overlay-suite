@@ -6,6 +6,9 @@
 (function() {
 'use strict';
 
+// デバッグモード: URLパラメータ ?debug=true で有効化
+const DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
 // =============================================================================
 // バリデーション関数
 // =============================================================================
@@ -459,7 +462,7 @@ class CommentQueueManager {
     if (!Number.isFinite(intervalMs) || intervalMs <= 0 || intervalMs > MAX_BUFFER_INTERVAL) return;
 
     if (this.BUFFER_INTERVAL !== intervalMs) {
-      console.log(`Changing BUFFER_INTERVAL from ${this.BUFFER_INTERVAL}ms to ${intervalMs}ms`);
+      if (DEBUG) console.log(`Changing BUFFER_INTERVAL from ${this.BUFFER_INTERVAL}ms to ${intervalMs}ms`);
       this.BUFFER_INTERVAL = intervalMs;
       // 既存タイマーを必ずクリア（issues/010: タイマー管理）
       if (this._bufferTimerId) {
@@ -532,7 +535,7 @@ class CommentQueueManager {
         Math.min(this.MAX_DISPLAY_INTERVAL, this.currentDisplayInterval)
       );
 
-      console.log(`Flushing ${count} comments with ${this.currentDisplayInterval}ms interval`);
+      if (DEBUG) console.log(`Flushing ${count} comments with ${this.currentDisplayInterval}ms interval`);
 
       // 処理済みとしてマーク
       this.commentBuffer.forEach(c => this._markProcessed(c.id));

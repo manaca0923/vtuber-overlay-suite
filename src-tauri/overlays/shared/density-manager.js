@@ -13,6 +13,9 @@
 (function () {
   'use strict';
 
+  // デバッグモード: URLパラメータ ?debug=true で有効化
+  const DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
   /** 定期クリーンアップのデフォルト間隔（ms） */
   const DEFAULT_CLEANUP_INTERVAL_MS = 5000;
 
@@ -108,12 +111,12 @@
       if (typeof ComponentRegistry === 'undefined') return;
 
       if (this.isDense) {
-        console.log(
+        if (DEBUG) console.log(
           `[DensityManager] High density detected (threshold: ${this.highDensityThreshold})`
         );
         ComponentRegistry.dispatch('density:high', this.degradedSettings);
       } else {
-        console.log('[DensityManager] Density normalized');
+        if (DEBUG) console.log('[DensityManager] Density normalized');
         ComponentRegistry.dispatch('density:normal', this.normalSettings);
       }
     }

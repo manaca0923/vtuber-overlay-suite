@@ -162,6 +162,7 @@
     } = window.CommentRenderer;
 
     const {
+      DEBUG,
       WS_URL,
       API_BASE_URL,
       SETTINGS_FETCH_TIMEOUT,
@@ -424,7 +425,7 @@
     // pageshow: ページ表示時（bfcache復元時はevent.persisted=true）
     window.addEventListener('pageshow', (event) => {
       if (event.persisted) {
-        console.log('Page restored from bfcache, reconnecting...');
+        if (DEBUG) console.log('Page restored from bfcache, reconnecting...');
         settingsFetcher.reset();
         wsManager.reinitialize();
       }

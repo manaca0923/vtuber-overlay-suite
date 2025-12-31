@@ -109,6 +109,9 @@ pub struct SettingsUpdatePayload {
     // ウィジェット表示設定
     #[serde(skip_serializing_if = "Option::is_none")]
     pub widget: Option<WidgetVisibilitySettings>,
+    // スパチャウィジェット設定
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub superchat: Option<SuperchatSettings>,
 }
 
 /// 天気ウィジェット設定（共通型）
@@ -138,6 +141,20 @@ pub struct WidgetVisibilitySettings {
     pub kpi: bool,
     pub tanzaku: bool,
     pub announcement: bool,
+}
+
+/// スパチャウィジェット設定（共通型）
+/// - DB保存用（overlay.rs）
+/// - WebSocket配信用（SettingsUpdatePayload）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuperchatSettings {
+    /// 同時表示数（1-3、デフォルト: 1）
+    pub max_display: u32,
+    /// 表示時間（秒、10-120、デフォルト: 60）
+    pub display_duration_sec: u32,
+    /// キュー表示ON/OFF（待機中のスパチャを順次表示）
+    pub queue_enabled: bool,
 }
 
 /// 天気ウィジェットの表示位置

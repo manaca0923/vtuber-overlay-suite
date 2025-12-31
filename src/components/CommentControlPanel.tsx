@@ -66,6 +66,8 @@ interface CommentControlPanelProps {
   apiKey: string;
   videoId: string;
   liveChatId: string;
+  isPolling: boolean;
+  setIsPolling: React.Dispatch<React.SetStateAction<boolean>>;
   onSettingsChange?: (settings: { videoId: string; liveChatId: string }) => void;
 }
 
@@ -73,9 +75,13 @@ export function CommentControlPanel({
   apiKey,
   videoId,
   liveChatId,
+  isPolling,
+  setIsPolling,
   onSettingsChange,
 }: CommentControlPanelProps) {
-  const [isPolling, setIsPolling] = useState(false);
+  // isPollingは親コンポーネント（App.tsx）から受け取る
+  // これによりタブ切り替え時も状態が維持される
+
   const [pollingState, setPollingState] = useState<PollingState | null>(null);
   // NOTE: savedState は「続きから開始」ボタン用（現在統合ポーラー未サポートのためUI非表示）
   // 将来的に保存状態復元機能を実装する際に復活させる
@@ -104,13 +110,32 @@ export function CommentControlPanel({
     };
   }, []);
 
+  // isPollingが変化したらconnectionStatusを同期
+  useEffect(() => {
+    if (isPolling) {
+      setConnectionStatus('connected');
+      // ポーリング中のAPIモードを取得
+      invoke<ApiMode | null>('get_unified_polling_mode')
+        .then((mode) => {
+          if (isMountedRef.current && mode) {
+            setApiMode(mode);
+          }
+        })
+        .catch((err) => console.error('Failed to get unified polling mode:', err));
+    }
+  }, [isPolling]);
+
   // 初期設定を読み込み（APIモード、useBundledKey）
+  // NOTE: このuseEffectは初回マウント時のみ実行する意図のため、依存配列は空のままにする。
+  // isPollingはマウント時の初期値（親から受け取った値）を参照している。
+  // マウント時にポーリング中であれば保存されたモードで上書きしない（現在のモードを維持）。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     async function loadInitialSettings() {
-      // APIモードを読み込み
+      // APIモードを読み込み（ポーリング中でない場合のみ更新）
       try {
         const savedMode = await invoke<ApiMode>('load_api_mode');
-        if (isMountedRef.current) {
+        if (isMountedRef.current && !isPolling) {
           setApiMode(savedMode);
         }
       } catch (err) {
@@ -281,26 +306,8 @@ export function CommentControlPanel({
     };
   }, [liveChatId]);
 
-  // 現在のポーリング状態を確認
-  useEffect(() => {
-    async function checkPollingStatus() {
-      try {
-        const running = await invoke<boolean>('is_polling_running');
-        if (isMountedRef.current) {
-          setIsPolling(running);
-        }
-        if (running) {
-          const state = await invoke<PollingState | null>('get_polling_state');
-          if (isMountedRef.current && state) {
-            setPollingState(state);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to check polling status:', err);
-      }
-    }
-    checkPollingStatus();
-  }, []);
+  // NOTE: ポーリング状態はApp.tsxで管理（is_unified_polling_running）
+  // 以下の古いuseEffectは削除：is_polling_running（旧API）を使用していたためバグの原因だった
 
   // 保存されたポーリング状態を読み込む（有効期限チェック付き）
   useEffect(() => {

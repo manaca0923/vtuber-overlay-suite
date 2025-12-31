@@ -141,6 +141,7 @@
     } = window.CommentRenderer;
 
     const {
+      DEBUG,
       WS_URL,
       API_BASE_URL,
       SETTINGS_FETCH_TIMEOUT,
@@ -357,7 +358,7 @@
       const threshold = performanceSettings.densityThreshold;
       if (typeof threshold === 'number' && densityManager) {
         densityManager.setThreshold(threshold);
-        console.log(`[Performance] Density threshold set to ${threshold}`);
+        if (DEBUG) console.log(`[Performance] Density threshold set to ${threshold}`);
       }
     }
 
@@ -638,7 +639,7 @@
     window.addEventListener('pageshow', (event) => {
       if (event.persisted) {
         // bfcacheから復元された場合
-        console.log('Page restored from bfcache, reconnecting...');
+        if (DEBUG) console.log('Page restored from bfcache, reconnecting...');
 
         // 設定フェッチャーをリセット（復元後に必ず再取得）
         settingsFetcher.reset();
@@ -648,12 +649,12 @@
         //     通常はdestroyされていないが、念のためチェック
         if (!densityManager || densityManager.isDestroyed()) {
           densityManager = new DensityManager();
-          console.log('DensityManager reinitialized after bfcache restore');
+          if (DEBUG) console.log('DensityManager reinitialized after bfcache restore');
         }
         // UpdateBatcherも再作成（destroyされている場合）
         if (!updateBatcher || updateBatcher.isDestroyed()) {
           updateBatcher = new UpdateBatcher({ batchInterval: 150 });
-          console.log('UpdateBatcher reinitialized after bfcache restore');
+          if (DEBUG) console.log('UpdateBatcher reinitialized after bfcache restore');
         }
 
         // WebSocketマネージャーを再初期化

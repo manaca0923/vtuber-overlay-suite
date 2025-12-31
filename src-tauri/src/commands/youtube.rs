@@ -1211,7 +1211,9 @@ pub async fn stop_unified_polling() -> Result<(), String> {
 #[tauri::command]
 pub async fn is_unified_polling_running() -> Result<bool, String> {
     let poller = get_unified_poller().lock().await;
-    Ok(poller.is_running())
+    let running = poller.is_running();
+    log::debug!("[is_unified_polling_running] running={}", running);
+    Ok(running)
 }
 
 /// 現在のAPIモードを取得

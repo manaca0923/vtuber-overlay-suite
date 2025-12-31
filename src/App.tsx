@@ -23,6 +23,9 @@ interface StatusMessage {
   text: string;
 }
 
+// モジュールレベル変数でポーリング状態を永続化（StrictMode対策）
+let persistedIsPolling = false;
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('comment');
   const [appMode, setAppMode] = useState<AppMode>('wizard');
@@ -31,8 +34,18 @@ function App() {
   const [wizardSettings, setWizardSettings] = useState<WizardSettings | null>(null);
   const [isVideoIdModalOpen, setIsVideoIdModalOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
+  // StrictMode対策: モジュールレベル変数から初期値を取得
+  const [isPolling, setIsPollingState] = useState(persistedIsPolling);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // setIsPollingのラッパー（モジュールレベル変数も更新）
+  const setIsPolling = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setIsPollingState((prev) => {
+      const newValue = typeof value === 'function' ? value(prev) : value;
+      persistedIsPolling = newValue;
+      return newValue;
+    });
+  }, []);
 
   // ステータスメッセージを表示（3秒後に自動消去）
   const showStatus = useCallback((type: 'success' | 'error', text: string) => {
@@ -104,6 +117,16 @@ function App() {
           }
         } catch (err) {
           console.error('Failed to load wizard settings:', err);
+        }
+
+        // ポーリング状態を復元（アプリ起動時）
+        try {
+          const running = await invoke<boolean>('is_unified_polling_running');
+          if (running) {
+            setIsPolling(true);
+          }
+        } catch (err) {
+          console.error('Failed to check polling status:', err);
         }
 
         // APIキーがあるか、ウィザード設定があればメイン画面へ
@@ -222,6 +245,8 @@ function App() {
               apiKey={apiKey}
               videoId={wizardSettings?.video_id ?? ''}
               liveChatId={wizardSettings?.live_chat_id ?? ''}
+              isPolling={isPolling}
+              setIsPolling={setIsPolling}
               onSettingsChange={(settings) => {
                 setWizardSettings((prev) => ({
                   video_id: settings.videoId ?? prev?.video_id ?? '',

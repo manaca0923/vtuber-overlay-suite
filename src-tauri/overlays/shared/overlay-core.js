@@ -10,6 +10,9 @@
 // 定数
 // =============================================================================
 
+// デバッグモード: URLパラメータ ?debug=true で有効化
+const DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
 const WS_URL = 'ws://localhost:19801/ws';
 const API_BASE_URL = 'http://localhost:19800/api';
 const SETTINGS_FETCH_TIMEOUT = 3000;
@@ -69,7 +72,7 @@ class WebSocketManager {
     this.ws = new WebSocket(this.url);
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected');
+      if (DEBUG) console.log('WebSocket connected');
       this.reconnectDelay = INITIAL_RECONNECT_DELAY;
       this.onOpen();
     };
@@ -92,11 +95,11 @@ class WebSocketManager {
 
       // シャットダウン中は再接続しない
       if (this.isShuttingDown) {
-        console.log('WebSocket closed (shutdown)');
+        if (DEBUG) console.log('WebSocket closed (shutdown)');
         return;
       }
 
-      console.log('WebSocket closed, reconnecting...');
+      if (DEBUG) console.log('WebSocket closed, reconnecting...');
       this.reconnectTimerId = setTimeout(() => {
         this.reconnectTimerId = null;
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
@@ -139,7 +142,7 @@ class WebSocketManager {
 
     // 既存の接続がある場合はスキップ（二重接続防止）
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
-      console.log('WebSocket already connected or connecting, skipping reinitialize');
+      if (DEBUG) console.log('WebSocket already connected or connecting, skipping reinitialize');
       return;
     }
 
@@ -190,7 +193,7 @@ class SettingsFetcher {
         this.fetchSucceeded = true;
       }
     } catch (_e) {
-      console.log('Settings API not available, using defaults');
+      if (DEBUG) console.log('Settings API not available, using defaults');
     } finally {
       clearTimeout(timeoutId);
       this.fetchInFlight = false;
@@ -460,7 +463,7 @@ async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout =
       }
     }
   } catch (_e) {
-    console.log('Failed to fetch setlist');
+    if (DEBUG) console.log('Failed to fetch setlist');
   } finally {
     clearTimeout(timeoutId);
   }
@@ -499,6 +502,7 @@ function setupBfcacheHandlers(onCleanup, onRestore) {
 
 window.OverlayCore = {
   // 定数
+  DEBUG,
   WS_URL,
   API_BASE_URL,
   SETTINGS_FETCH_TIMEOUT,

@@ -41,6 +41,10 @@ class WeatherWidget extends BaseComponent {
     this.currentIndex = 0;
     this.rotationInterval = 5000; // デフォルト5秒
     this.rotationTimer = null;
+
+    // visibilitychange対応（メモリリーク防止）
+    this._boundVisibilityHandler = this._handleVisibilityChange.bind(this);
+    document.addEventListener('visibilitychange', this._boundVisibilityHandler);
   }
 
   render() {
@@ -96,30 +100,23 @@ class WeatherWidget extends BaseComponent {
    * @param {Object} data - { cities: CityWeatherData[], rotationIntervalSec: number }
    */
   updateMulti(data) {
-    console.log('[WeatherWidget] updateMulti called:', JSON.stringify(data));
-
     this.cities = data.cities || [];
     this.rotationInterval = (data.rotationIntervalSec || 5) * 1000;
     this.multiMode = true;
-
-    console.log('[WeatherWidget] cities count:', this.cities.length, 'interval:', this.rotationInterval);
 
     // 既存のタイマーをクリア
     this._stopRotation();
 
     if (this.cities.length === 0) {
-      console.warn('[WeatherWidget] No cities to display');
       return;
     }
 
     // 最初の都市を表示
     this.currentIndex = 0;
     this._displayCity(this.cities[0]);
-    console.log('[WeatherWidget] Displayed first city:', this.cities[0]?.cityName);
 
     // ローテーション開始（2都市以上の場合）
     if (this.cities.length > 1) {
-      console.log('[WeatherWidget] Starting rotation timer');
       this.rotationTimer = setInterval(() => {
         this._rotateNext();
       }, this.rotationInterval);
@@ -132,7 +129,6 @@ class WeatherWidget extends BaseComponent {
   _rotateNext() {
     this.currentIndex = (this.currentIndex + 1) % this.cities.length;
     const city = this.cities[this.currentIndex];
-    console.log('[WeatherWidget] Rotating to city:', this.currentIndex, city?.cityName);
     this._displayCityWithFade(city);
   }
 
@@ -143,7 +139,6 @@ class WeatherWidget extends BaseComponent {
   _displayCityWithFade(cityData) {
     // BaseComponentでは this.element を使用
     if (!this.element) {
-      console.warn('[WeatherWidget] element is not initialized');
       this._displayCity(cityData);
       return;
     }
@@ -216,10 +211,39 @@ class WeatherWidget extends BaseComponent {
   }
 
   /**
+   * ローテーションを再開（マルチシティモードで2都市以上の場合のみ）
+   */
+  _resumeRotation() {
+    if (this.multiMode && this.cities.length > 1 && !this.rotationTimer) {
+      this.rotationTimer = setInterval(() => {
+        this._rotateNext();
+      }, this.rotationInterval);
+    }
+  }
+
+  /**
+   * ページの可視状態変更ハンドラ（メモリリーク防止）
+   * タブがバックグラウンドに行った際にタイマーを停止し、
+   * フォアグラウンドに戻った際に再開する
+   */
+  _handleVisibilityChange() {
+    if (document.hidden) {
+      this._stopRotation();
+    } else {
+      this._resumeRotation();
+    }
+  }
+
+  /**
    * コンポーネント破棄時
    */
   destroy() {
     this._stopRotation();
+    // visibilitychangeリスナーを解除
+    if (this._boundVisibilityHandler) {
+      document.removeEventListener('visibilitychange', this._boundVisibilityHandler);
+      this._boundVisibilityHandler = null;
+    }
     if (super.destroy) {
       super.destroy();
     }

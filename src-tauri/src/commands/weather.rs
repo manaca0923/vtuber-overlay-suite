@@ -182,12 +182,18 @@ pub async fn get_weather_multi(
         .map(|(id, _, display_name)| (id.clone(), display_name.clone()))
         .collect();
 
-    let weather_data: Vec<CityWeatherData> = results
-        .into_iter()
-        .filter_map(|(id, _name, result)| {
-            result.ok().map(|data| {
-                let display_name = display_name_map.get(&id).cloned().unwrap_or(data.location.clone());
-                CityWeatherData {
+    let total_cities = results.len();
+    let mut weather_data: Vec<CityWeatherData> = Vec::new();
+    let mut failed_cities: Vec<String> = Vec::new();
+
+    for (id, name, result) in results {
+        match result {
+            Ok(data) => {
+                let display_name = display_name_map
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or(data.location.clone());
+                weather_data.push(CityWeatherData {
                     city_id: id,
                     city_name: display_name,
                     icon: data.icon,
@@ -195,15 +201,30 @@ pub async fn get_weather_multi(
                     description: data.description,
                     location: data.location,
                     humidity: Some(data.humidity),
-                }
-            })
-        })
-        .collect();
+                });
+            }
+            Err(e) => {
+                log::warn!("都市 '{}' の天気取得に失敗: {}", name, e);
+                failed_cities.push(name);
+            }
+        }
+    }
 
-    log::info!(
-        "Multi-city weather fetched: {} cities succeeded",
-        weather_data.len()
-    );
+    // 部分的失敗の場合は警告ログを出力
+    if !failed_cities.is_empty() {
+        log::warn!(
+            "マルチシティ天気: {}/{} 都市成功、失敗した都市: {:?}",
+            weather_data.len(),
+            total_cities,
+            failed_cities
+        );
+    } else {
+        log::info!(
+            "マルチシティ天気: すべての都市({})の取得に成功",
+            weather_data.len()
+        );
+    }
+
     Ok(weather_data)
 }
 
@@ -222,7 +243,7 @@ pub async fn broadcast_weather_multi(
     let weather_data = get_weather_multi(state.clone(), cities).await?;
 
     if weather_data.is_empty() {
-        return Err("No weather data available for any city".to_string());
+        return Err("すべての都市の天気取得に失敗しました".to_string());
     }
 
     // WebSocketでブロードキャスト

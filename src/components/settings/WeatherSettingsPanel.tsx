@@ -159,8 +159,10 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
   const handleAddCity = useCallback(() => {
     if (!newCityName.trim() || !newCityDisplayName.trim()) return;
 
+    // より堅牢なID生成: タイムスタンプ + ランダム文字列
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
     const newCity: CityEntry = {
-      id: `custom-${Date.now()}`,
+      id: `custom-${Date.now()}-${randomSuffix}`,
       name: newCityName.trim(),
       displayName: newCityDisplayName.trim(),
       enabled: true,

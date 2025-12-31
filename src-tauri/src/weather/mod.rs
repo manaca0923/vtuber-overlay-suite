@@ -374,6 +374,26 @@ impl WeatherClient {
         let city = self.city.read().await.clone();
         self.cache.ttl_remaining(&city).await
     }
+
+    /// 複数都市の天気を一括取得
+    /// 各都市の天気を並列で取得し、結果をベクターで返す
+    pub async fn get_weather_multi(
+        &self,
+        cities: &[(String, String)], // (id, name) のペア
+    ) -> Vec<(String, String, Result<WeatherData, WeatherError>)> {
+        use futures::future::join_all;
+
+        let futures = cities.iter().map(|(id, name)| {
+            let id = id.clone();
+            let name = name.clone();
+            async move {
+                let result = self.fetch_weather_for_city(&name).await;
+                (id, name, result)
+            }
+        });
+
+        join_all(futures).await
+    }
 }
 
 impl Default for WeatherClient {

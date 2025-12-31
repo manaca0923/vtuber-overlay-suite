@@ -48,9 +48,13 @@ pub enum WsMessage {
     #[serde(rename = "promo:update")]
     PromoUpdate { payload: PromoUpdatePayload },
 
-    /// 天気更新
+    /// 天気更新（単一都市）
     #[serde(rename = "weather:update")]
     WeatherUpdate { payload: WeatherUpdatePayload },
+
+    /// 天気更新（マルチシティ）
+    #[serde(rename = "weather:multi-update")]
+    WeatherMultiUpdate { payload: WeatherMultiUpdatePayload },
 
     /// スパチャ追加（専用ウィジェット表示用）
     #[serde(rename = "superchat:add")]
@@ -118,6 +122,34 @@ pub struct SettingsUpdatePayload {
     pub theme_settings: Option<ThemeSettings>,
 }
 
+/// マルチシティ用都市エントリ
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityEntry {
+    /// ユニークID
+    pub id: String,
+    /// API用都市名（英語）
+    pub name: String,
+    /// 表示用都市名（日本語）
+    pub display_name: String,
+    /// 有効/無効
+    pub enabled: bool,
+    /// 並び順
+    pub order: u32,
+}
+
+/// マルチシティ設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiCitySettings {
+    /// マルチシティモード有効
+    pub enabled: bool,
+    /// ローテーション間隔（秒）
+    pub rotation_interval_sec: u32,
+    /// 都市リスト
+    pub cities: Vec<CityEntry>,
+}
+
 /// 天気ウィジェット設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
@@ -127,6 +159,9 @@ pub struct SettingsUpdatePayload {
 pub struct WeatherSettings {
     pub enabled: bool,
     pub position: WeatherPosition,
+    /// マルチシティモード設定（オプション）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multi_city: Option<MultiCitySettings>,
 }
 
 /// ウィジェット表示設定（共通型）
@@ -400,6 +435,36 @@ impl From<&WeatherData> for WeatherUpdatePayload {
             humidity: Some(data.humidity),
         }
     }
+}
+
+/// マルチシティ天気更新ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherMultiUpdatePayload {
+    /// 各都市の天気データ
+    pub cities: Vec<CityWeatherData>,
+    /// ローテーション間隔（秒）
+    pub rotation_interval_sec: u32,
+}
+
+/// 都市ごとの天気データ
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CityWeatherData {
+    /// 都市ID
+    pub city_id: String,
+    /// 都市名（表示用）
+    pub city_name: String,
+    /// 天気アイコン（絵文字）
+    pub icon: String,
+    /// 気温（摂氏）
+    pub temp: f64,
+    /// 天気の説明
+    pub description: String,
+    /// 地域名
+    pub location: String,
+    /// 湿度（%）
+    pub humidity: Option<i32>,
 }
 
 /// スパチャペイロード（専用ウィジェット表示用）

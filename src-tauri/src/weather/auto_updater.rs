@@ -2,29 +2,44 @@
 // 天気自動更新モジュール
 // =============================================================================
 // 15分ごとに天気情報を自動取得してWebSocketでブロードキャストする
+// マルチシティモードにも対応
 // =============================================================================
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, RwLock};
 
-use crate::server::types::{ServerState, WsMessage};
+use crate::server::types::{CityWeatherData, ServerState, WeatherMultiUpdatePayload, WsMessage};
 
 use super::WeatherClient;
 
 /// 自動更新間隔（15分 = 900秒）
 const AUTO_UPDATE_INTERVAL_SECS: u64 = 900;
 
+/// マルチシティ設定
+#[derive(Debug, Clone)]
+pub struct MultiCityConfig {
+    /// マルチシティモード有効
+    pub enabled: bool,
+    /// 都市リスト: (id, name, displayName)
+    pub cities: Vec<(String, String, String)>,
+    /// ローテーション間隔（秒）
+    pub rotation_interval_sec: u32,
+}
+
 /// 天気自動更新タスク
 ///
 /// アプリ起動時に開始し、15分ごとに天気を取得してWebSocketでブロードキャストする。
 /// 手動更新時は `reset_timer()` でタイマーをリセットできる。
+/// マルチシティモードにも対応。
 pub struct WeatherAutoUpdater {
     /// 実行中フラグ
     is_running: Arc<AtomicBool>,
     /// タイマーリセット通知
     reset_signal: Arc<Notify>,
+    /// マルチシティ設定
+    multi_city_config: Arc<RwLock<MultiCityConfig>>,
 }
 
 impl WeatherAutoUpdater {
@@ -39,12 +54,25 @@ impl WeatherAutoUpdater {
     pub fn start(weather: Arc<WeatherClient>, server: ServerState) -> Self {
         let is_running = Arc::new(AtomicBool::new(true));
         let reset_signal = Arc::new(Notify::new());
+        let multi_city_config = Arc::new(RwLock::new(MultiCityConfig {
+            enabled: false,
+            cities: Vec::new(),
+            rotation_interval_sec: 5,
+        }));
 
         let is_running_clone = Arc::clone(&is_running);
         let reset_signal_clone = Arc::clone(&reset_signal);
+        let multi_city_config_clone = Arc::clone(&multi_city_config);
 
         tauri::async_runtime::spawn(async move {
-            Self::update_loop(weather, server, is_running_clone, reset_signal_clone).await;
+            Self::update_loop(
+                weather,
+                server,
+                is_running_clone,
+                reset_signal_clone,
+                multi_city_config_clone,
+            )
+            .await;
         });
 
         log::info!(
@@ -55,6 +83,7 @@ impl WeatherAutoUpdater {
         Self {
             is_running,
             reset_signal,
+            multi_city_config,
         }
     }
 
@@ -64,6 +93,7 @@ impl WeatherAutoUpdater {
         server: ServerState,
         is_running: Arc<AtomicBool>,
         reset_signal: Arc<Notify>,
+        multi_city_config: Arc<RwLock<MultiCityConfig>>,
     ) {
         while is_running.load(Ordering::SeqCst) {
             // 15分待機（reset_signalで中断可能）
@@ -78,17 +108,28 @@ impl WeatherAutoUpdater {
                 }
             }
 
-            // 天気を取得してブロードキャスト
-            if let Err(e) = Self::fetch_and_broadcast(&weather, &server).await {
-                log::warn!("Weather auto-update failed: {}", e);
+            // 天気を取得してブロードキャスト（モードに応じて）
+            let config = multi_city_config.read().await.clone();
+            if config.enabled && !config.cities.is_empty() {
+                // マルチシティモード
+                if let Err(e) =
+                    Self::fetch_and_broadcast_multi(&weather, &server, &config).await
+                {
+                    log::warn!("Weather multi-city auto-update failed: {}", e);
+                }
+            } else {
+                // 単一都市モード
+                if let Err(e) = Self::fetch_and_broadcast_single(&weather, &server).await {
+                    log::warn!("Weather auto-update failed: {}", e);
+                }
             }
         }
 
         log::info!("Weather auto-updater stopped");
     }
 
-    /// 天気を取得してWebSocketでブロードキャスト
-    async fn fetch_and_broadcast(
+    /// 単一都市モード: 天気を取得してWebSocketでブロードキャスト
+    async fn fetch_and_broadcast_single(
         weather: &WeatherClient,
         server: &ServerState,
     ) -> Result<(), String> {
@@ -107,6 +148,74 @@ impl WeatherAutoUpdater {
         Ok(())
     }
 
+    /// マルチシティモード: 複数都市の天気を取得してWebSocketでブロードキャスト
+    async fn fetch_and_broadcast_multi(
+        weather: &WeatherClient,
+        server: &ServerState,
+        config: &MultiCityConfig,
+    ) -> Result<(), String> {
+        // 都市リストを準備
+        let city_pairs: Vec<(String, String)> = config
+            .cities
+            .iter()
+            .map(|(id, name, _)| (id.clone(), name.clone()))
+            .collect();
+
+        // 複数都市の天気を取得
+        let results = weather.get_weather_multi(&city_pairs).await;
+
+        // displayNameマップを作成
+        let display_name_map: std::collections::HashMap<String, String> = config
+            .cities
+            .iter()
+            .map(|(id, _, display_name)| (id.clone(), display_name.clone()))
+            .collect();
+
+        // 成功した都市のみ抽出
+        let weather_data: Vec<CityWeatherData> = results
+            .into_iter()
+            .filter_map(|(id, _name, result)| {
+                result.ok().map(|data| {
+                    let display_name = display_name_map
+                        .get(&id)
+                        .cloned()
+                        .unwrap_or(data.location.clone());
+                    CityWeatherData {
+                        city_id: id,
+                        city_name: display_name,
+                        icon: data.icon,
+                        temp: data.temp,
+                        description: data.description,
+                        location: data.location,
+                        humidity: Some(data.humidity),
+                    }
+                })
+            })
+            .collect();
+
+        if weather_data.is_empty() {
+            return Err("No weather data available for any city".to_string());
+        }
+
+        // WebSocketでブロードキャスト
+        let ws_state = server.read().await;
+        ws_state
+            .broadcast(WsMessage::WeatherMultiUpdate {
+                payload: WeatherMultiUpdatePayload {
+                    cities: weather_data.clone(),
+                    rotation_interval_sec: config.rotation_interval_sec,
+                },
+            })
+            .await;
+
+        log::info!(
+            "Weather multi-city auto-update broadcasted: {} cities (interval: {}s)",
+            weather_data.len(),
+            config.rotation_interval_sec
+        );
+        Ok(())
+    }
+
     /// 自動更新を停止する
     pub fn stop(&self) {
         self.is_running.store(false, Ordering::SeqCst);
@@ -119,6 +228,35 @@ impl WeatherAutoUpdater {
     /// 次回の自動更新までの時間を15分にリセットする。
     pub fn reset_timer(&self) {
         self.reset_signal.notify_one();
+    }
+
+    /// マルチシティ設定を更新する
+    ///
+    /// 設定保存時や手動配信時に呼び出し、次回の自動更新からこの設定が使用される。
+    pub fn set_multi_city_config(
+        &self,
+        enabled: bool,
+        cities: Vec<(String, String, String)>,
+        rotation_interval_sec: u32,
+    ) {
+        // blockingでロックを取得（非async関数から呼び出せるように）
+        let config = MultiCityConfig {
+            enabled,
+            cities,
+            rotation_interval_sec,
+        };
+
+        // tokio runtime内で実行
+        let multi_city_config = Arc::clone(&self.multi_city_config);
+        tauri::async_runtime::spawn(async move {
+            let mut guard = multi_city_config.write().await;
+            *guard = config;
+            log::info!(
+                "Multi-city config updated: enabled={}, cities={}",
+                guard.enabled,
+                guard.cities.len()
+            );
+        });
     }
 
     /// 実行中かどうかを確認

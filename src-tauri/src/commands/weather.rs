@@ -7,7 +7,9 @@
 
 use tauri::State;
 
-use crate::server::types::{WeatherUpdatePayload, WsMessage};
+use crate::server::types::{
+    CityWeatherData, WeatherMultiUpdatePayload, WeatherUpdatePayload, WsMessage,
+};
 use crate::weather::WeatherData;
 use crate::AppState;
 
@@ -149,4 +151,144 @@ pub async fn set_weather_city_and_broadcast(
         weather_data.temp
     );
     Ok(weather_data)
+}
+
+// =============================================================================
+// マルチシティモード用コマンド
+// =============================================================================
+
+/// 複数都市のマルチシティ天気データを取得
+///
+/// # Arguments
+/// * `cities` - 都市リスト [(id, name, displayName), ...]
+///
+/// # Returns
+/// 各都市の天気データ（失敗した都市は含まれない）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_weather_multi(
+    state: State<'_, AppState>,
+    cities: Vec<(String, String, String)>, // (id, name, displayName)
+) -> Result<Vec<CityWeatherData>, String> {
+    let city_pairs: Vec<(String, String)> = cities
+        .iter()
+        .map(|(id, name, _)| (id.clone(), name.clone()))
+        .collect();
+
+    let results = state.weather.get_weather_multi(&city_pairs).await;
+
+    // 成功した都市のみ返す（displayNameをマップから取得）
+    let display_name_map: std::collections::HashMap<String, String> = cities
+        .iter()
+        .map(|(id, _, display_name)| (id.clone(), display_name.clone()))
+        .collect();
+
+    let total_cities = results.len();
+    let mut weather_data: Vec<CityWeatherData> = Vec::new();
+    let mut failed_cities: Vec<String> = Vec::new();
+
+    for (id, name, result) in results {
+        match result {
+            Ok(data) => {
+                let display_name = display_name_map
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or(data.location.clone());
+                weather_data.push(CityWeatherData {
+                    city_id: id,
+                    city_name: display_name,
+                    icon: data.icon,
+                    temp: data.temp,
+                    description: data.description,
+                    location: data.location,
+                    humidity: Some(data.humidity),
+                });
+            }
+            Err(e) => {
+                log::warn!("都市 '{}' の天気取得に失敗: {}", name, e);
+                failed_cities.push(name);
+            }
+        }
+    }
+
+    // 部分的失敗の場合は警告ログを出力
+    if !failed_cities.is_empty() {
+        log::warn!(
+            "マルチシティ天気: {}/{} 都市成功、失敗した都市: {:?}",
+            weather_data.len(),
+            total_cities,
+            failed_cities
+        );
+    } else {
+        log::info!(
+            "マルチシティ天気: すべての都市({})の取得に成功",
+            weather_data.len()
+        );
+    }
+
+    Ok(weather_data)
+}
+
+/// 複数都市の天気をWebSocketでブロードキャスト
+///
+/// # Arguments
+/// * `cities` - 都市リスト [(id, name, displayName), ...]
+/// * `rotation_interval_sec` - ローテーション間隔（秒）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn broadcast_weather_multi(
+    state: State<'_, AppState>,
+    cities: Vec<(String, String, String)>, // (id, name, displayName)
+    rotation_interval_sec: u32,
+) -> Result<(), String> {
+    // 天気データを取得
+    let weather_data = get_weather_multi(state.clone(), cities).await?;
+
+    if weather_data.is_empty() {
+        return Err("すべての都市の天気取得に失敗しました".to_string());
+    }
+
+    // WebSocketでブロードキャスト
+    let ws_state = state.server.read().await;
+    ws_state
+        .broadcast(WsMessage::WeatherMultiUpdate {
+            payload: WeatherMultiUpdatePayload {
+                cities: weather_data,
+                rotation_interval_sec,
+            },
+        })
+        .await;
+
+    log::info!(
+        "Multi-city weather broadcasted (interval: {}s)",
+        rotation_interval_sec
+    );
+    Ok(())
+}
+
+/// マルチシティ設定を自動更新に反映する
+///
+/// 設定保存時や手動配信時に呼び出し、以降の自動更新でこの設定が使用される。
+///
+/// # Arguments
+/// * `enabled` - マルチシティモード有効/無効
+/// * `cities` - 都市リスト [(id, name, displayName), ...]
+/// * `rotation_interval_sec` - ローテーション間隔（秒）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_multi_city_mode(
+    state: State<'_, AppState>,
+    enabled: bool,
+    cities: Vec<(String, String, String)>,
+    rotation_interval_sec: u32,
+) -> Result<(), String> {
+    let cities_len = cities.len();
+    state
+        .weather_updater
+        .set_multi_city_config(enabled, cities, rotation_interval_sec);
+
+    log::info!(
+        "Multi-city mode set: enabled={}, cities={}, interval={}s",
+        enabled,
+        cities_len,
+        rotation_interval_sec
+    );
+    Ok(())
 }

@@ -54,6 +54,45 @@ export const broadcastWeather = () =>
 export const setWeatherCityAndBroadcast = (city: string) =>
   invoke<WeatherData>('set_weather_city_and_broadcast', { city });
 
+// マルチシティモード用の型と関数
+
+/** 都市ごとの天気データ */
+export interface CityWeatherData {
+  cityId: string;
+  cityName: string;
+  icon: string;
+  temp: number;
+  description: string;
+  location: string;
+  humidity: number | null;
+}
+
+/** 複数都市の天気を取得 */
+export const getWeatherMulti = (cities: Array<[string, string, string]>) =>
+  invoke<CityWeatherData[]>('get_weather_multi', { cities });
+
+/** 複数都市の天気をオーバーレイに配信 */
+export const broadcastWeatherMulti = (
+  cities: Array<[string, string, string]>,
+  rotationIntervalSec: number
+) =>
+  invoke<void>('broadcast_weather_multi', {
+    cities,
+    rotation_interval_sec: rotationIntervalSec,
+  });
+
+/** マルチシティモードを自動更新に反映 */
+export const setMultiCityMode = (
+  enabled: boolean,
+  cities: Array<[string, string, string]>,
+  rotationIntervalSec: number
+) =>
+  invoke<void>('set_multi_city_mode', {
+    enabled,
+    cities,
+    rotation_interval_sec: rotationIntervalSec,
+  });
+
 // Tauri Commands - KPI/視聴者数
 // 注意: Tauriコマンド引数はRust側のsnake_caseに合わせる必要がある
 export const getLiveStreamStats = (videoId: string, useBundledKey: boolean) =>

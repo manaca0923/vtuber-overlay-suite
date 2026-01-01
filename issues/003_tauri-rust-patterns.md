@@ -232,6 +232,53 @@ async fn restore_busy_timeout_with_retry(
 
 ---
 
+## 8. RwLockガードをawait境界をまたいで保持しない
+
+### 指摘内容 (PR#115)
+`server.read().await`で取得したガードを保持したまま`.broadcast(...).await`を呼ぶと、デッドロックや性能劣化のリスクがある。
+
+### 問題のあるコード
+```rust
+// ❌ 危険: ガードを保持したまま.await
+let ws_state = state.server.read().await;  // ガード取得
+ws_state
+    .broadcast(WsMessage::QueueUpdate { payload })
+    .await;  // この.awaitの間ガードを保持し続ける
+```
+
+### 解決方法: Fire-and-forgetパターン
+```rust
+use std::sync::Arc;
+
+// ✅ 正しい: Arc::cloneしてtokio::spawnで分離
+let server = Arc::clone(&state.server);
+tokio::spawn(async move {
+    let ws_state = server.read().await;
+    ws_state
+        .broadcast(WsMessage::QueueUpdate { payload })
+        .await;
+    log::debug!("Queue update broadcasted");
+});
+
+Ok(())  // 呼び出し元は即座にreturn
+```
+
+### 設計ノート
+- **Fire-and-forget**: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+- **呼び出し元はブロードキャスト完了を待たない**: 即座に`Ok(())`を返す
+- **ブロードキャスト失敗はログ出力のみ**: 呼び出し元のコマンド成功には影響しない
+- **RwLockガードの分離**: `tokio::spawn`で新しいタスクにすることで、ガードがawait境界をまたがない
+
+### 既存の正しい実装例
+`src-tauri/src/commands/setlist.rs:830-839` で同様のパターンを使用。
+
+### 今後の対策
+- ブロードキャスト処理は`Arc::clone` + `tokio::spawn`パターンを使用
+- RwLockガードを取得した後に`.await`を呼ぶ場合は要注意
+- 既存コード（youtube.rs, weather.rs, overlay.rs等）にも同様の問題あり → 技術的負債として管理
+
+---
+
 ## チェックリスト（Tauri/Rust実装時）
 
 - [ ] invokeパラメータの命名規則は正しいか（フロントエンドもsnake_case）
@@ -241,3 +288,4 @@ async fn restore_busy_timeout_with_retry(
 - [ ] グローバル状態は適切に管理されているか
 - [ ] 正規表現はシングルトン化されているか
 - [ ] リトライループのドキュメントは明確か（試行回数 vs リトライ回数）
+- [ ] RwLockガードをawait境界をまたいで保持していないか（tokio::spawnで分離）

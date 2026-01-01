@@ -133,6 +133,7 @@
 - [ ] [007](007_tauri-invoke-snake-case.md): パラメータ名は `snake_case`
 - [ ] [021](021_serde-field-naming.md): serde設定を確認
 - [ ] [013](013_pr68-accessibility-defensive-coding.md): 入力値の検証
+- [ ] [003](003_tauri-rust-patterns.md)#8: RwLockガードをawait境界をまたいで保持しない
 
 ### WebSocket/postMessage追加時
 - [ ] [010](010_pr62-websocket-manager-bfcache.md): bfcache対応

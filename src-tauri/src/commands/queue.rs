@@ -4,6 +4,7 @@
 //! データはDBのsettingsテーブルに保存される。
 
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::server::types::{QueueItem, QueueUpdatePayload, WsMessage};
@@ -128,6 +129,12 @@ pub async fn set_queue_title(
 }
 
 /// キュー更新をWebSocketでブロードキャスト
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - 呼び出し元はブロードキャスト完了を待たずに即座に`Ok(())`を返す
+/// - ブロードキャスト失敗はログ出力のみで、呼び出し元のコマンド成功には影響しない
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command]
 pub async fn broadcast_queue_update(
     queue_state: QueueState,
@@ -138,12 +145,18 @@ pub async fn broadcast_queue_update(
         items: queue_state.items,
     };
 
-    let server_state = state.server.read().await;
-    server_state
-        .broadcast(WsMessage::QueueUpdate { payload })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    // NOTE: RwLockガードをawait境界をまたいで保持するとデッドロックのリスクがあるため、
+    //       Arc::cloneでサーバー参照を取得し、tokio::spawnでバックグラウンド実行する
+    let server = Arc::clone(&state.server);
+    tokio::spawn(async move {
+        let ws_state = server.read().await;
+        ws_state
+            .broadcast(WsMessage::QueueUpdate { payload })
+            .await;
+        log::debug!("Queue update broadcasted");
+    });
 
-    log::info!("Queue update broadcasted");
     Ok(())
 }
 

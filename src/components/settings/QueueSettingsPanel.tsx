@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+
+/** タイトル保存のdebounce間隔（ミリ秒） */
+const TITLE_SAVE_DEBOUNCE_MS = 500;
 
 interface QueueItem {
   id: string | null;
@@ -13,17 +16,21 @@ interface QueueState {
 
 export function QueueSettingsPanel() {
   const [queueState, setQueueState] = useState<QueueState>({ title: null, items: [] });
+  // タイトル入力用のローカル状態（debounce用）
+  const [localTitle, setLocalTitle] = useState<string>('');
   const [newItemText, setNewItemText] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const titleSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // キュー状態を読み込み
   const loadQueueState = useCallback(async () => {
     try {
       const state = await invoke<QueueState>('get_queue_state');
       setQueueState(state);
+      setLocalTitle(state.title ?? '');
     } catch (err) {
       console.error('Failed to load queue state:', err);
       setError('キュー状態の読み込みに失敗しました');
@@ -35,6 +42,15 @@ export function QueueSettingsPanel() {
   useEffect(() => {
     loadQueueState();
   }, [loadQueueState]);
+
+  // タイマークリーンアップ
+  useEffect(() => {
+    return () => {
+      if (titleSaveTimerRef.current) {
+        clearTimeout(titleSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   // ステータスメッセージのクリア
   const clearMessages = useCallback(() => {
@@ -104,8 +120,24 @@ export function QueueSettingsPanel() {
     }
   };
 
-  // タイトルを変更
-  const handleTitleChange = async (title: string) => {
+  // タイトル入力の変更（ローカル状態のみ更新、debounceで保存）
+  const handleLocalTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocalTitle(value);
+
+    // 既存のタイマーをクリア
+    if (titleSaveTimerRef.current) {
+      clearTimeout(titleSaveTimerRef.current);
+    }
+
+    // debounce後に保存
+    titleSaveTimerRef.current = setTimeout(() => {
+      handleTitleSave(value);
+    }, TITLE_SAVE_DEBOUNCE_MS);
+  };
+
+  // タイトルを実際に保存
+  const handleTitleSave = async (title: string) => {
     const newTitle = title.trim() || null;
     clearMessages();
     setSaving(true);
@@ -167,8 +199,8 @@ export function QueueSettingsPanel() {
         <input
           id="queue-title"
           type="text"
-          value={queueState.title ?? ''}
-          onChange={(e) => handleTitleChange(e.target.value)}
+          value={localTitle}
+          onChange={handleLocalTitleChange}
           placeholder="例: リクエスト曲, 待機リスト"
           className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />

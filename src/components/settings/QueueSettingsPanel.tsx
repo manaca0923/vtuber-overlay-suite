@@ -71,7 +71,7 @@ export function QueueSettingsPanel() {
       setQueueState(updated);
       setNewItemText('');
       // ブロードキャスト
-      await invoke('broadcast_queue_update', { queueState: updated });
+      await invoke('broadcast_queue_update', { queue_state: updated });
       setSuccess('アイテムを追加しました');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
@@ -90,7 +90,7 @@ export function QueueSettingsPanel() {
       const updated = await invoke<QueueState>('remove_queue_item', { id });
       setQueueState(updated);
       // ブロードキャスト
-      await invoke('broadcast_queue_update', { queueState: updated });
+      await invoke('broadcast_queue_update', { queue_state: updated });
       setSuccess('アイテムを削除しました');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
@@ -111,7 +111,7 @@ export function QueueSettingsPanel() {
       const updated = await invoke<QueueState>('clear_queue');
       setQueueState(updated);
       // ブロードキャスト
-      await invoke('broadcast_queue_update', { queueState: updated });
+      await invoke('broadcast_queue_update', { queue_state: updated });
       setSuccess('キューをクリアしました');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
@@ -156,7 +156,7 @@ export function QueueSettingsPanel() {
       if (currentSeq === titleSaveSeqRef.current) {
         setQueueState(updated);
         // ブロードキャスト
-        await invoke('broadcast_queue_update', { queueState: updated });
+        await invoke('broadcast_queue_update', { queue_state: updated });
       }
     } catch (err) {
       // 最新のリクエストのみエラーを表示

@@ -35,6 +35,8 @@
   padding: var(--dt-spacing-sm, 8px) var(--dt-spacing-md, 12px);
   /* ウィジェット個別カラー適用（未設定時は--primary-colorにフォールバック） */
   color: var(--widget-weather-color, var(--primary-color, #ffffff));
+  /* マルチシティモード フェードアニメーション */
+  transition: opacity 0.2s ease-in-out;
 }
 
 .weather-icon {
@@ -47,11 +49,6 @@
 
 .weather-desc {
   opacity: 0.8;
-}
-
-/* 天気ウィジェット マルチシティモード フェードアニメーション */
-.weather-widget {
-  transition: opacity 0.2s ease-in-out;
 }
 
 .weather-fade-out {

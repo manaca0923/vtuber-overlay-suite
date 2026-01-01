@@ -81,6 +81,7 @@
 | [022](022_animation-callback-patterns.md) | アニメーション |
 | [027](027_pr108-multi-city-weather-review.md) | setInterval/visibilitychange |
 | [029](029_react-compiler-dependency-inference.md) | React Compiler依存配列推論 |
+| [030](030_pr115-queue-management-review.md) | 非同期競合対策、旧データ互換性 |
 
 </details>
 

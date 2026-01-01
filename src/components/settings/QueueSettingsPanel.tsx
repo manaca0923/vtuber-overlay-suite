@@ -24,6 +24,8 @@ export function QueueSettingsPanel() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const titleSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // タイトル保存のシーケンス番号（非同期競合対策）
+  const titleSaveSeqRef = useRef(0);
 
   // キュー状態を読み込み
   const loadQueueState = useCallback(async () => {
@@ -137,20 +139,36 @@ export function QueueSettingsPanel() {
   };
 
   // タイトルを実際に保存
+  // NOTE: 非同期競合対策としてシーケンス番号を使用。
+  //       古いリクエストの完了が最新のタイトルを上書きしないようにガード。
   const handleTitleSave = async (title: string) => {
     const newTitle = title.trim() || null;
+    // シーケンス番号をインクリメント
+    titleSaveSeqRef.current += 1;
+    const currentSeq = titleSaveSeqRef.current;
+
     clearMessages();
     setSaving(true);
     try {
       const updated = await invoke<QueueState>('set_queue_title', { title: newTitle });
-      setQueueState(updated);
-      // ブロードキャスト
-      await invoke('broadcast_queue_update', { queueState: updated });
+
+      // 最新のリクエストのみ状態を更新
+      if (currentSeq === titleSaveSeqRef.current) {
+        setQueueState(updated);
+        // ブロードキャスト
+        await invoke('broadcast_queue_update', { queueState: updated });
+      }
     } catch (err) {
-      console.error('Failed to set queue title:', err);
-      setError('タイトルの変更に失敗しました');
+      // 最新のリクエストのみエラーを表示
+      if (currentSeq === titleSaveSeqRef.current) {
+        console.error('Failed to set queue title:', err);
+        setError('タイトルの変更に失敗しました');
+      }
     } finally {
-      setSaving(false);
+      // 最新のリクエストのみsaving状態を解除
+      if (currentSeq === titleSaveSeqRef.current) {
+        setSaving(false);
+      }
     }
   };
 

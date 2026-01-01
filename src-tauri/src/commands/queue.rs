@@ -21,6 +21,10 @@ pub struct QueueState {
 }
 
 /// キュー状態を取得
+///
+/// ## 旧データ互換性
+/// `id: None`のアイテムが含まれる場合、新しいUUIDを付与して正規化する。
+/// これにより、旧データでも削除操作が可能になる。
 #[tauri::command]
 pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueState, String> {
     let pool = &state.db;
@@ -32,8 +36,39 @@ pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueS
             .map_err(|e| format!("DB error: {}", e))?;
 
     if let Some((json_str,)) = result {
-        let queue_state: QueueState =
+        let mut queue_state: QueueState =
             serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+
+        // 旧データ互換性: id: None のアイテムにUUIDを付与
+        let mut needs_save = false;
+        for item in &mut queue_state.items {
+            if item.id.is_none() {
+                item.id = Some(Uuid::new_v4().to_string());
+                needs_save = true;
+            }
+        }
+
+        // 正規化したデータを保存（マイグレーション）
+        if needs_save {
+            log::info!("Migrating queue items: assigning UUIDs to items without id");
+            let now = chrono::Utc::now().to_rfc3339();
+            let json_str = serde_json::to_string(&queue_state)
+                .map_err(|e| format!("JSON serialize error: {}", e))?;
+
+            sqlx::query(
+                r#"
+                INSERT INTO settings (key, value, updated_at)
+                VALUES ('queue_state', ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                "#,
+            )
+            .bind(&json_str)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("DB error during migration: {}", e))?;
+        }
+
         Ok(queue_state)
     } else {
         Ok(QueueState::default())

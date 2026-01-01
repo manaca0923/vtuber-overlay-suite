@@ -537,6 +537,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### テスト（推奨）
 
+- [ ] **Queue機能のユニットテスト追加** (PR#115レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/queue.rs`
+  - テストケース:
+    - `get_queue_state`が`settings`に存在しない場合に`QueueState::default()`を返す
+    - `save_queue_state`と`get_queue_state`の往復（JSON整合性）
+    - `remove_queue_item`が存在しない`id`を渡された場合にキューが不変であること
+    - `set_queue_title`に`null`相当を入れたときの保存/復元
+    - 同時に`add_queue_item`と`clear_queue`が走った場合の整合性
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
+
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`

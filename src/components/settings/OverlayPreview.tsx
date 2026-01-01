@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { OverlaySettings } from '../../types/overlaySettings';
 import { LAYOUT_PRESETS } from '../../types/overlaySettings';
 import type { LiveStreamStats } from '../../types/weather';
+import type { WizardSettingsData } from '../../types/wizard';
 
 // KPIデータ型（オーバーレイへのpostMessage用）
 interface KpiData {
@@ -10,13 +11,6 @@ interface KpiData {
   label: string;
   sub: number | null;
   subLabel: string | null;
-}
-
-// ウィザード設定型（Rust側でrename_allなしのためsnake_case）
-interface WizardSettingsData {
-  video_id: string;
-  live_chat_id: string;
-  use_bundled_key?: boolean;
 }
 
 type PreviewMode = 'combined' | 'individual';

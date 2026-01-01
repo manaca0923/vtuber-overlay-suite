@@ -135,7 +135,7 @@ impl InnerTubeClient {
             timeout_ms: 5000,
             api_key: None,
             client_version: FALLBACK_CLIENT_VERSION.to_string(),
-            continuation_type: ContinuationType::Invalidation, // 初期値（最も一般的）
+            continuation_type: ContinuationType::default(),
         })
     }
 

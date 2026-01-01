@@ -189,11 +189,38 @@ pub struct WidgetVisibilitySettings {
 #[serde(rename_all = "camelCase")]
 pub struct SuperchatSettings {
     /// 同時表示数（1-3、デフォルト: 1）
+    #[serde(default = "SuperchatSettings::default_max_display")]
     pub max_display: u32,
     /// 表示時間（秒、10-120、デフォルト: 60）
+    #[serde(default = "SuperchatSettings::default_display_duration_sec")]
     pub display_duration_sec: u32,
     /// キュー表示ON/OFF（待機中のスパチャを順次表示）
+    #[serde(default = "SuperchatSettings::default_queue_enabled")]
     pub queue_enabled: bool,
+}
+
+impl SuperchatSettings {
+    fn default_max_display() -> u32 {
+        1
+    }
+
+    fn default_display_duration_sec() -> u32 {
+        60
+    }
+
+    fn default_queue_enabled() -> bool {
+        true
+    }
+}
+
+impl Default for SuperchatSettings {
+    fn default() -> Self {
+        Self {
+            max_display: Self::default_max_display(),
+            display_duration_sec: Self::default_display_duration_sec(),
+            queue_enabled: Self::default_queue_enabled(),
+        }
+    }
 }
 
 /// カスタムカラーエントリ（最大3件保存）

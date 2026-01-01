@@ -183,17 +183,19 @@ pub async fn broadcast_queue_update(
     // WebSocketでブロードキャスト（Fire-and-forget）
     //
     // ## 設計根拠
-    // - `tokio::spawn`で独立したタスクとして実行するため、呼び出し元の`broadcast_queue_update`
-    //   関数はRwLockガードを保持せず即座に`Ok(())`を返す
-    // - spawn内でのガード保持は独立タスク内に閉じており、呼び出し元のawait境界には影響しない
-    // - このパターンは`setlist.rs:830-839`と同一であり、プロジェクトで採用済み
-    // - `broadcast`メソッド自体が短時間で完了する非同期処理のため、実用上の問題は発生しない
+    // - `tokio::spawn`で独立したタスクとして実行
+    // - RwLockガードをawait境界をまたいで保持しないため、ピアをクローンしてから送信
+    // - ガード取得→ピアクローン→ガード解放→送信の順序で実行
     let server = Arc::clone(&state.server);
+    let message = WsMessage::QueueUpdate { payload };
     tokio::spawn(async move {
-        let ws_state = server.read().await;
-        ws_state
-            .broadcast(WsMessage::QueueUpdate { payload })
-            .await;
+        // ガード保持時間を最小化: ピアをクローンして即座にガードを解放
+        let peers = {
+            let ws_state = server.read().await;
+            ws_state.clone_peers()
+        }; // ここでws_stateのガードが解放される
+        // ガード解放後に送信（awaitなし）
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
         log::debug!("Queue update broadcasted");
     });
 

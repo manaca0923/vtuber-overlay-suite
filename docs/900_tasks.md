@@ -470,12 +470,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/components/weather-widget.js`
   - 実装: `Array.isArray(data.cities)`チェックを追加
 
-- [ ] **マルチシティ機能のユニットテスト追加** (PR#108レビューで提案)
-  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+- [ ] **マルチシティ機能のユニットテスト追加** (PR#108レビューで提案, PR#112で追加項目)
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`, `src-tauri/src/commands/weather.rs`
   - テストケース:
     - `get_weather_multi` - 正常系（複数都市取得）
     - `get_weather_multi` - 一部都市が失敗した場合
     - `broadcast_weather_multi` - 空の都市リストでエラーが返ること
+    - `broadcast_weather_multi` / `set_multi_city_mode` で `rotation_interval_sec = 0` を渡したとき1秒にクランプされること (PR#112)
   - 優先度: 中（モック化が必要）
 
 - [x] **WeatherWidget定数化** (PR#108レビューで提案, PR#112で実装)

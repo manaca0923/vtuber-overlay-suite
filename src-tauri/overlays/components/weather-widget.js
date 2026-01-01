@@ -8,6 +8,9 @@ const DEFAULT_ROTATION_INTERVAL_MS = 5000;
 /** デフォルトのローテーション間隔（秒） - updateMulti引数用 */
 const DEFAULT_ROTATION_INTERVAL_SEC = 5;
 
+/** ローテーション間隔の最小値（秒） - バックエンド(weather.rs)のMIN_ROTATION_INTERVAL_SECと同値 */
+const MIN_ROTATION_INTERVAL_SEC = 1;
+
 /** フェードアウトアニメーション時間（ミリ秒） */
 const FADE_OUT_DURATION_MS = 200;
 
@@ -118,7 +121,11 @@ class WeatherWidget extends BaseComponent {
   updateMulti(data) {
     // 型安全性チェック: 配列以外のtruthyな値（オブジェクト等）への防御
     this.cities = Array.isArray(data.cities) ? data.cities : [];
-    this.rotationInterval = (data.rotationIntervalSec || DEFAULT_ROTATION_INTERVAL_SEC) * 1000;
+    // 数値チェック＋最小値クランプでバックエンド(weather.rs)と挙動を統一
+    const intervalSec = Number.isFinite(data.rotationIntervalSec)
+      ? data.rotationIntervalSec
+      : DEFAULT_ROTATION_INTERVAL_SEC;
+    this.rotationInterval = Math.max(intervalSec, MIN_ROTATION_INTERVAL_SEC) * 1000;
     this.multiMode = true;
 
     // 既存のタイマーをクリア

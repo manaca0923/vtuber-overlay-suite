@@ -89,8 +89,8 @@ export function OverlayPreview({ settings, activePanel, mode = 'combined' }: Ove
   const isV2Layout = layoutVersion === 'v2';
 
   // キャッシュバスター（開発時のiframeキャッシュ対策）
-  // コンポーネントマウント時に一度だけ生成
-  const cacheKey = useMemo(() => Date.now().toString(), []);
+  // コンポーネントマウント時に一度だけ生成（useState遅延初期化で不純関数を安全に呼び出し）
+  const [cacheKey] = useState(() => Date.now().toString());
 
   // previewUrl: iframeの再作成を最小限にするため、URLパラメータは最小限に
   // 他の設定（カラー、フォントサイズ等）はpostMessageで即時反映

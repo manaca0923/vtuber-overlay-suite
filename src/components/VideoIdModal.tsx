@@ -12,10 +12,10 @@ export function VideoIdModal({ isOpen, onClose, onSubmit, defaultValue = '' }: V
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // モーダルが開いたときにフォーカス
+  // モーダルが開いたときにフォームをリセットしてフォーカス
   useEffect(() => {
     if (isOpen) {
-      setVideoId(defaultValue);
+      setVideoId(defaultValue); // eslint-disable-line react-hooks/set-state-in-effect -- モーダル開閉時のフォームリセット
       setError(null);
       // 少し遅延させてフォーカス（アニメーション考慮）
       setTimeout(() => inputRef.current?.focus(), 100);

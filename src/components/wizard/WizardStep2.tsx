@@ -33,7 +33,7 @@ export default function WizardStep2({
   // 動画ID変更時に自動でチャットID取得（debounce）
   useEffect(() => {
     if (!videoId.trim()) {
-      setLoading(false);
+      setLoading(false); // eslint-disable-line react-hooks/set-state-in-effect -- 入力クリア時のリセット
       setError('');
       setSuccess('');
       return;

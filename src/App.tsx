@@ -70,7 +70,7 @@ function App() {
     } catch (e) {
       showStatus('error', 'エラー: ' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showStatus]);
+  }, [showStatus, setIsPolling]);
 
   // ウィザード完了ハンドラ
   const handleWizardComplete = useCallback(async () => {
@@ -91,6 +91,7 @@ function App() {
   }, []);
 
   // 初回起動判定 & 設定読み込み
+  // NOTE: 初期化処理は初回マウント時のみ実行する意図のため、依存配列は空にする
   useEffect(() => {
     async function initialize() {
       try {
@@ -143,6 +144,7 @@ function App() {
       }
     }
     initialize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // クリーンアップ：アンマウント時にタイマーをクリア

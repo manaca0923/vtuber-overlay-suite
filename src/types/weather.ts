@@ -56,6 +56,9 @@ export const setWeatherCityAndBroadcast = (city: string) =>
 
 // マルチシティモード用の型と関数
 
+/** 都市タプル: [cityId, cityName, displayName] */
+export type CityTuple = [id: string, name: string, displayName: string];
+
 /** 都市ごとの天気データ */
 export interface CityWeatherData {
   cityId: string;
@@ -68,12 +71,12 @@ export interface CityWeatherData {
 }
 
 /** 複数都市の天気を取得 */
-export const getWeatherMulti = (cities: Array<[string, string, string]>) =>
+export const getWeatherMulti = (cities: CityTuple[]) =>
   invoke<CityWeatherData[]>('get_weather_multi', { cities });
 
 /** 複数都市の天気をオーバーレイに配信 */
 export const broadcastWeatherMulti = (
-  cities: Array<[string, string, string]>,
+  cities: CityTuple[],
   rotationIntervalSec: number
 ) =>
   invoke<void>('broadcast_weather_multi', {
@@ -84,7 +87,7 @@ export const broadcastWeatherMulti = (
 /** マルチシティモードを自動更新に反映 */
 export const setMultiCityMode = (
   enabled: boolean,
-  cities: Array<[string, string, string]>,
+  cities: CityTuple[],
   rotationIntervalSec: number
 ) =>
   invoke<void>('set_multi_city_mode', {

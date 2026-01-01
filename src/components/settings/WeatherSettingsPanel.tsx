@@ -8,6 +8,7 @@ import {
   broadcastWeatherMulti,
   setMultiCityMode,
   type WeatherData,
+  type CityTuple,
 } from '../../types/weather';
 import type {
   WeatherSettings,
@@ -245,7 +246,7 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
         return;
       }
 
-      const cityTuples: Array<[string, string, string]> = enabledCities.map((c) => [
+      const cityTuples: CityTuple[] = enabledCities.map((c) => [
         c.id,
         c.name,
         c.displayName,

@@ -1,3 +1,22 @@
+// =============================================================================
+// 定数定義
+// =============================================================================
+
+/** デフォルトのローテーション間隔（ミリ秒） */
+const DEFAULT_ROTATION_INTERVAL_MS = 5000;
+
+/** デフォルトのローテーション間隔（秒） - updateMulti引数用 */
+const DEFAULT_ROTATION_INTERVAL_SEC = 5;
+
+/** ローテーション間隔の最小値（秒） - バックエンド(weather.rs)のMIN_ROTATION_INTERVAL_SECと同値 */
+const MIN_ROTATION_INTERVAL_SEC = 1;
+
+/** フェードアウトアニメーション時間（ミリ秒） */
+const FADE_OUT_DURATION_MS = 200;
+
+/** フェードインアニメーション時間（ミリ秒） */
+const FADE_IN_DURATION_MS = 300;
+
 /**
  * WeatherWidget - 天気情報コンポーネント
  *
@@ -39,7 +58,7 @@ class WeatherWidget extends BaseComponent {
     this.multiMode = false;
     this.cities = [];
     this.currentIndex = 0;
-    this.rotationInterval = 5000; // デフォルト5秒
+    this.rotationInterval = DEFAULT_ROTATION_INTERVAL_MS;
     this.rotationTimer = null;
 
     // visibilitychange対応（メモリリーク防止）
@@ -100,8 +119,13 @@ class WeatherWidget extends BaseComponent {
    * @param {Object} data - { cities: CityWeatherData[], rotationIntervalSec: number }
    */
   updateMulti(data) {
-    this.cities = data.cities || [];
-    this.rotationInterval = (data.rotationIntervalSec || 5) * 1000;
+    // 型安全性チェック: 配列以外のtruthyな値（オブジェクト等）への防御
+    this.cities = Array.isArray(data.cities) ? data.cities : [];
+    // 数値チェック＋最小値クランプでバックエンド(weather.rs)と挙動を統一
+    const intervalSec = Number.isFinite(data.rotationIntervalSec)
+      ? data.rotationIntervalSec
+      : DEFAULT_ROTATION_INTERVAL_SEC;
+    this.rotationInterval = Math.max(intervalSec, MIN_ROTATION_INTERVAL_SEC) * 1000;
     this.multiMode = true;
 
     // 既存のタイマーをクリア
@@ -157,8 +181,8 @@ class WeatherWidget extends BaseComponent {
       // フェードインクラスを削除
       setTimeout(() => {
         this.element.classList.remove('weather-fade-in');
-      }, 300);
-    }, 200);
+      }, FADE_IN_DURATION_MS);
+    }, FADE_OUT_DURATION_MS);
   }
 
   /**

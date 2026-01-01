@@ -13,6 +13,10 @@ use crate::server::types::{
 use crate::weather::WeatherData;
 use crate::AppState;
 
+/// ローテーション間隔の最小値（秒）
+/// UIで最小3秒を設定しているが、0が渡された場合の防御的ガード
+const MIN_ROTATION_INTERVAL_SEC: u32 = 1;
+
 /// 都市名を設定
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_weather_city(state: State<'_, AppState>, city: String) -> Result<(), String> {
@@ -239,6 +243,9 @@ pub async fn broadcast_weather_multi(
     cities: Vec<(String, String, String)>, // (id, name, displayName)
     rotation_interval_sec: u32,
 ) -> Result<(), String> {
+    // 最小値ガード: 0が渡された場合は1秒に
+    let rotation_interval_sec = rotation_interval_sec.max(MIN_ROTATION_INTERVAL_SEC);
+
     // 天気データを取得
     let weather_data = get_weather_multi(state.clone(), cities).await?;
 
@@ -279,6 +286,9 @@ pub async fn set_multi_city_mode(
     cities: Vec<(String, String, String)>,
     rotation_interval_sec: u32,
 ) -> Result<(), String> {
+    // 最小値ガード: 0が渡された場合は1秒に
+    let rotation_interval_sec = rotation_interval_sec.max(MIN_ROTATION_INTERVAL_SEC);
+
     let cities_len = cities.len();
     state
         .weather_updater

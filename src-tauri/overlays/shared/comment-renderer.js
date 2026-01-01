@@ -441,7 +441,8 @@ class CommentQueueManager {
     if (this._isDuplicate(comment.id)) return;
 
     // bufferIntervalMs の型チェック + 範囲チェック（防御的プログラミング: issues/013）
-    if (Number.isFinite(bufferIntervalMs) && bufferIntervalMs > 0) {
+    // 値が変わった場合のみsetBufferInterval()を呼び出し（関数呼び出しオーバーヘッド削減）
+    if (Number.isFinite(bufferIntervalMs) && bufferIntervalMs > 0 && this.BUFFER_INTERVAL !== bufferIntervalMs) {
       this.setBufferInterval(bufferIntervalMs);
     }
 

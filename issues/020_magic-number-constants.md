@@ -172,3 +172,42 @@ const MAX_CUSTOM_COLORS: usize = 3;
 - [ ] 定数をフロントエンド・バックエンド両方で定義したか
 - [ ] コメントで相互参照を明記したか
 - [ ] 値を変更する場合、両方を更新したか
+
+## 最小値/最大値ガードの同期パターン（PR#112で追加）
+
+### 問題
+
+バックエンドで最小値ガードを追加したが、フロントエンドでは異なるフォールバック処理をしていたため挙動が不一致。
+
+```rust
+// バックエンド (weather.rs)
+const MIN_ROTATION_INTERVAL_SEC: u32 = 1;
+let rotation_interval_sec = rotation_interval_sec.max(MIN_ROTATION_INTERVAL_SEC);
+// → 0が渡されると1秒に
+```
+
+```javascript
+// フロントエンド (weather-widget.js) - 修正前
+this.rotationInterval = (data.rotationIntervalSec || DEFAULT_ROTATION_INTERVAL_SEC) * 1000;
+// → 0が渡されるとfalsy扱いで5秒にフォールバック
+```
+
+### 解決方法
+
+```javascript
+// フロントエンド (weather-widget.js) - 修正後
+/** ローテーション間隔の最小値（秒） - バックエンド(weather.rs)のMIN_ROTATION_INTERVAL_SECと同値 */
+const MIN_ROTATION_INTERVAL_SEC = 1;
+
+// 数値チェック＋最小値クランプでバックエンドと挙動を統一
+const intervalSec = Number.isFinite(data.rotationIntervalSec)
+  ? data.rotationIntervalSec
+  : DEFAULT_ROTATION_INTERVAL_SEC;
+this.rotationInterval = Math.max(intervalSec, MIN_ROTATION_INTERVAL_SEC) * 1000;
+```
+
+### チェックリスト
+
+- [ ] バックエンドとフロントエンドで同じ最小値/最大値を使っているか
+- [ ] `|| default` ではなく `Number.isFinite()` + `Math.max/min` を使っているか
+- [ ] コメントで相互参照を明記したか

@@ -397,11 +397,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - C) 現状維持（widget設定が優先）をドキュメント化
   - 優先度: 低（現状でも動作に問題なし）
 
-- [ ] **queue()呼び出し時のsetBufferInterval()最適化** (PR#100レビューで提案)
+- [x] **queue()呼び出し時のsetBufferInterval()最適化** (PR#100レビューで提案, PR#112で実装)
   - 対象ファイル: `src-tauri/overlays/shared/comment-renderer.js`
-  - 現在: `queue()` が呼ばれるたびに `setBufferInterval()` を呼び出し
-  - 改善案: `queue()` 側で値が異なる場合のみ `setBufferInterval()` を呼び出す
-  - 優先度: 低（軽微なパフォーマンス改善）
+  - 実装: `queue()` 側で値が異なる場合のみ `setBufferInterval()` を呼び出し
 
 - [ ] **Invalidation種別のポーリング間隔設計再検討** (PR#100レビューで提案)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs:43`
@@ -464,17 +462,13 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: `MAX_CITIES = 20` 等の上限を設けてエラー表示
   - 優先度: 低（実用上10-20都市で十分）
 
-- [ ] **ローテーション間隔の最小値検証** (PR#108レビューで提案)
+- [x] **ローテーション間隔の最小値検証** (PR#108レビューで提案, PR#112で実装)
   - 対象ファイル: `src-tauri/src/commands/weather.rs`
-  - 現状: `rotation_interval_sec`が0の場合の挙動が未定義
-  - 改善案: `let interval = rotation_interval_sec.max(1);` で最低1秒に
-  - 優先度: 低（UIで最小3秒を設定しているため発生しにくい）
+  - 実装: `MIN_ROTATION_INTERVAL_SEC`定数を追加し、`.max()`でガード
 
-- [ ] **updateMultiの型安全性強化** (PR#108レビューで提案)
+- [x] **updateMultiの型安全性強化** (PR#108レビューで提案, PR#112で実装)
   - 対象ファイル: `src-tauri/overlays/components/weather-widget.js`
-  - 現状: `data.cities`が配列かどうかの検証がない
-  - 改善案: `if (!Array.isArray(data.cities)) return;` を追加
-  - 優先度: 低（WebSocket経由で正しいデータが送られるため）
+  - 実装: `Array.isArray(data.cities)`チェックを追加
 
 - [ ] **マルチシティ機能のユニットテスト追加** (PR#108レビューで提案)
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
@@ -484,11 +478,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - `broadcast_weather_multi` - 空の都市リストでエラーが返ること
   - 優先度: 中（モック化が必要）
 
-- [ ] **WeatherWidget定数化** (PR#108レビューで提案)
+- [x] **WeatherWidget定数化** (PR#108レビューで提案, PR#112で実装)
   - 対象ファイル: `src-tauri/overlays/components/weather-widget.js`
-  - 対象: `5000`（デフォルト5秒）、`300`（フェードイン完了後）
-  - 改善案: クラス定数として定義
-  - 優先度: 低（将来的な調整の容易さのため）
+  - 実装: `DEFAULT_ROTATION_INTERVAL_MS`, `FADE_OUT_DURATION_MS`, `FADE_IN_DURATION_MS`等の定数を追加
 
 - [ ] **set_multi_city_config の非同期設計の改善** (PR#108レビューで提案)
   - 対象ファイル: `src-tauri/src/weather/auto_updater.rs`
@@ -503,11 +495,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: `futures::stream::buffer_unordered(3)` で同時3リクエストに制限
   - 優先度: 低（Open-Meteo APIは寛容だが、将来的に都市数が増える場合に備えて）
 
-- [ ] **CityTuple型エイリアスの追加** (PR#108レビューで提案)
-  - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
-  - 問題: `Array<[string, string, string]>` が不明瞭
-  - 改善案: `type CityTuple = [id: string, name: string, displayName: string];`
-  - 優先度: 低（可読性改善のみ）
+- [x] **CityTuple型エイリアスの追加** (PR#108レビューで提案, PR#112で実装)
+  - 対象ファイル: `src/types/weather.ts`, `src/components/settings/WeatherSettingsPanel.tsx`
+  - 実装: `CityTuple`型エイリアスを`weather.ts`に定義し、各所でインポートして使用
 
 - [ ] **マルチシティ部分的成功時のUI通知** (PR#108レビューで提案)
   - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`

@@ -181,8 +181,13 @@ pub async fn broadcast_queue_update(
     };
 
     // WebSocketでブロードキャスト（Fire-and-forget）
-    // NOTE: RwLockガードをawait境界をまたいで保持するとデッドロックのリスクがあるため、
-    //       Arc::cloneでサーバー参照を取得し、tokio::spawnでバックグラウンド実行する
+    //
+    // ## 設計根拠
+    // - `tokio::spawn`で独立したタスクとして実行するため、呼び出し元の`broadcast_queue_update`
+    //   関数はRwLockガードを保持せず即座に`Ok(())`を返す
+    // - spawn内でのガード保持は独立タスク内に閉じており、呼び出し元のawait境界には影響しない
+    // - このパターンは`setlist.rs:830-839`と同一であり、プロジェクトで採用済み
+    // - `broadcast`メソッド自体が短時間で完了する非同期処理のため、実用上の問題は発生しない
     let server = Arc::clone(&state.server);
     tokio::spawn(async move {
         let ws_state = server.read().await;

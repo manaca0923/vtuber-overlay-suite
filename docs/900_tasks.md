@@ -336,37 +336,31 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - または正当なパターンの場合はeslint-disableコメントで対応
   - 優先度: 低（動作に問題なし、パフォーマンス影響も軽微）
 
-- [ ] **ContinuationType へのDefaultトレイト実装** (PR#99レビューで提案)
+- [x] **ContinuationType へのDefaultトレイト実装** (PR#99レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
-  - `impl Default for ContinuationType { fn default() -> Self { Self::Invalidation } }`
-  - client.rsの初期化コメントが不要になる
-  - 優先度: 低（任意の改善提案）
+  - `#[default]`アトリビュートでInvalidationをデフォルト値に設定
+  - client.rsの初期化コメントを削除してdefault()を使用
 
-- [ ] **WizardSettingsData型の一元化** (PR#110レビューで提案)
-  - 対象ファイル: `src/components/settings/OverlayPreview.tsx`, `src/components/CommentControlPanel.tsx`
-  - 現状: `WizardSettingsData`がローカル定義されている（OverlayPreview.tsx:16-20）
-  - 改善案: `src/types/wizard.ts`に一元化して再利用
-  - 優先度: 低（現状でも動作に問題なし）
+- [x] **WizardSettingsData型の一元化** (PR#110レビューで提案, PR#111で実装)
+  - 対象ファイル: `src/types/wizard.ts`に新規作成
+  - OverlayPreview.tsxのローカル定義を削除して共通型をインポート
 
 - [ ] **lib.rsのコマンドリスト重複削減** (PR#110レビューで提案)
   - 対象ファイル: `src-tauri/src/lib.rs`
   - 現状: デバッグビルドとリリースビルドで大量のコマンドリストが重複
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
-  - 優先度: 低（現状でも動作に問題なし）
+  - 優先度: 低（Tauriマクロの制約により複雑）
 
-- [ ] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案)
-  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
-  - 現状: `?v=2`, `?v=3`などを手動で追加
-  - 改善案: ビルドツールで自動生成するか、一貫したルールを設ける
-  - 優先度: 低（現状でも動作に問題なし）
+- [x] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案, PR#111で実装)
+  - 対象ファイル: `src-tauri/overlays/*.html`
+  - 全ファイルのキャッシュバスターを`?v=3`に統一
+  - combined-v2.htmlにバージョン管理ルールのコメントを追加
 
-- [ ] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案)
+- [x] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
-  - `MAX_POLLING_INTERVAL_MS`, `MIN_POLLING_INTERVAL_MS` になぜこの値を選んだか追記
-  - メンテナンス性向上のため
-  - 優先度: 低（任意の改善提案）
+  - MAX_POLLING_INTERVAL_MS, MIN_POLLING_INTERVAL_MS に設計根拠を詳細記載
 
-- [ ] **SuperchatSettingsのDefault trait実装** (PR#105レビューで提案)
+- [x] **SuperchatSettingsのDefault trait実装** (PR#105レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/src/server/types.rs`
   - 実装例:
     ```rust

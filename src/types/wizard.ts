@@ -7,6 +7,8 @@
 export interface WizardSettingsData {
   video_id: string;
   live_chat_id: string;
-  saved_at?: string;
+  /** 保存日時（ISO 8601形式） */
+  saved_at: string;
+  /** 同梱APIキー使用フラグ（後方互換性のためオプショナル） */
   use_bundled_key?: boolean;
 }

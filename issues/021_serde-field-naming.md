@@ -155,6 +155,45 @@ struct CommentAddPayload {
 
 ---
 
+## オプショナル/必須の整合性
+
+### ルール
+
+TypeScript型を定義する際、フィールドのオプショナル/必須はRust側と一致させる：
+
+| Rust | TypeScript | 説明 |
+|------|------------|------|
+| `pub field: String` | `field: string` | 必須フィールド |
+| `pub field: Option<String>` | `field?: string` または `field: string \| null` | オプショナル |
+| `#[serde(default)]` | `field?: Type` | デフォルト値あり（オプショナル可） |
+
+### 問題例（PR#111で発見）
+
+```typescript
+// ❌ 悪い例: Rust側は必須なのにTypeScript側がオプショナル
+interface WizardSettingsData {
+  saved_at?: string;  // TypeScript: オプショナル
+}
+
+// Rust側
+pub struct WizardSettingsData {
+  pub saved_at: String,  // Rust: 必須
+}
+
+// ✅ 良い例: 整合性が取れている
+interface WizardSettingsData {
+  saved_at: string;  // TypeScript: 必須（Rust側と一致）
+}
+```
+
+### 確認手順
+
+1. Rust側の型定義を確認（`Option<T>`かどうか）
+2. `#[serde(default)]`があるか確認
+3. TypeScript側の型定義を同じルールで設定
+
+---
+
 ## 重複定義の防止
 
 ### ルール
@@ -164,6 +203,7 @@ struct CommentAddPayload {
 1. `src/types/` に同じ型が既に存在しないか検索
 2. 存在する場合はインポートして再利用
 3. 新規定義が必要な場合は、Rust側のserde設定を確認
+4. **オプショナル/必須の整合性を確認**
 
 ### 例: LiveStreamStats
 

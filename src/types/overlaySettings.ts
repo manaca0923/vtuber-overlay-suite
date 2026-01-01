@@ -254,8 +254,8 @@ export interface WidgetVisibilitySettings {
   superchat: boolean; // left.lower: スパチャ
   logo: boolean; // left.bottom: ロゴ
   setlist: boolean; // right.upper: セトリ
-  kpi: boolean; // right.lowerLeft: KPI
-  tanzaku: boolean; // right.lowerRight: 短冊
+  kpi: boolean; // right.kpi: KPI
+  tanzaku: boolean; // right.tanzaku: 短冊
   announcement: boolean; // right.bottom: 告知
 }
 

@@ -20,8 +20,8 @@
     'center.full',
     'right.top',
     'right.upper',
-    'right.lowerLeft',
-    'right.lowerRight',
+    'right.kpi',
+    'right.tanzaku',
     'right.bottom',
   ];
 
@@ -35,8 +35,8 @@
     'center.full': { column: 'center', role: '主役', clampBox: false },
     'right.top': { column: 'right', role: 'ラベル', clampBox: false },
     'right.upper': { column: 'right', role: 'セトリ', clampBox: true },
-    'right.lowerLeft': { column: 'right', role: 'KPI', clampBox: false },
-    'right.lowerRight': { column: 'right', role: '短冊', clampBox: true },
+    'right.kpi': { column: 'right', role: 'KPI', clampBox: false },
+    'right.tanzaku': { column: 'right', role: '短冊', clampBox: true },
     'right.bottom': { column: 'right', role: '告知', clampBox: false },
   };
 

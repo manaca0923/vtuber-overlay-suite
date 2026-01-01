@@ -71,12 +71,18 @@ class KPIBlock extends BaseComponent {
   }
 
   render() {
+    // 横長レイアウト: 数字を横に並べ、その下にラベルを表示
     const container = this.createElement('div', {
-      className: 'kpi-block panel',
+      className: 'kpi-block kpi-block--horizontal panel',
+    });
+
+    // 主KPI項目（視聴者数）
+    const mainItem = this.createElement('div', {
+      className: 'kpi-item',
     });
 
     this.mainEl = this.createElement('div', {
-      className: 'kpi-main dt-text-shadow',
+      className: 'kpi-value dt-text-shadow',
       textContent: '--',
     });
 
@@ -85,23 +91,29 @@ class KPIBlock extends BaseComponent {
       textContent: this.mainLabel,
     });
 
-    container.appendChild(this.mainEl);
-    container.appendChild(this.labelEl);
+    mainItem.appendChild(this.mainEl);
+    mainItem.appendChild(this.labelEl);
+    container.appendChild(mainItem);
 
+    // 副KPI項目（高評価数）
     if (this.showSub) {
-      this.subEl = this.createElement('div', {
-        className: 'kpi-sub dt-text-shadow',
-        textContent: '',
+      const subItem = this.createElement('div', {
+        className: 'kpi-item',
       });
-      container.appendChild(this.subEl);
 
-      if (this.subLabel) {
-        this.subLabelEl = this.createElement('div', {
-          className: 'kpi-sub-label',
-          textContent: this.subLabel,
-        });
-        container.appendChild(this.subLabelEl);
-      }
+      this.subEl = this.createElement('div', {
+        className: 'kpi-value dt-text-shadow',
+        textContent: '--',
+      });
+
+      this.subLabelEl = this.createElement('div', {
+        className: 'kpi-label kpi-sub-label',
+        textContent: this.subLabel || '高評価',
+      });
+
+      subItem.appendChild(this.subEl);
+      subItem.appendChild(this.subLabelEl);
+      container.appendChild(subItem);
     }
 
     return container;

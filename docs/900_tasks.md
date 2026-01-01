@@ -342,6 +342,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - client.rsの初期化コメントが不要になる
   - 優先度: 低（任意の改善提案）
 
+- [ ] **WizardSettingsData型の一元化** (PR#110レビューで提案)
+  - 対象ファイル: `src/components/settings/OverlayPreview.tsx`, `src/components/CommentControlPanel.tsx`
+  - 現状: `WizardSettingsData`がローカル定義されている（OverlayPreview.tsx:16-20）
+  - 改善案: `src/types/wizard.ts`に一元化して再利用
+  - 優先度: 低（現状でも動作に問題なし）
+
+- [ ] **lib.rsのコマンドリスト重複削減** (PR#110レビューで提案)
+  - 対象ファイル: `src-tauri/src/lib.rs`
+  - 現状: デバッグビルドとリリースビルドで大量のコマンドリストが重複
+  - 改善案: マクロやcfg-ifクレートで共通部分を抽出
+  - 優先度: 低（現状でも動作に問題なし）
+
+- [ ] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案)
+  - 対象ファイル: `src-tauri/overlays/combined-v2.html`
+  - 現状: `?v=2`, `?v=3`などを手動で追加
+  - 改善案: ビルドツールで自動生成するか、一貫したルールを設ける
+  - 優先度: 低（現状でも動作に問題なし）
+
 - [ ] **ポーリング間隔定数の根拠をコメントに追記** (PR#99レビューで提案)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
   - `MAX_POLLING_INTERVAL_MS`, `MIN_POLLING_INTERVAL_MS` になぜこの値を選んだか追記
@@ -1005,15 +1023,23 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ### 技術仕様
 - 取得間隔: 30秒（クォータ節約とリアルタイム性のバランス）
-- 主数値: 同時接続者数（gRPC/公式API）または視聴回数（InnerTube）
-- 副数値: 高評価数（gRPC/公式APIのみ）
-- InnerTubeモード: `/player`エンドポイントで視聴回数を取得（ラベル「視聴中」/「再生回数」で区別）
+- 主数値: 同時接続者数（`concurrentViewers`）
+- 副数値: 高評価数（`likeCount`）
+- **KPI取得は常に同梱APIキーを使用**（コメント取得モードに関係なく）
+  - 理由: InnerTube APIの`viewCount`は総視聴回数であり、同時接続者数ではないため不正確
+  - クォータ消費: 約3 units/30秒（10時間配信で約3,600 units、許容範囲）
+
+### 設計判断（PR#110）
+| 機能 | 取得方法 | 理由 |
+|------|----------|------|
+| コメント取得 | モードに応じて切替 | InnerTubeモードでクォータ節約 |
+| KPI取得 | 常に同梱APIキー | 正確な同時接続者数が必要 |
 
 ### 成果物
-- `src-tauri/src/commands/youtube.rs` - `fetch_and_broadcast_viewer_count`, `fetch_viewer_count_innertube` コマンド追加
-- `src/components/CommentControlPanel.tsx` - ポーリング中の定期取得ロジック追加（モード別対応）
+- `src-tauri/src/commands/youtube.rs` - `fetch_and_broadcast_viewer_count` コマンド（KPI取得）
+- `src/components/CommentControlPanel.tsx` - ポーリング中の定期取得ロジック（常に同梱キー使用）
 - `src-tauri/overlays/components/kpi-block.js` - モックデータ削除、実データ待機に変更
-- `src-tauri/src/youtube/innertube/client.rs` - `get_video_details()` メソッド追加
+- `src-tauri/src/youtube/innertube/client.rs` - `get_video_details()` メソッド（デバッグ用）
 - `src-tauri/src/youtube/innertube/types.rs` - `VideoDetails`, `InnerTubePlayerResponse` 型追加
 - `issues/028_pr109-log-level-trace.md` - 定期実行ログレベル指針のノウハウ
 

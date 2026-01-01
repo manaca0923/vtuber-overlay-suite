@@ -180,6 +180,8 @@ pub fn run() {
           commands::youtube::get_live_stream_stats,
           commands::youtube::broadcast_kpi_update,
           commands::youtube::fetch_and_broadcast_viewer_count,
+          // fetch_viewer_count_innertube: デバッグ用（InnerTube APIでviewCount取得）
+          // 本番ではKPI取得は常に同梱APIキーを使用するため、フロントエンドからは呼ばれない
           commands::youtube::fetch_viewer_count_innertube,
           commands::weather::set_weather_city,
           commands::weather::get_weather_city,
@@ -197,7 +199,9 @@ pub fn run() {
           commands::system::get_system_fonts,
         ]
       }
-      // リリースビルドではtest_innertube_connectionを除外
+      // リリースビルドではtest_innertube_connection, fetch_viewer_count_innertubeを除外
+      // 理由: KPI取得は常に同梱APIキーを使用するため、InnerTube経由のviewCount取得は不要
+      //       test_innertube_connectionは開発時の接続テスト専用
       #[cfg(not(debug_assertions))]
       {
         tauri::generate_handler![
@@ -256,7 +260,8 @@ pub fn run() {
           commands::youtube::get_live_stream_stats,
           commands::youtube::broadcast_kpi_update,
           commands::youtube::fetch_and_broadcast_viewer_count,
-          commands::youtube::fetch_viewer_count_innertube,
+          // fetch_viewer_count_innertube: リリースビルドでは除外
+          // KPI取得は常に同梱APIキーを使用するため不要
           commands::weather::set_weather_city,
           commands::weather::get_weather_city,
           commands::weather::get_weather,

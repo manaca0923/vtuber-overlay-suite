@@ -1356,7 +1356,7 @@ pub async fn fetch_and_broadcast_viewer_count(
     Ok(())
 }
 
-/// InnerTube APIで視聴者数を取得してブロードキャスト
+/// InnerTube APIで視聴者数を取得してブロードキャスト（デバッグ専用）
 ///
 /// YouTube Data APIを使用せずに、InnerTube（内部API）で視聴情報を取得。
 /// APIキー不要のため、InnerTubeモードでの視聴者数表示に使用。
@@ -1364,6 +1364,10 @@ pub async fn fetch_and_broadcast_viewer_count(
 /// 注意: InnerTube APIで取得できるのは総視聴回数（viewCount）であり、
 /// ライブ配信の同時接続者数（concurrentViewers）とは異なる可能性があります。
 /// ラベルを「視聴中」「再生回数」として、Data APIの「視聴者」と区別しています。
+///
+/// 注: 本番ではKPI取得は常に同梱APIキーを使用するため、この関数は呼ばれません。
+/// デバッグ・検証目的でのみ使用されます。
+#[cfg(debug_assertions)]
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fetch_viewer_count_innertube(
     video_id: String,

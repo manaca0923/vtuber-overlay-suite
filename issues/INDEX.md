@@ -9,7 +9,7 @@
 | カテゴリ | 参照ファイル | 要点 |
 |---------|-------------|------|
 | **Tauri invoke** | [007](007_tauri-invoke-snake-case.md) | パラメータ名は `snake_case` |
-| **serde** | [021](021_serde-field-naming.md) | `rename_all` の適用範囲 |
+| **serde** | [021](021_serde-field-naming.md) | `rename_all` の適用範囲、戻り値の型定義 |
 | **入力検証** | [013](013_pr68-accessibility-defensive-coding.md) | 型ガード、上下限チェック |
 | **セキュリティ** | [002](002_overlay-security.md) | URL検証、XSS、深層防御 |
 | **定数** | [020](020_magic-number-constants.md) | マジックナンバー禁止 |

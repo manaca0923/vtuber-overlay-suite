@@ -16,7 +16,7 @@ describe('slot.ts', () => {
     it('ドット区切りをハイフン区切りに変換する', () => {
       expect(slotIdToCssId('left.top')).toBe('slot-left-top');
       expect(slotIdToCssId('center.full')).toBe('slot-center-full');
-      expect(slotIdToCssId('right.lowerLeft')).toBe('slot-right-lowerLeft');
+      expect(slotIdToCssId('right.kpi')).toBe('slot-right-kpi');
     });
 
     it('全てのSLOT_IDを正しく変換できる', () => {
@@ -31,7 +31,7 @@ describe('slot.ts', () => {
     it('ハイフン区切りをドット区切りに変換する', () => {
       expect(cssIdToSlotId('slot-left-top')).toBe('left.top');
       expect(cssIdToSlotId('slot-center-full')).toBe('center.full');
-      expect(cssIdToSlotId('slot-right-lowerLeft')).toBe('right.lowerLeft');
+      expect(cssIdToSlotId('slot-right-kpi')).toBe('right.kpi');
     });
 
     it('無効なCSS IDに対してnullを返す', () => {
@@ -54,11 +54,10 @@ describe('slot.ts', () => {
       }
     });
 
-    it('複数ハイフンを含むslot名を正しく処理する', () => {
-      // 現在の実装では存在しないが、正しくパースされることを確認
-      // right-lowerLeft のケース
-      expect(cssIdToSlotId('slot-right-lowerLeft')).toBe('right.lowerLeft');
-      expect(cssIdToSlotId('slot-right-lowerRight')).toBe('right.lowerRight');
+    it('全slotのCSS ID変換をテスト', () => {
+      // 全てのslot IDを往復変換
+      expect(cssIdToSlotId('slot-right-kpi')).toBe('right.kpi');
+      expect(cssIdToSlotId('slot-right-tanzaku')).toBe('right.tanzaku');
     });
   });
 
@@ -98,8 +97,8 @@ describe('slot.ts', () => {
       const rightSlots = getSlotsByColumn('right');
       expect(rightSlots).toContain('right.top');
       expect(rightSlots).toContain('right.upper');
-      expect(rightSlots).toContain('right.lowerLeft');
-      expect(rightSlots).toContain('right.lowerRight');
+      expect(rightSlots).toContain('right.kpi');
+      expect(rightSlots).toContain('right.tanzaku');
       expect(rightSlots).toContain('right.bottom');
       expect(rightSlots).toHaveLength(5);
     });

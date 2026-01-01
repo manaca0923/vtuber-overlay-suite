@@ -377,13 +377,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 将来的にデフォルト値が必要になった場合に備えて
   - 優先度: 低（現時点では全フィールドがオプショナル）
 
-- [ ] **オーバーレイJSのDEBUG定数統一** (PR#105レビューで提案)
+- [x] **オーバーレイJSのDEBUG定数統一** (PR#105レビューで提案, PR#113で確認)
   - 対象ファイル: `src-tauri/overlays/shared/*.js`, `src-tauri/overlays/components/*.js`
-  - 現状: 各ファイルで同じDEBUG定数定義が重複
-    - `overlay-core.js`, `comment-renderer.js`, `density-manager.js`, `component-registry.js`, `superchat-card.js`
-  - 改善案: `overlay-core.js`からexportしたDEBUGを各ファイルでimport
-  - 注意: スタンドアロンで動作する必要がある場合は現状維持
-  - 優先度: 低（動作に問題なし、一貫性の改善のみ）
+  - 確認結果: 各ファイルはブラウザのプレーンJSであり、ESモジュールではないためスタンドアロン動作が必要
+  - 結論: 現状維持が適切（各ファイルで個別にDEBUG定数を定義）
 
 - [ ] **commentEnabled/setlistEnabledとwidget設定の統合検討** (PR#102レビューで提案)
   - 対象ファイル: `src-tauri/overlays/combined-v2.html`
@@ -421,10 +418,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対応案: v1レイアウトも利用者がいる場合は同様の対応を追加
   - 優先度: 低（v2レイアウトへの移行を推奨）
 
-- [ ] **postMessageメッセージ型のドキュメント追記** (PR#103レビューで提案)
+- [x] **postMessageメッセージ型のドキュメント追記** (PR#103レビューで提案, PR#113で確認)
   - 対象ファイル: `docs/300_overlay-specs.md`
-  - 追記内容: `preview:settings:update`メッセージ型の仕様
-  - 優先度: 低（ドキュメント改善）
+  - 確認結果: `preview:settings:update`メッセージ型は既にドキュメント化済み（lines 250-258）
 
 - [ ] **システムフォント取得のエラーハンドリング強化** (PR#106レビューで提案)
   - 対象ファイル: `src-tauri/src/commands/system.rs`
@@ -444,11 +440,10 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: enumを使用して型安全性を向上
   - 優先度: 低（後方互換性を考慮すると現状維持でも問題なし）
 
-- [ ] **CSS変数のフォールバック値の統一** (PR#106レビューで提案)
-  - 対象ファイル: `src-tauri/overlays/shared/design-tokens.css`
-  - 現在: フォールバック値が`#ffffff`で一部重複
-  - 改善案: CSS変数として定義し一箇所にまとめる
-  - 優先度: 低（保守性改善のみ）
+- [x] **CSS変数のフォールバック値の統一** (PR#106レビューで提案, PR#113で確認)
+  - 対象ファイル: `src-tauri/overlays/shared/design-tokens.css`, `src-tauri/overlays/styles/components.css`
+  - 確認結果: `--primary-color: #ffffff`が`overlay-common.css`で一元定義済み
+  - 各ウィジェットカラーは`var(--widget-*-color, var(--primary-color, #ffffff))`で一貫性あり
 
 - [ ] **キャッシュTTLと自動更新間隔の表示整理** (PR#107レビューで提案)
   - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
@@ -506,10 +501,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: 「X/Y 都市の天気を取得しました」等の通知を表示
   - 優先度: 低（ログには記録されているため運用上は問題なし）
 
-- [ ] **天気ウィジェットCSSトランジションの確認** (PR#108レビューで提案)
+- [x] **天気ウィジェットCSSトランジションの確認** (PR#108レビューで提案, PR#113で修正)
   - 対象ファイル: `src-tauri/overlays/styles/components.css`
-  - 確認事項: `.weather-widget`とフェードクラスにトランジションが重複していないか
-  - 優先度: 低（動作に問題なし、意図した設計か確認）
+  - 修正内容: 重複していた`.weather-widget`セレクタを1つに統合し、`transition`プロパティを含めた
 
 - [ ] **InnerTubeクライアントの再作成コスト最適化** (PR#109レビューで提案)
   - 対象ファイル: `src-tauri/src/commands/youtube.rs:1378-1380`

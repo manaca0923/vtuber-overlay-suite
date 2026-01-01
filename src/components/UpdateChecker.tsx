@@ -176,6 +176,8 @@ export function UpdateChecker() {
   }, []);
 
   // このバージョンをスキップ
+  // NOTE: versionのみ使用しているが、React Compilerはstate.update全体を依存として推論する
+  // state.updateは更新情報が変わったときのみ変化するため、実用上問題なし
   const skipVersion = useCallback(() => {
     if (state.update?.version) {
       try {

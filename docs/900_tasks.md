@@ -827,7 +827,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | **ロゴ** | left.bottom | ❌ | ❌ | ✅ | ⚠️ UI のみ（設定UIなし） |
 | セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **KPI** | right.lowerLeft | ✅ | ✅ | ✅ | ✅ **完全動作**（gRPC/公式APIモード時） |
-| **短冊** | right.lowerRight | ❌ | ✅型のみ | ✅ | ⚠️ データ供給なし |
+| **短冊** | right.lowerRight | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **告知** | right.bottom | ❌ | ✅型のみ | ✅ | ⚠️ スタブ表示 |
 
 ### 詳細説明
@@ -882,11 +882,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
    - ファイル: `src-tauri/overlays/components/brand-block.js`
 
 8. **短冊** (`QueueList`)
-   - UIコンポーネントは完成（リスト表示、最大6件、空時非表示）
-   - WebSocket型定義あり: `queue:update` (`QueueUpdatePayload`)
-   - **欠けているもの**: キュー管理のバックエンドロジック、設定UI
-   - 現状: データがないため非表示
-   - ファイル: `src-tauri/overlays/components/queue-list.js`
+   - UIコンポーネント完成（リスト表示、最大6件、空時非表示）
+   - キュー管理バックエンド完成（DB保存、CRUD操作）
+   - WebSocket: `queue:update` メッセージでリアルタイム反映
+   - 設定UI完成（アイテム追加/削除/クリア、タイトル設定）
+   - ファイル: `src-tauri/overlays/components/queue-list.js`, `src-tauri/src/commands/queue.rs`
 
 9. **告知** (`PromoPanel`)
    - UIコンポーネントは完成（サイクル表示、フェードアニメーション）
@@ -1031,7 +1031,7 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ## T27: 短冊（キュー）管理機能
 **優先度**: P3 | **見積**: 3日 | **依存**: なし
-**ステータス**: 未着手
+**ステータス**: ✅ **完了**（2026-01-01）
 
 ### 概要
 短冊ウィジェット（right.lowerRight）のキュー管理機能を実装。
@@ -1040,13 +1040,14 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 ### 背景
 - QueueListコンポーネントは完成済み（UI、WebSocket受信）
 - WebSocket型定義 `queue:update` も存在
-- **欠けているもの**: キュー管理のバックエンド、設定UI
+- ~~**欠けているもの**: キュー管理のバックエンド、設定UI~~ → 実装完了
 
 ### チェックリスト
-- [ ] キューデータのDB保存（またはメモリ管理）
-- [ ] キュー操作コマンド: `add_queue_item`, `remove_queue_item`, `clear_queue`
-- [ ] `broadcast_queue_update()` 関数実装
-- [ ] 設定UI: キュータイトル、最大表示件数
+- [x] キューデータのDB保存（settingsテーブル）
+- [x] キュー操作コマンド: `add_queue_item`, `remove_queue_item`, `clear_queue`
+- [x] `broadcast_queue_update()` 関数実装
+- [x] 設定UI: キュータイトル、アイテム管理
+- [x] OverlaySettingsへのタブ統合
 
 ### ユースケース
 - リクエスト曲の待ち行列
@@ -1055,7 +1056,11 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ### 成果物
 - `src-tauri/src/commands/queue.rs` - キュー管理コマンド
-- `src/components/settings/QueueSettingsPanel.tsx` - 設定UI
+  - `get_queue_state`, `save_queue_state` - 状態取得・保存
+  - `add_queue_item`, `remove_queue_item`, `clear_queue` - アイテム操作
+  - `set_queue_title` - タイトル設定
+  - `broadcast_queue_update`, `save_and_broadcast_queue` - WebSocketブロードキャスト
+- `src/components/settings/QueueSettingsPanel.tsx` - 設定UI（アイテムCRUD）
 
 ---
 

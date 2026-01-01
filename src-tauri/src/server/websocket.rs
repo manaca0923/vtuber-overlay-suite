@@ -108,27 +108,19 @@ impl WebSocketState {
         log::debug!("Broadcasted message to {} peers: {:?}", peers.len(), message);
     }
 
-    /// ピアのクローンを取得（同期版・ガード保持時間を最小化するため）
+    /// ピアのクローンを取得（ガード保持時間を最小化するため）
     ///
     /// ## 使用例
     /// ```rust
     /// let peers = {
     ///     let ws_state = server.read().await;
-    ///     ws_state.clone_peers()
+    ///     ws_state.clone_peers().await
     /// }; // ここでガード解放
     /// WebSocketState::send_to_peers(&peers, &message); // ガード解放後に送信
     /// ```
-    pub fn clone_peers(&self) -> Vec<(usize, Tx)> {
-        // 注意: この関数は同期的にピアをクローンする
-        // 外側でRwLockガードを取得してからこの関数を呼ぶこと
-        // peersフィールドへの直接アクセスが必要なため、try_read()を使用
-        if let Ok(peers) = self.peers.try_read() {
-            peers.iter().map(|(id, tx)| (*id, tx.clone())).collect()
-        } else {
-            // ロック取得に失敗した場合は空のリストを返す
-            log::warn!("Failed to acquire peers lock for cloning");
-            Vec::new()
-        }
+    pub async fn clone_peers(&self) -> Vec<(usize, Tx)> {
+        let peers = self.peers.read().await;
+        peers.iter().map(|(id, tx)| (*id, tx.clone())).collect()
     }
 
     /// メッセージを直接送信（ガード不要版）

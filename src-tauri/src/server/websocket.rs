@@ -108,19 +108,21 @@ impl WebSocketState {
         log::debug!("Broadcasted message to {} peers: {:?}", peers.len(), message);
     }
 
-    /// ピアのクローンを取得（ガード保持時間を最小化するため）
+    /// ピアマップのArcを取得（ガード保持時間を最小化するため）
     ///
     /// ## 使用例
     /// ```rust
-    /// let peers = {
+    /// // ステップ1: ガードを取得してpeersのArcをクローン、即座にガード解放
+    /// let peers_arc = {
     ///     let ws_state = server.read().await;
-    ///     ws_state.clone_peers().await
-    /// }; // ここでガード解放
-    /// WebSocketState::send_to_peers(&peers, &message); // ガード解放後に送信
+    ///     ws_state.get_peers_arc()
+    /// }; // ここでws_stateのガード解放
+    /// // ステップ2: ガード解放後にpeersをawait
+    /// let peers = peers_arc.read().await;
+    /// // ... peers を使用
     /// ```
-    pub async fn clone_peers(&self) -> Vec<(usize, Tx)> {
-        let peers = self.peers.read().await;
-        peers.iter().map(|(id, tx)| (*id, tx.clone())).collect()
+    pub fn get_peers_arc(&self) -> PeerMap {
+        Arc::clone(&self.peers)
     }
 
     /// メッセージを直接送信（ガード不要版）

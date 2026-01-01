@@ -184,18 +184,28 @@ pub async fn broadcast_queue_update(
     //
     // ## 設計根拠
     // - `tokio::spawn`で独立したタスクとして実行
-    // - 外側のRwLockガード（server）を保持したまま内側のawait（clone_peers）を呼ぶが、
-    //   これは独立タスク内であり呼び出し元には影響しない
-    // - ピアクローン完了後は同期的に送信するため、ロック保持時間は最小限
+    // - RwLockガードをawait境界をまたいで保持しないため、2段階で処理:
+    //   1. serverのガードを取得→peersのArcをクローン→ガード解放
+    //   2. ガード解放後にpeersのRwLockをawait
+    // - これにより「ガード保持中にawait」を完全に回避
     let server = Arc::clone(&state.server);
     let message = WsMessage::QueueUpdate { payload };
     tokio::spawn(async move {
-        // ピアをクローンして送信準備
-        let peers = {
+        // ステップ1: serverのガードを取得してpeersのArcをクローン、即座にガード解放
+        let peers_arc = {
             let ws_state = server.read().await;
-            ws_state.clone_peers().await
-        }; // ここでws_stateのガードが解放される
-        // ガード解放後に送信（awaitなし）
+            ws_state.get_peers_arc()
+        }; // ここでws_stateのガード解放
+
+        // ステップ2: ガード解放後にpeersをawait（ガード保持中にawaitしていない）
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard); // 明示的にガード解放
+
+        // ステップ3: ガード解放後に送信（awaitなし）
         crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
         log::debug!("Queue update broadcasted");
     });

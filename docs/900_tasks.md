@@ -356,6 +356,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（Tauriマクロの制約により複雑）
 
+- [ ] **キュー操作のread-modify-write競合対策** (PR#115レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/queue.rs`
+  - 問題: `get_queue_state`→変更→`save_queue_state`のパターンが非原子的
+  - 影響: 同時に`add_queue_item`/`clear_queue`が走ると更新が失われる可能性
+  - 改善案:
+    - A) SQLiteトランザクションで囲む
+    - B) ETag/バージョン管理で楽観的ロック
+  - 優先度: 低（単一ユーザー操作が前提、既存パターンと同様）
+  - 備考: setlist等も同様のパターンを使用しており、全体的な改修が必要
+
 - [ ] **既存コードのRwLockガードawait境界問題の修正** (PR#115レビューで発見)
   - 対象ファイル:
     - `src-tauri/src/commands/youtube.rs` (3箇所: L1286, L1350, L1413)

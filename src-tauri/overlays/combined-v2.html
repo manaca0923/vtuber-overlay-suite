@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  キャッシュバスター管理:
+  - CSS/JSファイルの変更時は `?v=X` の値を更新する
+  - 全ファイル共通のバージョン番号を使用（現在: v=3）
+  - 更新時は検索・置換で一括更新: `?v=3` → `?v=4`
+-->
 <html lang="ja">
 
 <head>
@@ -103,9 +109,9 @@
   </div>
 
   <!-- 共通スクリプト -->
-  <script src="shared/slots.js?v=2"></script>
-  <script src="shared/comment-renderer.js?v=2"></script>
-  <script src="shared/overlay-core.js?v=1"></script>
+  <script src="shared/slots.js?v=3"></script>
+  <script src="shared/comment-renderer.js?v=3"></script>
+  <script src="shared/overlay-core.js?v=3"></script>
 
   <!-- パフォーマンス最適化モジュール（T24） -->
   <script src="shared/clamp-constants.js"></script>

@@ -8,9 +8,11 @@ use serde::{Deserialize, Serialize};
 /// - `invalidationContinuationData`: timeout_msはOptional、推奨間隔（短縮可能）
 /// - `timedContinuationData`: timeout_msは必須、明示的な待機時間（厳守）
 /// - `reloadContinuationData/replay`: 初期化・リプレイ用
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ContinuationType {
     /// invalidationContinuationData - 推奨間隔（短縮可能）
+    /// 最も一般的な種別のためデフォルト値
+    #[default]
     Invalidation,
     /// timedContinuationData - 明示的な待機時間（厳守）
     Timed,
@@ -19,11 +21,19 @@ pub enum ContinuationType {
 }
 
 /// ポーリング間隔の最大値（30秒）
-/// 極端に大きな値が返された場合のガード
+///
+/// 根拠:
+/// - YouTubeライブチャットの一般的なイベント更新頻度は5〜30秒程度
+/// - 30秒を超える待機は実用上不要であり、極端な値のガードとして設定
+/// - APIレスポンスで異常に大きな値が返された場合のフォールバック
 const MAX_POLLING_INTERVAL_MS: u64 = 30000;
 
 /// ポーリング間隔の最小値（500ms）
-/// 極端に短い値によるサーバー過負荷を防止
+///
+/// 根拠:
+/// - YouTubeへの過剰なリクエストを防止（サーバー負荷軽減）
+/// - 500ms未満のポーリングは実用上の意味がなく、BAN対策として重要
+/// - 一般的なWeb APIのレート制限（1-2リクエスト/秒）に準拠
 const MIN_POLLING_INTERVAL_MS: u64 = 500;
 
 /// InnerTubeモードのバッファ間隔（1秒）

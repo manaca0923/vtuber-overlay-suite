@@ -38,7 +38,7 @@ class BrandBlock extends BaseComponent {
       }
       console.warn('BrandBlock: 無効なURLスキーム:', parsed.protocol);
       return '';
-    } catch (_e) {
+    } catch {
       // 相対パスの場合は許可
       if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
         return url;

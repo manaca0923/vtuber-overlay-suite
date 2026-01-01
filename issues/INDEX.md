@@ -70,7 +70,7 @@
 </details>
 
 <details>
-<summary><strong>JavaScript/TypeScript</strong></summary>
+<summary><strong>JavaScript/TypeScript/React</strong></summary>
 
 | ID | 要点 |
 |----|------|
@@ -80,6 +80,7 @@
 | [020](020_magic-number-constants.md) | 定数化パターン |
 | [022](022_animation-callback-patterns.md) | アニメーション |
 | [027](027_pr108-multi-city-weather-review.md) | setInterval/visibilitychange |
+| [029](029_react-compiler-dependency-inference.md) | React Compiler依存配列推論 |
 
 </details>
 

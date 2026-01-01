@@ -192,7 +192,7 @@ class SettingsFetcher {
         this.onSettingsApply(settings);
         this.fetchSucceeded = true;
       }
-    } catch (_e) {
+    } catch {
       if (DEBUG) console.log('Settings API not available, using defaults');
     } finally {
       clearTimeout(timeoutId);
@@ -471,7 +471,7 @@ async function fetchLatestSetlist(apiBaseUrl = API_BASE_URL, onUpdate, timeout =
         });
       }
     }
-  } catch (_e) {
+  } catch {
     if (DEBUG) console.log('Failed to fetch setlist');
   } finally {
     clearTimeout(timeoutId);

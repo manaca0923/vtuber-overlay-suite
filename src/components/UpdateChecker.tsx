@@ -39,20 +39,16 @@ export function UpdateChecker() {
     nextRetryDelay: INITIAL_RETRY_DELAY_MS,
   });
   const [dismissed, setDismissed] = useState(false);
-  const [skippedVersion, setSkippedVersion] = useState<string | null>(null);
-  const downloadCancelledRef = useRef(false);
-
-  // localStorageからスキップされたバージョンを読み込み
-  useEffect(() => {
+  // localStorageからスキップされたバージョンを遅延初期化で読み込み
+  const [skippedVersion, setSkippedVersion] = useState<string | null>(() => {
     try {
-      const saved = localStorage.getItem(SKIPPED_VERSION_KEY);
-      if (saved) {
-        setSkippedVersion(saved);
-      }
+      return localStorage.getItem(SKIPPED_VERSION_KEY);
     } catch {
       // localStorageが使用できない環境では無視
+      return null;
     }
-  }, []);
+  });
+  const downloadCancelledRef = useRef(false);
 
   const checkForUpdates = useCallback(async (isRetry = false) => {
     setState((prev) => ({ ...prev, checking: true, error: null }));
@@ -180,6 +176,8 @@ export function UpdateChecker() {
   }, []);
 
   // このバージョンをスキップ
+  // NOTE: versionのみ使用しているが、React Compilerはstate.update全体を依存として推論する
+  // state.updateは更新情報が変わったときのみ変化するため、実用上問題なし
   const skipVersion = useCallback(() => {
     if (state.update?.version) {
       try {
@@ -192,7 +190,7 @@ export function UpdateChecker() {
         setDismissed(true);
       }
     }
-  }, [state.update?.version]);
+  }, [state.update]);
 
   // スキップをクリア（将来的に設定画面から使用可能）
   const clearSkippedVersion = useCallback(() => {
@@ -205,12 +203,14 @@ export function UpdateChecker() {
   }, []);
 
   // 起動時に更新チェック
+  // NOTE: コンポーネントマウント時の初期データ取得は正当なパターン
   useEffect(() => {
     // 開発環境ではスキップ
     if (import.meta.env.DEV) {
       console.log('Skipping update check in development mode');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 初期マウント時の更新チェック
     checkForUpdates();
   }, [checkForUpdates]);
 

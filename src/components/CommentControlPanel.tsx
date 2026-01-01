@@ -162,7 +162,6 @@ export function CommentControlPanel({
   // NOTE: このuseEffectは初回マウント時のみ実行する意図のため、依存配列は空のままにする。
   // isPollingはマウント時の初期値（親から受け取った値）を参照している。
   // マウント時にポーリング中であれば保存されたモードで上書きしない（現在のモードを維持）。
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     async function loadInitialSettings() {
       // APIモードを読み込み（ポーリング中でない場合のみ更新）
@@ -193,6 +192,7 @@ export function CommentControlPanel({
       }
     }
     loadInitialSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // InnerTube/gRPC/Officialステータスイベントを監視
@@ -337,7 +337,7 @@ export function CommentControlPanel({
     return () => {
       unlistenRef.current?.();
     };
-  }, [liveChatId]);
+  }, [liveChatId, setIsPolling]);
 
   // NOTE: ポーリング状態はApp.tsxで管理（is_unified_polling_running）
   // 以下の古いuseEffectは削除：is_polling_running（旧API）を使用していたためバグの原因だった
@@ -415,7 +415,7 @@ export function CommentControlPanel({
         }
       }
     },
-    [videoId, apiMode, useBundledKey, apiKey, hasValidApiKey, currentModeRequiresApiKey]
+    [videoId, apiMode, useBundledKey, apiKey, hasValidApiKey, currentModeRequiresApiKey, setIsPolling]
   );
 
   // 統合ポーラーを使った停止処理
@@ -439,7 +439,7 @@ export function CommentControlPanel({
         setLoading(false);
       }
     }
-  }, []);
+  }, [setIsPolling]);
 
   // APIモード変更ハンドラ
   const handleApiModeChange = useCallback(async (newMode: ApiMode) => {

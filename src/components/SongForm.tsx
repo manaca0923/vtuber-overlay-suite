@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { createSong, updateSong } from '../types/commands';
 import type { Song } from '../types/song';
 import { parseTags } from '../types/song';
@@ -44,7 +44,7 @@ export function SongForm({ song, onClose }: SongFormProps) {
     setTags(tags.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setError('タイトルは必須です');

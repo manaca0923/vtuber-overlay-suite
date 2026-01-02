@@ -50,11 +50,15 @@ pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoS
 /// Tauriコマンドとして外部公開されているため、任意の値が渡される可能性があります。
 /// `set_promo_settings`と同じクランプルールを適用することで、
 /// オーバーレイ表示の異常挙動や極端値による性能劣化を防止します。
+///
+/// ## 戻り値
+/// クランプ適用後の`PromoState`を返します。これにより、保存値とブロードキャスト値の
+/// 一致が保証されます。
 #[tauri::command]
 pub async fn save_promo_state(
     mut promo_state: PromoState,
     state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<PromoState, String> {
     let pool = &state.db;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -83,7 +87,7 @@ pub async fn save_promo_state(
     .map_err(|e| format!("DB error: {}", e))?;
 
     log::info!("Promo state saved");
-    Ok(())
+    Ok(promo_state)
 }
 
 /// 告知アイテムを追加
@@ -240,12 +244,16 @@ pub async fn broadcast_promo_update(
 }
 
 /// 告知状態を保存してブロードキャスト
+///
+/// `save_promo_state`の戻り値（クランプ適用後）でブロードキャストすることで、
+/// 保存値と配信値の一致を保証します。
 #[tauri::command]
 pub async fn save_and_broadcast_promo(
     promo_state: PromoState,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    save_promo_state(promo_state.clone(), state.clone()).await?;
-    broadcast_promo_update(promo_state, state).await?;
+    // save_promo_stateはクランプ適用後の値を返すため、その値でブロードキャスト
+    let validated_state = save_promo_state(promo_state, state.clone()).await?;
+    broadcast_promo_update(validated_state, state).await?;
     Ok(())
 }

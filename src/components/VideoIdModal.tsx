@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 
 interface VideoIdModalProps {
   isOpen: boolean;
@@ -47,7 +47,7 @@ export function VideoIdModal({ isOpen, onClose, onSubmit, defaultValue = '' }: V
     return null;
   }, []);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = useCallback((e: FormEvent) => {
     e.preventDefault();
 
     const extracted = extractVideoId(videoId);
@@ -60,7 +60,7 @@ export function VideoIdModal({ isOpen, onClose, onSubmit, defaultValue = '' }: V
     onClose();
   }, [videoId, extractVideoId, onSubmit, onClose]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       onClose();
     }

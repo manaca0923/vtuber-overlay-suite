@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 /** 表示間隔保存のdebounce間隔（ミリ秒） */
@@ -178,7 +178,7 @@ export function PromoSettingsPanel() {
   };
 
   // 表示間隔の変更（ローカル状態のみ更新、debounceで保存）
-  const handleShowSecChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleShowSecChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
     if (isNaN(value)) return;
 
@@ -227,14 +227,14 @@ export function PromoSettingsPanel() {
   };
 
   // キーボードイベント（新規追加）
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       handleAddItem();
     }
   };
 
   // キーボードイベント（編集）
-  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleEditKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       handleSaveEdit();
     } else if (e.key === 'Escape') {

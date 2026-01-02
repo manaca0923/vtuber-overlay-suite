@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ChatMessage } from '../types/chat';
@@ -67,7 +67,7 @@ interface CommentControlPanelProps {
   videoId: string;
   liveChatId: string;
   isPolling: boolean;
-  setIsPolling: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsPolling: Dispatch<SetStateAction<boolean>>;
   onSettingsChange?: (settings: { videoId: string; liveChatId: string }) => void;
 }
 

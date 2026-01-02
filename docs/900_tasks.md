@@ -563,11 +563,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - `set_promo_settings`で`show_sec`が3〜15にクランプされること
     - `set_promo_settings`で`cycle_sec`が10〜120にクランプされること
     - `save_promo_state`でも`show_sec`/`cycle_sec`がクランプされること
+    - `save_and_broadcast_promo`経路で保存値と配信値が一致すること
     - `remove_promo_item`が範囲外インデックスでエラーを返すこと
     - `update_promo_item`が範囲外インデックスでエラーを返すこと
     - `add_promo_item`/`update_promo_item`/`remove_promo_item`の正常系動作
     - `get_promo_state`が存在しない場合に`PromoState::default()`を返す
+    - `get_promo_state`が破損JSONを受け取った場合のエラー処理
     - `save_promo_state`と`get_promo_state`の往復（JSON整合性）
+    - `set_promo_settings`で`None`が渡された場合に既存値が保持されること
   - 優先度: 中（動作確認済みだが回帰テストとして重要）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)

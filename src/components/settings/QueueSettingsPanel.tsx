@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type ChangeEvent, type KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 /** タイトル保存のdebounce間隔（ミリ秒） */
@@ -123,7 +123,7 @@ export function QueueSettingsPanel() {
   };
 
   // タイトル入力の変更（ローカル状態のみ更新、debounceで保存）
-  const handleLocalTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLocalTitleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setLocalTitle(value);
 
@@ -173,7 +173,7 @@ export function QueueSettingsPanel() {
   };
 
   // キーボードイベント
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       handleAddItem();
     }

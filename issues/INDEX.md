@@ -66,6 +66,7 @@
 | [002](002_overlay-security.md) | URL検証、XSS、postMessage |
 | [013](013_pr68-accessibility-defensive-coding.md) | 型ガード、フォールバック |
 | [025](025_pr106-theme-font-settings.md) | 深層防御 |
+| [031](031_pr116-promo-validation-review.md) | 公開APIのバリデーション、境界チェック |
 
 </details>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { createSetlist } from '../types/commands';
 
 interface SetlistFormProps {
@@ -11,7 +11,7 @@ export function SetlistForm({ onClose }: SetlistFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('セットリスト名は必須です');

@@ -1,5 +1,6 @@
 pub mod keyring;
 pub mod overlay;
+pub mod promo;
 pub mod queue;
 pub mod setlist;
 pub mod system;

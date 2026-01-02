@@ -842,7 +842,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ---
 
-## ウィジェット実装状況（2025-12-31 調査）
+## ウィジェット実装状況（2026-01-02 更新）
 
 > ウィジェット表示設定（設定画面のトグル）に表示される9つのウィジェットの実装状況。
 > 各ウィジェットは3層（バックエンド/WebSocket送信/オーバーレイUI）で構成される。
@@ -859,11 +859,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **KPI** | right.lowerLeft | ✅ | ✅ | ✅ | ✅ **完全動作**（gRPC/公式APIモード時） |
 | **短冊** | right.lowerRight | ✅ | ✅ | ✅ | ✅ **完全動作** |
-| **告知** | right.bottom | ❌ | ✅型のみ | ✅ | ⚠️ スタブ表示 |
+| **告知** | right.bottom | ✅ | ✅ | ✅ | ✅ **完全動作** |
 
 ### 詳細説明
 
-#### ✅ 完全動作（6個）
+#### ✅ 完全動作（8個）
 
 1. **時計** (`ClockWidget`)
    - 設計上バックエンド不要（ブラウザのローカル時刻を使用）
@@ -905,26 +905,26 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
    - WebSocket: `kpi:update` メッセージ
    - ファイル: `src-tauri/overlays/components/kpi-block.js`
 
-#### ⚠️ 部分実装（3個）
-
-7. **ロゴ** (`BrandBlock`)
-   - UIコンポーネントは完成（画像URL/テキスト表示対応）
-   - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
-   - ファイル: `src-tauri/overlays/components/brand-block.js`
-
-8. **短冊** (`QueueList`)
+7. **短冊** (`QueueList`)
    - UIコンポーネント完成（リスト表示、最大6件、空時非表示）
    - キュー管理バックエンド完成（DB保存、CRUD操作）
    - WebSocket: `queue:update` メッセージでリアルタイム反映
    - 設定UI完成（アイテム追加/削除/クリア、タイトル設定）
    - ファイル: `src-tauri/overlays/components/queue-list.js`, `src-tauri/src/commands/queue.rs`
 
-9. **告知** (`PromoPanel`)
-   - UIコンポーネントは完成（サイクル表示、フェードアニメーション）
-   - WebSocket型定義あり: `promo:update` (`PromoUpdatePayload`)
-   - **欠けているもの**: 告知コンテンツ管理のバックエンド、設定UI
-   - 現状: `afterMount`で固定ダミー文言（「チャンネル登録よろしく」等）を表示
-   - ファイル: `src-tauri/overlays/components/promo-panel.js`
+8. **告知** (`PromoPanel`)
+   - UIコンポーネント完成（サイクル表示、フェードアニメーション）
+   - 告知コンテンツ管理バックエンド完成（DB保存、CRUD操作）
+   - WebSocket: `promo:update` メッセージでリアルタイム反映
+   - 設定UI完成（アイテム追加/編集/削除、表示間隔設定）
+   - ファイル: `src-tauri/overlays/components/promo-panel.js`, `src-tauri/src/commands/promo.rs`
+
+#### ⚠️ 部分実装（1個）
+
+9. **ロゴ** (`BrandBlock`)
+   - UIコンポーネントは完成（画像URL/テキスト表示対応）
+   - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
+   - ファイル: `src-tauri/overlays/components/brand-block.js`
 
 ### 関連ファイル
 
@@ -1097,7 +1097,7 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ## T28: 告知コンテンツ管理
 **優先度**: P3 | **見積**: 2日 | **依存**: なし
-**ステータス**: 未着手
+**ステータス**: ✅ **完了**（2026-01-02）
 
 ### 概要
 告知ウィジェット（right.bottom）のコンテンツ管理機能を実装。
@@ -1106,18 +1106,23 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 ### 背景
 - PromoPanelコンポーネントは完成済み（UI、WebSocket受信、サイクル表示）
 - WebSocket型定義 `promo:update` も存在
-- **欠けているもの**: 告知コンテンツの設定UI、保存機能
-- 現状: 固定ダミー文言（「チャンネル登録よろしく」等）を表示
+- ~~**欠けているもの**: 告知コンテンツの設定UI、保存機能~~ → 実装完了
+- ~~現状: 固定ダミー文言（「チャンネル登録よろしく」等）を表示~~ → 設定データを表示
 
 ### チェックリスト
-- [ ] 告知コンテンツのDB保存
-- [ ] 告知編集コマンド: `set_promo_items`, `get_promo_items`
-- [ ] `broadcast_promo_update()` 関数実装
-- [ ] 設定UI: 告知文の追加・編集・削除、サイクル間隔設定
+- [x] 告知コンテンツのDB保存（settingsテーブル）
+- [x] 告知編集コマンド: `get_promo_state`, `save_promo_state`, `add_promo_item`, `remove_promo_item`, `update_promo_item`, `clear_promo`, `set_promo_settings`
+- [x] `broadcast_promo_update()` 関数実装
+- [x] 設定UI: 告知文の追加・編集・削除、表示間隔設定
+- [x] OverlaySettingsへのタブ統合
 
 ### 成果物
 - `src-tauri/src/commands/promo.rs` - 告知管理コマンド
-- `src/components/settings/PromoSettingsPanel.tsx` - 設定UI
+  - `get_promo_state`, `save_promo_state` - 状態取得・保存
+  - `add_promo_item`, `remove_promo_item`, `update_promo_item`, `clear_promo` - アイテム操作
+  - `set_promo_settings` - 表示間隔設定
+  - `broadcast_promo_update`, `save_and_broadcast_promo` - WebSocketブロードキャスト
+- `src/components/settings/PromoSettingsPanel.tsx` - 設定UI（アイテムCRUD、表示間隔設定）
 
 ---
 

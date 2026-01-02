@@ -561,7 +561,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/src/commands/promo.rs`
   - テストケース:
     - `set_promo_settings`で`show_sec`が3〜15にクランプされること
-    - `add_promo_item`/`update_promo_item`/`remove_promo_item`の境界インデックス動作
+    - `set_promo_settings`で`cycle_sec`が10〜120にクランプされること
+    - `save_promo_state`でも`show_sec`/`cycle_sec`がクランプされること
+    - `remove_promo_item`が範囲外インデックスでエラーを返すこと
+    - `update_promo_item`が範囲外インデックスでエラーを返すこと
+    - `add_promo_item`/`update_promo_item`/`remove_promo_item`の正常系動作
     - `get_promo_state`が存在しない場合に`PromoState::default()`を返す
     - `save_promo_state`と`get_promo_state`の往復（JSON整合性）
   - 優先度: 中（動作確認済みだが回帰テストとして重要）

@@ -42,13 +42,29 @@ pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoS
 }
 
 /// 告知状態を保存
+///
+/// ## 範囲検証
+/// - `cycle_sec`: 10〜120秒にクランプ
+/// - `show_sec`: 3〜15秒にクランプ
+///
+/// Tauriコマンドとして外部公開されているため、任意の値が渡される可能性があります。
+/// `set_promo_settings`と同じクランプルールを適用することで、
+/// オーバーレイ表示の異常挙動や極端値による性能劣化を防止します。
 #[tauri::command]
 pub async fn save_promo_state(
-    promo_state: PromoState,
+    mut promo_state: PromoState,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let pool = &state.db;
     let now = chrono::Utc::now().to_rfc3339();
+
+    // 保存時にも範囲検証を行う（set_promo_settingsと同じルール）
+    if let Some(sec) = promo_state.cycle_sec {
+        promo_state.cycle_sec = Some(sec.clamp(10, 120));
+    }
+    if let Some(sec) = promo_state.show_sec {
+        promo_state.show_sec = Some(sec.clamp(3, 15));
+    }
 
     let json_str =
         serde_json::to_string(&promo_state).map_err(|e| format!("JSON serialize error: {}", e))?;
@@ -87,6 +103,9 @@ pub async fn add_promo_item(
 }
 
 /// 告知アイテムを削除（インデックス指定）
+///
+/// ## エラー
+/// - `index`が範囲外の場合はエラーを返す
 #[tauri::command]
 pub async fn remove_promo_item(
     index: usize,
@@ -94,15 +113,24 @@ pub async fn remove_promo_item(
 ) -> Result<PromoState, String> {
     let mut promo_state = get_promo_state(state.clone()).await?;
 
-    if index < promo_state.items.len() {
-        promo_state.items.remove(index);
-        save_promo_state(promo_state.clone(), state).await?;
+    if index >= promo_state.items.len() {
+        return Err(format!(
+            "Index out of range: {} (items count: {})",
+            index,
+            promo_state.items.len()
+        ));
     }
+
+    promo_state.items.remove(index);
+    save_promo_state(promo_state.clone(), state).await?;
 
     Ok(promo_state)
 }
 
 /// 告知アイテムを更新（インデックス指定）
+///
+/// ## エラー
+/// - `index`が範囲外の場合はエラーを返す
 #[tauri::command]
 pub async fn update_promo_item(
     index: usize,
@@ -112,10 +140,16 @@ pub async fn update_promo_item(
 ) -> Result<PromoState, String> {
     let mut promo_state = get_promo_state(state.clone()).await?;
 
-    if index < promo_state.items.len() {
-        promo_state.items[index] = PromoItem { text, icon };
-        save_promo_state(promo_state.clone(), state).await?;
+    if index >= promo_state.items.len() {
+        return Err(format!(
+            "Index out of range: {} (items count: {})",
+            index,
+            promo_state.items.len()
+        ));
     }
+
+    promo_state.items[index] = PromoItem { text, icon };
+    save_promo_state(promo_state.clone(), state).await?;
 
     Ok(promo_state)
 }

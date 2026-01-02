@@ -204,7 +204,7 @@ export function PromoSettingsPanel() {
     clearMessages();
     setSaving(true);
     try {
-      const updated = await invoke<PromoState>('set_promo_settings', { showSec });
+      const updated = await invoke<PromoState>('set_promo_settings', { show_sec: showSec });
 
       // 最新のリクエストのみ状態を更新
       if (currentSeq === settingsSaveSeqRef.current) {

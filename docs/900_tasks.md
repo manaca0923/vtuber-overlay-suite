@@ -557,6 +557,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 同時に`add_queue_item`と`clear_queue`が走った場合の整合性
   - 優先度: 中（動作確認済みだが回帰テストとして重要）
 
+- [ ] **Promo機能のユニットテスト追加** (PR#116レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/promo.rs`
+  - テストケース:
+    - `set_promo_settings`で`show_sec`が3〜15にクランプされること
+    - `add_promo_item`/`update_promo_item`/`remove_promo_item`の境界インデックス動作
+    - `get_promo_state`が存在しない場合に`PromoState::default()`を返す
+    - `save_promo_state`と`get_promo_state`の往復（JSON整合性）
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
+
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`

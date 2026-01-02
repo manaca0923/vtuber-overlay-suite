@@ -356,6 +356,27 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（Tauriマクロの制約により複雑）
 
+- [ ] **キュー操作のread-modify-write競合対策** (PR#115レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/queue.rs`
+  - 問題: `get_queue_state`→変更→`save_queue_state`のパターンが非原子的
+  - 影響: 同時に`add_queue_item`/`clear_queue`が走ると更新が失われる可能性
+  - 改善案:
+    - A) SQLiteトランザクションで囲む
+    - B) ETag/バージョン管理で楽観的ロック
+  - 優先度: 低（単一ユーザー操作が前提、既存パターンと同様）
+  - 備考: setlist等も同様のパターンを使用しており、全体的な改修が必要
+
+- [ ] **既存コードのRwLockガードawait境界問題の修正** (PR#115レビューで発見)
+  - 対象ファイル:
+    - `src-tauri/src/commands/youtube.rs` (3箇所: L1286, L1350, L1413)
+    - `src-tauri/src/commands/weather.rs` (4箇所: L66, L116, L142, L257)
+    - `src-tauri/src/commands/overlay.rs` (1箇所: L209)
+    - `src-tauri/src/weather/auto_updater.rs` (2箇所: L140, L201)
+  - 問題: `server.read().await`でガードを取得後に`.broadcast(...).await`を呼んでいる
+  - 改善案: `Arc::clone` + `tokio::spawn`パターンで分離（queue.rsで実装済み）
+  - 参考: `issues/003_tauri-rust-patterns.md#8`
+  - 優先度: 中（デッドロックのリスクあり、ただし現状問題は発生していない）
+
 - [x] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/overlays/*.html`
   - 全ファイルのキャッシュバスターを`?v=3`に統一
@@ -525,6 +546,16 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（UX改善のみ）
 
 ### テスト（推奨）
+
+- [ ] **Queue機能のユニットテスト追加** (PR#115レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/queue.rs`
+  - テストケース:
+    - `get_queue_state`が`settings`に存在しない場合に`QueueState::default()`を返す
+    - `save_queue_state`と`get_queue_state`の往復（JSON整合性）
+    - `remove_queue_item`が存在しない`id`を渡された場合にキューが不変であること
+    - `set_queue_title`に`null`相当を入れたときの保存/復元
+    - 同時に`add_queue_item`と`clear_queue`が走った場合の整合性
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
 
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
@@ -827,7 +858,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | **ロゴ** | left.bottom | ❌ | ❌ | ✅ | ⚠️ UI のみ（設定UIなし） |
 | セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **KPI** | right.lowerLeft | ✅ | ✅ | ✅ | ✅ **完全動作**（gRPC/公式APIモード時） |
-| **短冊** | right.lowerRight | ❌ | ✅型のみ | ✅ | ⚠️ データ供給なし |
+| **短冊** | right.lowerRight | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **告知** | right.bottom | ❌ | ✅型のみ | ✅ | ⚠️ スタブ表示 |
 
 ### 詳細説明
@@ -882,11 +913,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
    - ファイル: `src-tauri/overlays/components/brand-block.js`
 
 8. **短冊** (`QueueList`)
-   - UIコンポーネントは完成（リスト表示、最大6件、空時非表示）
-   - WebSocket型定義あり: `queue:update` (`QueueUpdatePayload`)
-   - **欠けているもの**: キュー管理のバックエンドロジック、設定UI
-   - 現状: データがないため非表示
-   - ファイル: `src-tauri/overlays/components/queue-list.js`
+   - UIコンポーネント完成（リスト表示、最大6件、空時非表示）
+   - キュー管理バックエンド完成（DB保存、CRUD操作）
+   - WebSocket: `queue:update` メッセージでリアルタイム反映
+   - 設定UI完成（アイテム追加/削除/クリア、タイトル設定）
+   - ファイル: `src-tauri/overlays/components/queue-list.js`, `src-tauri/src/commands/queue.rs`
 
 9. **告知** (`PromoPanel`)
    - UIコンポーネントは完成（サイクル表示、フェードアニメーション）
@@ -1031,7 +1062,7 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ## T27: 短冊（キュー）管理機能
 **優先度**: P3 | **見積**: 3日 | **依存**: なし
-**ステータス**: 未着手
+**ステータス**: ✅ **完了**（2026-01-01）
 
 ### 概要
 短冊ウィジェット（right.lowerRight）のキュー管理機能を実装。
@@ -1040,13 +1071,14 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 ### 背景
 - QueueListコンポーネントは完成済み（UI、WebSocket受信）
 - WebSocket型定義 `queue:update` も存在
-- **欠けているもの**: キュー管理のバックエンド、設定UI
+- ~~**欠けているもの**: キュー管理のバックエンド、設定UI~~ → 実装完了
 
 ### チェックリスト
-- [ ] キューデータのDB保存（またはメモリ管理）
-- [ ] キュー操作コマンド: `add_queue_item`, `remove_queue_item`, `clear_queue`
-- [ ] `broadcast_queue_update()` 関数実装
-- [ ] 設定UI: キュータイトル、最大表示件数
+- [x] キューデータのDB保存（settingsテーブル）
+- [x] キュー操作コマンド: `add_queue_item`, `remove_queue_item`, `clear_queue`
+- [x] `broadcast_queue_update()` 関数実装
+- [x] 設定UI: キュータイトル、アイテム管理
+- [x] OverlaySettingsへのタブ統合
 
 ### ユースケース
 - リクエスト曲の待ち行列
@@ -1055,7 +1087,11 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ### 成果物
 - `src-tauri/src/commands/queue.rs` - キュー管理コマンド
-- `src/components/settings/QueueSettingsPanel.tsx` - 設定UI
+  - `get_queue_state`, `save_queue_state` - 状態取得・保存
+  - `add_queue_item`, `remove_queue_item`, `clear_queue` - アイテム操作
+  - `set_queue_title` - タイトル設定
+  - `broadcast_queue_update`, `save_and_broadcast_queue` - WebSocketブロードキャスト
+- `src/components/settings/QueueSettingsPanel.tsx` - 設定UI（アイテムCRUD）
 
 ---
 

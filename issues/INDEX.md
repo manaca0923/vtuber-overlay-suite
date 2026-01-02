@@ -81,6 +81,7 @@
 | [022](022_animation-callback-patterns.md) | アニメーション |
 | [027](027_pr108-multi-city-weather-review.md) | setInterval/visibilitychange |
 | [029](029_react-compiler-dependency-inference.md) | React Compiler依存配列推論 |
+| [030](030_pr115-queue-management-review.md) | 非同期競合対策、旧データ互換性 |
 
 </details>
 
@@ -133,6 +134,7 @@
 - [ ] [007](007_tauri-invoke-snake-case.md): パラメータ名は `snake_case`
 - [ ] [021](021_serde-field-naming.md): serde設定を確認
 - [ ] [013](013_pr68-accessibility-defensive-coding.md): 入力値の検証
+- [ ] [003](003_tauri-rust-patterns.md)#8: RwLockガードをawait境界をまたいで保持しない
 
 ### WebSocket/postMessage追加時
 - [ ] [010](010_pr62-websocket-manager-bfcache.md): bfcache対応

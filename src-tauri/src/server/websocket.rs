@@ -107,6 +107,48 @@ impl WebSocketState {
 
         log::debug!("Broadcasted message to {} peers: {:?}", peers.len(), message);
     }
+
+    /// ピアマップのArcを取得（ガード保持時間を最小化するため）
+    ///
+    /// ## 使用例
+    /// ```rust
+    /// // ステップ1: ガードを取得してpeersのArcをクローン、即座にガード解放
+    /// let peers_arc = {
+    ///     let ws_state = server.read().await;
+    ///     ws_state.get_peers_arc()
+    /// }; // ここでws_stateのガード解放
+    /// // ステップ2: ガード解放後にpeersをawait
+    /// let peers = peers_arc.read().await;
+    /// // ... peers を使用
+    /// ```
+    pub fn get_peers_arc(&self) -> PeerMap {
+        Arc::clone(&self.peers)
+    }
+
+    /// メッセージを直接送信（ガード不要版）
+    ///
+    /// ## 設計根拠
+    /// `broadcast`メソッドは内部でRwLockガードを取得するため、
+    /// 外側でガードを保持したまま呼ぶと二重ロックになる。
+    /// このメソッドは事前に取得したピアリストに対して直接送信する。
+    pub fn send_to_peers(peers: &[(usize, Tx)], message: &WsMessage) {
+        let json = match serde_json::to_string(message) {
+            Ok(j) => j,
+            Err(e) => {
+                log::error!("Failed to serialize WebSocket message: {}", e);
+                return;
+            }
+        };
+
+        let msg = Message::Text(json);
+        for (peer_id, tx) in peers.iter() {
+            if let Err(e) = tx.send(msg.clone()) {
+                log::warn!("Failed to send message to peer {}: {}", peer_id, e);
+            }
+        }
+
+        log::debug!("Sent message to {} peers: {:?}", peers.len(), message);
+    }
 }
 
 impl Default for WebSocketState {

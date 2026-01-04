@@ -102,8 +102,9 @@ pub async fn add_promo_item(
     let item = PromoItem { text, icon };
     promo_state.items.push(item);
 
-    save_promo_state(promo_state.clone(), state).await?;
-    Ok(promo_state)
+    // save_promo_stateはクランプ適用後の値を返すため、その値を使用
+    let saved = save_promo_state(promo_state, state).await?;
+    Ok(saved)
 }
 
 /// 告知アイテムを削除（インデックス指定）
@@ -126,9 +127,10 @@ pub async fn remove_promo_item(
     }
 
     promo_state.items.remove(index);
-    save_promo_state(promo_state.clone(), state).await?;
 
-    Ok(promo_state)
+    // save_promo_stateはクランプ適用後の値を返すため、その値を使用
+    let saved = save_promo_state(promo_state, state).await?;
+    Ok(saved)
 }
 
 /// 告知アイテムを更新（インデックス指定）
@@ -153,9 +155,10 @@ pub async fn update_promo_item(
     }
 
     promo_state.items[index] = PromoItem { text, icon };
-    save_promo_state(promo_state.clone(), state).await?;
 
-    Ok(promo_state)
+    // save_promo_stateはクランプ適用後の値を返すため、その値を使用
+    let saved = save_promo_state(promo_state, state).await?;
+    Ok(saved)
 }
 
 /// 告知をクリア
@@ -165,8 +168,9 @@ pub async fn clear_promo(state: tauri::State<'_, AppState>) -> Result<PromoState
 
     promo_state.items.clear();
 
-    save_promo_state(promo_state.clone(), state).await?;
-    Ok(promo_state)
+    // save_promo_stateはクランプ適用後の値を返すため、その値を使用
+    let saved = save_promo_state(promo_state, state).await?;
+    Ok(saved)
 }
 
 /// 告知設定を変更（cycle_sec, show_sec）

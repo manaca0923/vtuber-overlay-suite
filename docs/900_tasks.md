@@ -317,13 +317,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
   - `http.rs`の`*Api`型を削除し、共通型を使用
 
-- [ ] **他の設定取得関数へのJSON破損フォールバック適用** (PR#116レビューで提案)
+- [x] **他の設定取得関数へのJSON破損フォールバック適用** (PR#116レビューで提案, PR#118で実装)
   - 対象ファイル:
     - `src-tauri/src/commands/queue.rs` (`get_queue_state`)
-    - `src-tauri/src/commands/overlay.rs` (`get_overlay_settings`)
-    - `src-tauri/src/commands/youtube.rs` (`get_youtube_settings`, `get_settings`)
-  - 参考実装: `promo.rs`の`get_promo_state`（JSON破損時にバックアップ保存 + デフォルト値フォールバック）
-  - 優先度: 中（UIが復旧不能になるリスク回避）
+    - `src-tauri/src/commands/overlay.rs` (`load_overlay_settings`)
+    - `src-tauri/src/commands/youtube.rs` (`load_polling_state`, `load_wizard_settings`)
+  - 実装: `promo.rs`と同様のパターンでJSON破損時にバックアップ保存 + フォールバック
 
 - [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
   - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
@@ -343,11 +342,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 正当なパターン（モーダルリセット、データフェッチング）にはeslint-disableコメントで対応
   - ノウハウ: `issues/029_react-compiler-dependency-inference.md`
 
-- [ ] **eslint-disableコメントの配置スタイル統一** (PR#114レビューで提案)
-  - 対象ファイル: `App.tsx`, `VideoIdModal.tsx`, `WizardStep2.tsx`, `CommentControlPanel.tsx`
-  - 現状: 行末コメント（`// eslint-disable-line`）と次行コメント（`// eslint-disable-next-line`）が混在
-  - 改善案: どちらかに統一（推奨: 次行コメント）
-  - 優先度: 低（動作に問題なし、コードスタイルの一貫性のみ）
+- [x] **eslint-disableコメントの配置スタイル統一** (PR#114レビューで提案, PR#118で実装)
+  - 対象ファイル: `VideoIdModal.tsx`, `WizardStep2.tsx`
+  - 実装: 行末コメント（`// eslint-disable-line`）を次行コメント（`// eslint-disable-next-line`）に統一
 
 - [x] **ContinuationType へのDefaultトレイト実装** (PR#99レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
@@ -391,16 +388,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（単一ユーザー操作が前提、既存パターンと同様）
   - 備考: setlist等も同様のパターンを使用しており、全体的な改修が必要
 
-- [ ] **既存コードのRwLockガードawait境界問題の修正** (PR#115レビューで発見)
+- [x] **既存コードのRwLockガードawait境界問題の修正** (PR#115レビューで発見, PR#118で実装)
   - 対象ファイル:
-    - `src-tauri/src/commands/youtube.rs` (3箇所: L1286, L1350, L1413)
-    - `src-tauri/src/commands/weather.rs` (4箇所: L66, L116, L142, L257)
-    - `src-tauri/src/commands/overlay.rs` (1箇所: L209)
-    - `src-tauri/src/weather/auto_updater.rs` (2箇所: L140, L201)
-  - 問題: `server.read().await`でガードを取得後に`.broadcast(...).await`を呼んでいる
-  - 改善案: `Arc::clone` + `tokio::spawn`パターンで分離（queue.rsで実装済み）
+    - `src-tauri/src/commands/youtube.rs` (3関数: `broadcast_kpi_update`, `fetch_and_broadcast_viewer_count`, `fetch_viewer_count_innertube`)
+    - `src-tauri/src/commands/weather.rs` (4関数: `broadcast_weather_update`, `broadcast_weather`, `set_weather_city_and_broadcast`, `broadcast_weather_multi`)
+    - `src-tauri/src/commands/overlay.rs` (1関数: `broadcast_settings_update`)
+    - `src-tauri/src/weather/auto_updater.rs` (2関数: `fetch_and_broadcast_single`, `fetch_and_broadcast_multi`)
+  - 実装: `Arc::clone` + `tokio::spawn`パターンでFire-and-forget化
   - 参考: `issues/003_tauri-rust-patterns.md#8`
-  - 優先度: 中（デッドロックのリスクあり、ただし現状問題は発生していない）
 
 - [x] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/overlays/*.html`

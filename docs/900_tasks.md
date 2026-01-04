@@ -364,6 +364,19 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（Tauriマクロの制約により複雑）
 
+- [ ] **save_and_broadcast_*の保存成功・配信失敗時のエラーハンドリング** (PR#117レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/brand.rs` (`save_and_broadcast_brand`)
+    - `src-tauri/src/commands/queue.rs` (`save_and_broadcast_queue`)
+    - `src-tauri/src/commands/promo.rs` (`save_and_broadcast_promo`)
+  - 問題: 保存成功後にブロードキャスト失敗すると「保存は完了しているのにエラー返却」になる
+  - 影響: UI側では失敗扱いになり、不要な再保存やUXの混乱を誘発
+  - 改善案:
+    - A) 保存成功時は`Ok(Settings)`を返し、ブロードキャスト失敗は`log::warn!`で記録して`Ok`返却
+    - B) 戻り値に「保存成功・配信失敗」を判別できる構造体を返す
+    - C) フロント側で保存成功を判定し、配信失敗を別メッセージとして表示
+  - 優先度: 低（実際にブロードキャスト失敗するケースは稀、単一ユーザー環境が前提）
+
 - [ ] **設定操作のread-modify-write競合対策** (PR#115, PR#116レビューで提案)
   - 対象ファイル:
     - `src-tauri/src/commands/queue.rs`

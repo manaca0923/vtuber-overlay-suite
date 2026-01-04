@@ -12,6 +12,15 @@ const MAX_LOGO_URL_LENGTH: usize = 2048;
 /// テキスト最大長（文字）
 const MAX_TEXT_LENGTH: usize = 100;
 
+/// 許可するdata: URLのMIMEタイプ（プレフィックス）
+/// NOTE: SVGはスクリプト/外部参照によるセキュリティリスクがあるため除外
+const ALLOWED_DATA_IMAGE_PREFIXES: &[&str] = &[
+    "data:image/png",
+    "data:image/jpeg",
+    "data:image/gif",
+    "data:image/webp",
+];
+
 /// ブランド設定を取得
 ///
 /// ## JSON破損時のフォールバック
@@ -140,16 +149,17 @@ fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, Str
             ));
         }
 
-        // スキーム検証（http, https, data:image/ のみ許可）
-        // NOTE: data:はロゴ画像用途のためdata:image/に限定（data:text/html等を拒否）
+        // スキーム検証（http, https, data:image/(許可リスト) のみ許可）
+        // NOTE: SVGはスクリプト/外部参照によるセキュリティリスクがあるため除外
         if !url.is_empty() {
-            let is_valid = url.starts_with("http://")
-                || url.starts_with("https://")
-                || url.starts_with("data:image/");
+            let is_http = url.starts_with("http://") || url.starts_with("https://");
+            let is_allowed_data = ALLOWED_DATA_IMAGE_PREFIXES
+                .iter()
+                .any(|prefix| url.starts_with(prefix));
 
-            if !is_valid {
+            if !is_http && !is_allowed_data {
                 return Err(
-                    "Invalid URL scheme. Only http, https, or data:image/ URLs are allowed."
+                    "Invalid URL scheme. Only http, https, or data:image/(png|jpeg|gif|webp) URLs are allowed."
                         .to_string(),
                 );
             }

@@ -10,6 +10,17 @@ const MAX_LOGO_URL_LENGTH = 2048;
 /** テキスト最大長（文字） - Rust側と同期 */
 const MAX_TEXT_LENGTH = 100;
 
+/**
+ * 許可するdata: URLのMIMEタイプ（プレフィックス）- Rust側と同期
+ * NOTE: SVGはスクリプト/外部参照によるセキュリティリスクがあるため除外
+ */
+const ALLOWED_DATA_IMAGE_PREFIXES = [
+  'data:image/png',
+  'data:image/jpeg',
+  'data:image/gif',
+  'data:image/webp',
+] as const;
+
 interface BrandSettings {
   logoUrl: string | null;
   text: string | null;
@@ -79,27 +90,32 @@ export function BrandSettingsPanel() {
     if (!url) return true; // 空は許可
     // バイト長でチェック（Rust側のurl.len()と同期）
     if (getUtf8ByteLength(url) > MAX_LOGO_URL_LENGTH) return false;
-    // http, https, data:image/ スキームのみ許可（ロゴ画像用途のためdata:image/に限定）
-    return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/');
+    // http, https, data:image/(許可リスト) スキームのみ許可
+    // NOTE: SVGはスクリプト/外部参照によるセキュリティリスクがあるため除外
+    const isHttp = url.startsWith('http://') || url.startsWith('https://');
+    const isAllowedData = ALLOWED_DATA_IMAGE_PREFIXES.some((prefix) => url.startsWith(prefix));
+    return isHttp || isAllowedData;
   };
 
   // 設定を保存（latestValuesRefから最新値を取得）
   const handleSave = async () => {
-    // 最新値をrefから取得
-    const { logoUrl, text } = latestValuesRef.current;
+    // 最新値をrefから取得し、トリム済み値を作成
+    // NOTE: 検証と保存で同じトリム済み値を使用（検証→保存の順序を揃える）
+    const trimmedLogoUrl = latestValuesRef.current.logoUrl.trim();
+    const trimmedText = latestValuesRef.current.text.trim();
 
     // シーケンス番号をインクリメント
     saveSeqRef.current += 1;
     const currentSeq = saveSeqRef.current;
 
-    // URL検証
-    if (logoUrl && !validateUrl(logoUrl)) {
-      setError(`無効なURLです。http://, https://, または data:image/ で始まり、${MAX_LOGO_URL_LENGTH}バイト以内のURLを入力してください。`);
+    // URL検証（トリム後の値で検証）
+    if (trimmedLogoUrl && !validateUrl(trimmedLogoUrl)) {
+      setError(`無効なURLです。http://, https://, または data:image/(png|jpeg|gif|webp) で始まり、${MAX_LOGO_URL_LENGTH}バイト以内のURLを入力してください。`);
       return;
     }
 
-    // テキスト長検証（サロゲートペア対応 - Rust側のtext.chars().count()と同期）
-    if ([...text].length > MAX_TEXT_LENGTH) {
+    // テキスト長検証（サロゲートペア対応 - Rust側のtext.chars().count()と同期、トリム後の値で検証）
+    if ([...trimmedText].length > MAX_TEXT_LENGTH) {
       setError(`テキストが長すぎます（最大${MAX_TEXT_LENGTH}文字）`);
       return;
     }
@@ -108,8 +124,8 @@ export function BrandSettingsPanel() {
     setSaving(true);
     try {
       const newSettings: BrandSettings = {
-        logoUrl: logoUrl.trim() || null,
-        text: text.trim() || null,
+        logoUrl: trimmedLogoUrl || null,
+        text: trimmedText || null,
       };
 
       // 保存とブロードキャストを単一コマンドで実行（原子性を担保）
@@ -236,7 +252,7 @@ export function BrandSettingsPanel() {
           className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
         />
         <p className="text-xs text-gray-500 mt-1">
-          http://, https://, または data:image/ で始まるURLを入力してください
+          http://, https://, または data:image/(png|jpeg|gif|webp) で始まるURLを入力してください
         </p>
       </div>
 

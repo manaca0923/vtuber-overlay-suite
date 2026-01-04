@@ -83,6 +83,7 @@
 | [027](027_pr108-multi-city-weather-review.md) | setInterval/visibilitychange |
 | [029](029_react-compiler-dependency-inference.md) | React Compiler依存配列推論 |
 | [030](030_pr115-queue-management-review.md) | 非同期競合対策、旧データ互換性 |
+| [032](032_debounce-save-patterns.md) | debounce保存のuseRefパターン、原子的保存 |
 
 </details>
 
@@ -156,4 +157,5 @@
 
 ## 更新履歴
 
+- 2025-01: issue 032 追加（debounce保存パターン）
 - 2024-12: 初版作成（issues 001-025）

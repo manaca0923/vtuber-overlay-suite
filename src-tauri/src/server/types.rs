@@ -63,6 +63,10 @@ pub enum WsMessage {
     /// スパチャ削除（表示完了時）
     #[serde(rename = "superchat:remove")]
     SuperchatRemove { payload: SuperchatRemovePayload },
+
+    /// ブランド（ロゴ）更新
+    #[serde(rename = "brand:update")]
+    BrandUpdate { payload: BrandUpdatePayload },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -527,4 +531,24 @@ pub struct SuperchatPayload {
 pub struct SuperchatRemovePayload {
     /// 削除するスパチャのID
     pub id: String,
+}
+
+/// ブランド（ロゴ）更新ペイロード
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrandUpdatePayload {
+    /// ロゴ画像URL（http/https/data スキームのみ許可）
+    pub logo_url: Option<String>,
+    /// 代替テキスト（ロゴがない場合やエラー時に表示）
+    pub text: Option<String>,
+}
+
+/// ブランド（ロゴ）設定（保存用）
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrandSettings {
+    /// ロゴ画像URL
+    pub logo_url: Option<String>,
+    /// 代替テキスト
+    pub text: Option<String>,
 }

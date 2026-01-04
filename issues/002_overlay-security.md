@@ -278,6 +278,124 @@ function loadGoogleFont(fontSpec: string): void {
 
 ---
 
+## 8. data: URLの許可リスト（SVG除外）
+
+### 指摘内容 (PR#117)
+`data:image/`を包括的に許可すると、`data:image/svg+xml`などSVGのスクリプト/外部参照によるセキュリティリスクがある。
+
+### 解決方法
+
+**バックエンド側（Rust）**
+```rust
+// brand.rs - 許可するdata: URLのMIMEタイプを限定
+const ALLOWED_DATA_IMAGE_PREFIXES: &[&str] = &[
+    "data:image/png",
+    "data:image/jpeg",
+    "data:image/gif",
+    "data:image/webp",
+];
+
+fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, String> {
+    if let Some(ref url) = validated.logo_url {
+        let is_http = url.starts_with("http://") || url.starts_with("https://");
+        let is_allowed_data = ALLOWED_DATA_IMAGE_PREFIXES
+            .iter()
+            .any(|prefix| url.starts_with(prefix));
+
+        if !is_http && !is_allowed_data {
+            return Err("Invalid URL scheme...".to_string());
+        }
+    }
+    Ok(validated)
+}
+```
+
+**フロントエンド側（TypeScript）**
+```typescript
+// BrandSettingsPanel.tsx - 許可リストをRust側と同期
+const ALLOWED_DATA_IMAGE_PREFIXES = [
+  'data:image/png',
+  'data:image/jpeg',
+  'data:image/gif',
+  'data:image/webp',
+] as const;
+
+const validateUrl = (url: string): boolean => {
+  const isHttp = url.startsWith('http://') || url.startsWith('https://');
+  const isAllowedData = ALLOWED_DATA_IMAGE_PREFIXES.some((prefix) => url.startsWith(prefix));
+  return isHttp || isAllowedData;
+};
+```
+
+### 今後の対策
+- `data:image/`を許可する場合は、許可するMIMEタイプを明示的にリスト化
+- SVG（`data:image/svg+xml`）はスクリプト実行や外部参照のリスクがあるため除外
+- 許可リストはフロントエンド・バックエンド両方で同期
+
+---
+
+## 9. URL検証とトリムの順序
+
+### 指摘内容 (PR#117)
+フロントエンドでURL検証がトリム前に実行されると、先頭/末尾の空白を含む正しいURLが「無効」と判定される。
+
+### 解決方法
+```typescript
+// BrandSettingsPanel.tsx - 検証と保存で同じトリム済み値を使用
+const handleSave = async () => {
+  // 最新値をrefから取得し、トリム済み値を作成
+  const trimmedLogoUrl = latestValuesRef.current.logoUrl.trim();
+  const trimmedText = latestValuesRef.current.text.trim();
+
+  // URL検証（トリム後の値で検証）
+  if (trimmedLogoUrl && !validateUrl(trimmedLogoUrl)) {
+    setError('無効なURLです...');
+    return;
+  }
+
+  // 保存時も同じトリム済み値を使用
+  const newSettings = {
+    logoUrl: trimmedLogoUrl || null,
+    text: trimmedText || null,
+  };
+  await invoke('save_and_broadcast_brand', { brand_settings: newSettings });
+};
+```
+
+**バックエンド側（Rust）** - 深層防御
+```rust
+// brand.rs - フロント以外の呼び出し（将来のAPI/他クライアント）にも対応
+fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, String> {
+    let mut validated = settings;
+
+    if let Some(ref url) = validated.logo_url {
+        // トリムしてから検証
+        let trimmed_url = url.trim();
+
+        // 空文字列はNoneに正規化
+        if trimmed_url.is_empty() {
+            validated.logo_url = None;
+        } else {
+            // トリム後の値で検証
+            if trimmed_url.len() > MAX_LOGO_URL_LENGTH {
+                return Err("Logo URL too long".to_string());
+            }
+            // トリム済みの値で更新
+            validated.logo_url = Some(trimmed_url.to_string());
+        }
+    }
+    Ok(validated)
+}
+```
+
+### 今後の対策
+- 検証と保存で同じ値（トリム済み）を使用
+- トリム処理は検証の前に行う
+- バックエンド側でも同様のトリム処理を行い、空文字列はNoneに正規化
+- **深層防御**: フロント以外の呼び出し（将来のAPI/他クライアント）にも対応するため、バックエンドでも必ずトリムする
+
+---
+
 ## チェックリスト（オーバーレイ実装時）
 
 - [ ] URLパラメータはバリデーション済みか
@@ -290,3 +408,6 @@ function loadGoogleFont(fontSpec: string): void {
 - [ ] フロントエンド・バックエンド両方でバリデーションしているか（深層防御）
 - [ ] カスタム値の上限はバックエンドでも検証しているか
 - [ ] 外部リソース（Google Fonts等）のURLホスト名を検証しているか
+- [ ] `data:image/`を許可する場合、MIMEタイプを限定しているか（SVG除外）
+- [ ] URL検証はトリム後の値で行っているか（フロント・バックエンド両方）
+- [ ] バックエンドでもトリム処理を行っているか（深層防御）

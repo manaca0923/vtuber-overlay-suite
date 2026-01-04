@@ -7,7 +7,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, RwLock};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
-use super::types::{SetlistUpdatePayload, SongItem, SongStatus, WsMessage};
+use super::types::{BrandSettings, BrandUpdatePayload, SetlistUpdatePayload, SongItem, SongStatus, WsMessage};
 use crate::youtube::types::ChatMessage;
 
 type Tx = mpsc::UnboundedSender<Message>;
@@ -201,8 +201,9 @@ async fn handle_connection(
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
 
-    // 先にセットリストとキャッシュされたコメントを取得
+    // 先にセットリスト、ブランド設定、キャッシュされたコメントを取得
     let initial_setlist = fetch_latest_setlist_message(&db).await;
+    let initial_brand = fetch_brand_settings_message(&db).await;
     let cached_comments = {
         let state_guard = state.read().await;
         state_guard.get_cached_comments().await
@@ -223,6 +224,17 @@ async fn handle_connection(
                 log::warn!("Failed to send initial setlist to peer {}", peer_id);
             } else {
                 log::debug!("Sent initial setlist to peer {}", peer_id);
+            }
+        }
+    }
+
+    // 接続時にブランド設定を送信
+    if let Some(msg) = initial_brand {
+        if let Ok(json) = serde_json::to_string(&msg) {
+            if tx.send(Message::Text(json)).is_err() {
+                log::warn!("Failed to send initial brand settings to peer {}", peer_id);
+            } else {
+                log::debug!("Sent initial brand settings to peer {}", peer_id);
             }
         }
     }
@@ -370,4 +382,52 @@ async fn fetch_latest_setlist_message(pool: &SqlitePool) -> Option<WsMessage> {
 
     log::debug!("Generated initial setlist message with {} songs", payload.songs.len());
     Some(WsMessage::SetlistUpdate { payload })
+}
+
+/// ブランド設定を取得してWsMessageを生成
+///
+/// ## JSON破損時の動作
+/// 保存されているJSONが破損している場合はデフォルト状態（空）を返す。
+async fn fetch_brand_settings_message(pool: &SqlitePool) -> Option<WsMessage> {
+    let result: Result<Option<(String,)>, _> =
+        sqlx::query_as("SELECT value FROM settings WHERE key = 'brand_settings'")
+            .fetch_optional(pool)
+            .await;
+
+    let settings = match result {
+        Ok(Some((json_str,))) => {
+            match serde_json::from_str::<BrandSettings>(&json_str) {
+                Ok(s) => s,
+                Err(e) => {
+                    log::warn!(
+                        "Brand settings JSON corrupted for initial message, using default. Error: {}",
+                        e
+                    );
+                    BrandSettings::default()
+                }
+            }
+        }
+        Ok(None) => {
+            log::debug!("No brand settings found for initial WebSocket message");
+            BrandSettings::default()
+        }
+        Err(e) => {
+            log::error!("Failed to fetch brand settings for initial message: {}", e);
+            return None;
+        }
+    };
+
+    // ロゴURLまたはテキストが設定されている場合のみ送信
+    if settings.logo_url.is_none() && settings.text.is_none() {
+        log::debug!("Brand settings are empty, skipping initial message");
+        return None;
+    }
+
+    let payload = BrandUpdatePayload {
+        logo_url: settings.logo_url,
+        text: settings.text,
+    };
+
+    log::debug!("Generated initial brand settings message");
+    Some(WsMessage::BrandUpdate { payload })
 }

@@ -317,6 +317,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
   - `http.rs`の`*Api`型を削除し、共通型を使用
 
+- [ ] **他の設定取得関数へのJSON破損フォールバック適用** (PR#116レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/queue.rs` (`get_queue_state`)
+    - `src-tauri/src/commands/overlay.rs` (`get_overlay_settings`)
+    - `src-tauri/src/commands/youtube.rs` (`get_youtube_settings`, `get_settings`)
+  - 参考実装: `promo.rs`の`get_promo_state`（JSON破損時にバックアップ保存 + デフォルト値フォールバック）
+  - 優先度: 中（UIが復旧不能になるリスク回避）
+
 - [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
   - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
   - 改善案: `serde_json::from_str::<OverlaySettings>`で直接デシリアライズ
@@ -356,13 +364,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（Tauriマクロの制約により複雑）
 
-- [ ] **キュー操作のread-modify-write競合対策** (PR#115レビューで提案)
-  - 対象ファイル: `src-tauri/src/commands/queue.rs`
-  - 問題: `get_queue_state`→変更→`save_queue_state`のパターンが非原子的
-  - 影響: 同時に`add_queue_item`/`clear_queue`が走ると更新が失われる可能性
+- [ ] **設定操作のread-modify-write競合対策** (PR#115, PR#116レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/queue.rs`
+    - `src-tauri/src/commands/promo.rs`
+  - 問題: `get_*_state`→変更→`save_*_state`のパターンが非原子的
+  - 影響: 同時に複数の操作（add/remove/update/clear等）が走ると更新が失われる可能性
   - 改善案:
     - A) SQLiteトランザクションで囲む
     - B) ETag/バージョン管理で楽観的ロック
+    - C) `save_and_broadcast_*`を唯一の保存経路にして、フロントからは常に最新版を送る
+    - D) テーブルを分割し、更新対象のみSQL更新（items/settings分離）
   - 優先度: 低（単一ユーザー操作が前提、既存パターンと同様）
   - 備考: setlist等も同様のパターンを使用しており、全体的な改修が必要
 
@@ -557,6 +569,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 同時に`add_queue_item`と`clear_queue`が走った場合の整合性
   - 優先度: 中（動作確認済みだが回帰テストとして重要）
 
+- [ ] **Promo機能のユニットテスト追加** (PR#116レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/promo.rs`
+  - テストケース:
+    - `set_promo_settings`で`show_sec`が3〜15にクランプされること
+    - `set_promo_settings`で`cycle_sec`が10〜120にクランプされること
+    - `save_promo_state`でも`show_sec`/`cycle_sec`がクランプされること
+    - `save_and_broadcast_promo`経路で保存値と配信値が一致すること
+    - `add_promo_item`/`remove_promo_item`/`update_promo_item`/`clear_promo`が`save_promo_state`のクランプ後値を返すこと（戻り値の整合性）
+    - 既存`promo_state`に異常値がある場合、アイテム操作後にクランプされること（境界値）
+    - `remove_promo_item`が範囲外インデックスでエラーを返すこと
+    - `update_promo_item`が範囲外インデックスでエラーを返すこと
+    - `add_promo_item`/`update_promo_item`/`remove_promo_item`の正常系動作
+    - `get_promo_state`が存在しない場合に`PromoState::default()`を返す
+    - `get_promo_state`が破損JSONを受け取った場合のエラー処理（UIでの復旧フロー含む）
+    - `save_promo_state`と`get_promo_state`の往復（JSON整合性）
+    - `set_promo_settings`で`None`が渡された場合に既存値が保持されること
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
+
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
@@ -604,6 +634,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 ### セキュリティ（将来課題）
 
 ### 機能改善（中優先度）
+
+- [ ] **起動時/WebSocket再接続時のPromo/Queue初期状態送信** (PR#116レビューで提案)
+  - 問題: 保存済みのPromo/Queue状態がWebSocket経由でしか送信されないため、
+    アプリ再起動やオーバーレイ再接続時にデフォルト/スタブ表示になる
+  - 対応案A: HTTP API `/overlay/promo`, `/overlay/queue` エンドポイントを追加し、
+    SettingsFetcherで取得・適用
+  - 対応案B: WebSocket接続時にサーバー側から初期状態を自動送信
+  - 優先度: 中（保存したデータが表示されないUX問題）
+
+- [ ] **Promo/Queue入力サイズ上限の追加** (PR#116レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/promo.rs` (`save_promo_state`, `add_promo_item`)
+    - `src-tauri/src/commands/queue.rs` (`save_queue_state`, `add_queue_item`)
+  - 問題: Tauri公開コマンドとして入力サイズ上限がなく、巨大データでDB肥大化やブロードキャスト負荷が発生する可能性
+  - 改善案:
+    - `MAX_PROMO_ITEMS = 20`, `MAX_TEXT_LENGTH = 200` 等の定数を設けてバリデーション
+    - 超過時はエラーを返す
+  - 優先度: 低（現実的には問題になりにくいが、防御的プログラミングとして推奨）
 
 - [ ] **オーバーレイのカスタムCSS機能**
   - 設定画面にカスタムCSSテキストエリアを追加
@@ -842,7 +890,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ---
 
-## ウィジェット実装状況（2025-12-31 調査）
+## ウィジェット実装状況（2026-01-02 更新）
 
 > ウィジェット表示設定（設定画面のトグル）に表示される9つのウィジェットの実装状況。
 > 各ウィジェットは3層（バックエンド/WebSocket送信/オーバーレイUI）で構成される。
@@ -859,11 +907,11 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **KPI** | right.lowerLeft | ✅ | ✅ | ✅ | ✅ **完全動作**（gRPC/公式APIモード時） |
 | **短冊** | right.lowerRight | ✅ | ✅ | ✅ | ✅ **完全動作** |
-| **告知** | right.bottom | ❌ | ✅型のみ | ✅ | ⚠️ スタブ表示 |
+| **告知** | right.bottom | ✅ | ✅ | ✅ | ✅ **完全動作** |
 
 ### 詳細説明
 
-#### ✅ 完全動作（6個）
+#### ✅ 完全動作（8個）
 
 1. **時計** (`ClockWidget`)
    - 設計上バックエンド不要（ブラウザのローカル時刻を使用）
@@ -905,26 +953,26 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
    - WebSocket: `kpi:update` メッセージ
    - ファイル: `src-tauri/overlays/components/kpi-block.js`
 
-#### ⚠️ 部分実装（3個）
-
-7. **ロゴ** (`BrandBlock`)
-   - UIコンポーネントは完成（画像URL/テキスト表示対応）
-   - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
-   - ファイル: `src-tauri/overlays/components/brand-block.js`
-
-8. **短冊** (`QueueList`)
+7. **短冊** (`QueueList`)
    - UIコンポーネント完成（リスト表示、最大6件、空時非表示）
    - キュー管理バックエンド完成（DB保存、CRUD操作）
    - WebSocket: `queue:update` メッセージでリアルタイム反映
    - 設定UI完成（アイテム追加/削除/クリア、タイトル設定）
    - ファイル: `src-tauri/overlays/components/queue-list.js`, `src-tauri/src/commands/queue.rs`
 
-9. **告知** (`PromoPanel`)
-   - UIコンポーネントは完成（サイクル表示、フェードアニメーション）
-   - WebSocket型定義あり: `promo:update` (`PromoUpdatePayload`)
-   - **欠けているもの**: 告知コンテンツ管理のバックエンド、設定UI
-   - 現状: `afterMount`で固定ダミー文言（「チャンネル登録よろしく」等）を表示
-   - ファイル: `src-tauri/overlays/components/promo-panel.js`
+8. **告知** (`PromoPanel`)
+   - UIコンポーネント完成（サイクル表示、フェードアニメーション）
+   - 告知コンテンツ管理バックエンド完成（DB保存、CRUD操作）
+   - WebSocket: `promo:update` メッセージでリアルタイム反映
+   - 設定UI完成（アイテム追加/編集/削除、表示間隔設定）
+   - ファイル: `src-tauri/overlays/components/promo-panel.js`, `src-tauri/src/commands/promo.rs`
+
+#### ⚠️ 部分実装（1個）
+
+9. **ロゴ** (`BrandBlock`)
+   - UIコンポーネントは完成（画像URL/テキスト表示対応）
+   - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
+   - ファイル: `src-tauri/overlays/components/brand-block.js`
 
 ### 関連ファイル
 
@@ -1097,7 +1145,7 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ## T28: 告知コンテンツ管理
 **優先度**: P3 | **見積**: 2日 | **依存**: なし
-**ステータス**: 未着手
+**ステータス**: ✅ **完了**（2026-01-02）
 
 ### 概要
 告知ウィジェット（right.bottom）のコンテンツ管理機能を実装。
@@ -1106,18 +1154,23 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 ### 背景
 - PromoPanelコンポーネントは完成済み（UI、WebSocket受信、サイクル表示）
 - WebSocket型定義 `promo:update` も存在
-- **欠けているもの**: 告知コンテンツの設定UI、保存機能
-- 現状: 固定ダミー文言（「チャンネル登録よろしく」等）を表示
+- ~~**欠けているもの**: 告知コンテンツの設定UI、保存機能~~ → 実装完了
+- ~~現状: 固定ダミー文言（「チャンネル登録よろしく」等）を表示~~ → 設定データを表示
 
 ### チェックリスト
-- [ ] 告知コンテンツのDB保存
-- [ ] 告知編集コマンド: `set_promo_items`, `get_promo_items`
-- [ ] `broadcast_promo_update()` 関数実装
-- [ ] 設定UI: 告知文の追加・編集・削除、サイクル間隔設定
+- [x] 告知コンテンツのDB保存（settingsテーブル）
+- [x] 告知編集コマンド: `get_promo_state`, `save_promo_state`, `add_promo_item`, `remove_promo_item`, `update_promo_item`, `clear_promo`, `set_promo_settings`
+- [x] `broadcast_promo_update()` 関数実装
+- [x] 設定UI: 告知文の追加・編集・削除、表示間隔設定
+- [x] OverlaySettingsへのタブ統合
 
 ### 成果物
 - `src-tauri/src/commands/promo.rs` - 告知管理コマンド
-- `src/components/settings/PromoSettingsPanel.tsx` - 設定UI
+  - `get_promo_state`, `save_promo_state` - 状態取得・保存
+  - `add_promo_item`, `remove_promo_item`, `update_promo_item`, `clear_promo` - アイテム操作
+  - `set_promo_settings` - 表示間隔設定
+  - `broadcast_promo_update`, `save_and_broadcast_promo` - WebSocketブロードキャスト
+- `src/components/settings/PromoSettingsPanel.tsx` - 設定UI（アイテムCRUD、表示間隔設定）
 
 ---
 

@@ -140,14 +140,18 @@ fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, Str
             ));
         }
 
-        // スキーム検証（http, https, data のみ許可）
+        // スキーム検証（http, https, data:image/ のみ許可）
+        // NOTE: data:はロゴ画像用途のためdata:image/に限定（data:text/html等を拒否）
         if !url.is_empty() {
             let is_valid = url.starts_with("http://")
                 || url.starts_with("https://")
-                || url.starts_with("data:");
+                || url.starts_with("data:image/");
 
             if !is_valid {
-                return Err("Invalid URL scheme. Only http, https, or data URLs are allowed.".to_string());
+                return Err(
+                    "Invalid URL scheme. Only http, https, or data:image/ URLs are allowed."
+                        .to_string(),
+                );
             }
         }
 

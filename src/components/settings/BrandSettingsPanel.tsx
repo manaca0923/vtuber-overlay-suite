@@ -79,8 +79,8 @@ export function BrandSettingsPanel() {
     if (!url) return true; // 空は許可
     // バイト長でチェック（Rust側のurl.len()と同期）
     if (getUtf8ByteLength(url) > MAX_LOGO_URL_LENGTH) return false;
-    // http, https, data スキームのみ許可
-    return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:');
+    // http, https, data:image/ スキームのみ許可（ロゴ画像用途のためdata:image/に限定）
+    return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/');
   };
 
   // 設定を保存（latestValuesRefから最新値を取得）
@@ -94,12 +94,12 @@ export function BrandSettingsPanel() {
 
     // URL検証
     if (logoUrl && !validateUrl(logoUrl)) {
-      setError(`無効なURLです。http://, https://, または data: で始まり、${MAX_LOGO_URL_LENGTH}バイト以内のURLを入力してください。`);
+      setError(`無効なURLです。http://, https://, または data:image/ で始まり、${MAX_LOGO_URL_LENGTH}バイト以内のURLを入力してください。`);
       return;
     }
 
-    // テキスト長検証
-    if (text.length > MAX_TEXT_LENGTH) {
+    // テキスト長検証（サロゲートペア対応 - Rust側のtext.chars().count()と同期）
+    if ([...text].length > MAX_TEXT_LENGTH) {
       setError(`テキストが長すぎます（最大${MAX_TEXT_LENGTH}文字）`);
       return;
     }
@@ -236,7 +236,7 @@ export function BrandSettingsPanel() {
           className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
         />
         <p className="text-xs text-gray-500 mt-1">
-          http://, https://, または data: で始まるURLを入力してください
+          http://, https://, または data:image/ で始まるURLを入力してください
         </p>
       </div>
 
@@ -274,9 +274,10 @@ export function BrandSettingsPanel() {
           onChange={handleTextChange}
           placeholder="例: チャンネル名, @username"
           disabled={saving}
-          maxLength={MAX_TEXT_LENGTH}
           className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
         />
+        {/* NOTE: maxLength属性はUTF-16コードユニット単位でサロゲートペアを正しくカウントしないため削除。
+            文字数制限はバックエンド（Rust側chars().count()）で行い、フロントでは[...text].lengthで事前検証 */}
         <p className="text-xs text-gray-500 mt-1">
           ロゴ画像がない場合や読み込みエラー時に表示されます（最大{MAX_TEXT_LENGTH}文字）
         </p>

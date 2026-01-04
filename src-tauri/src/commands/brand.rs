@@ -3,8 +3,6 @@
 //! ロゴ画像URL/テキストの設定・取得、WebSocketブロードキャストを提供する。
 //! データはDBのsettingsテーブルに保存される。
 
-use std::sync::Arc;
-
 use crate::server::types::{BrandSettings, BrandUpdatePayload, WsMessage};
 use crate::AppState;
 
@@ -82,7 +80,8 @@ pub async fn save_brand_settings(
 
 /// ブランド更新をWebSocketでブロードキャスト
 ///
-/// Fire-and-forgetパターン: ブロードキャストは非同期で実行
+/// 同期的にブロードキャストし、完了を待機する。
+/// RwLockガードをawait境界をまたいで保持しないよう設計。
 #[tauri::command]
 pub async fn broadcast_brand_update(
     brand_settings: BrandSettings,
@@ -93,24 +92,21 @@ pub async fn broadcast_brand_update(
         text: brand_settings.text,
     };
 
-    let server = Arc::clone(&state.server);
     let message = WsMessage::BrandUpdate { payload };
-    tokio::spawn(async move {
-        let peers_arc = {
-            let ws_state = server.read().await;
-            ws_state.get_peers_arc()
-        };
 
+    // RwLockガードをawait境界をまたがないよう、先にpeersを収集
+    let peers = {
+        let ws_state = state.server.read().await;
+        let peers_arc = ws_state.get_peers_arc();
         let peers_guard = peers_arc.read().await;
-        let peers: Vec<_> = peers_guard
+        peers_guard
             .iter()
             .map(|(id, tx)| (*id, tx.clone()))
-            .collect();
-        drop(peers_guard);
+            .collect::<Vec<_>>()
+    };
 
-        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
-        log::debug!("Brand update broadcasted");
-    });
+    crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+    log::debug!("Brand update broadcasted to {} peers", peers.len());
 
     Ok(())
 }

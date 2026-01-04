@@ -587,6 +587,22 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - `set_promo_settings`で`None`が渡された場合に既存値が保持されること
   - 優先度: 中（動作確認済みだが回帰テストとして重要）
 
+- [ ] **Brand機能のユニットテスト追加** (PR#117レビューで提案)
+  - 対象ファイル: `src-tauri/src/commands/brand.rs`
+  - テストケース:
+    - `validate_brand_settings`に対する境界値テスト（logo_url 2048バイト境界、text 100文字境界）
+    - 空文字列の`None`正規化動作
+    - `save_brand_settings`と`get_brand_settings`の往復（JSON整合性）
+    - `get_brand_settings`が破損JSONの場合に`BrandSettings::default()`を返すこと
+    - URLスキーム検証（http/https/data以外を拒否）
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
+
+- [ ] **BrandSettingsPanelのdebounce保存テスト** (PR#117レビューで提案)
+  - 対象ファイル: `src/components/settings/BrandSettingsPanel.tsx`
+  - テストケース:
+    - 連続入力で最新値のみが保存されること（古い値が保存されないこと）
+  - 優先度: 低（JavaScriptテスト基盤構築時に対応）
+
 - [x] **Weather APIテストのヘルパー関数抽出** (PR#84, PR#88で実装)
   - 実装済み: `setup_test_client()`および`mock_geocoding_success()`ヘルパー関数を追加
   - 対象ファイル: `src-tauri/src/weather/mod.rs`

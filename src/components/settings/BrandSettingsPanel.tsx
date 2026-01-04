@@ -69,10 +69,16 @@ export function BrandSettingsPanel() {
     setSuccess('');
   }, []);
 
+  // UTF-8バイト長を計算（Rust側の.len()と同期）
+  const getUtf8ByteLength = (str: string): number => {
+    return new TextEncoder().encode(str).length;
+  };
+
   // URL検証（フロントエンド側）
   const validateUrl = (url: string): boolean => {
     if (!url) return true; // 空は許可
-    if (url.length > MAX_LOGO_URL_LENGTH) return false;
+    // バイト長でチェック（Rust側のurl.len()と同期）
+    if (getUtf8ByteLength(url) > MAX_LOGO_URL_LENGTH) return false;
     // http, https, data スキームのみ許可
     return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:');
   };
@@ -88,7 +94,7 @@ export function BrandSettingsPanel() {
 
     // URL検証
     if (logoUrl && !validateUrl(logoUrl)) {
-      setError('無効なURLです。http://, https://, または data: で始まるURLを入力してください。');
+      setError(`無効なURLです。http://, https://, または data: で始まり、${MAX_LOGO_URL_LENGTH}バイト以内のURLを入力してください。`);
       return;
     }
 

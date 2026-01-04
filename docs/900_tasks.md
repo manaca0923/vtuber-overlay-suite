@@ -317,6 +317,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
   - `http.rs`の`*Api`型を削除し、共通型を使用
 
+- [ ] **他の設定取得関数へのJSON破損フォールバック適用** (PR#116レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/queue.rs` (`get_queue_state`)
+    - `src-tauri/src/commands/overlay.rs` (`get_overlay_settings`)
+    - `src-tauri/src/commands/youtube.rs` (`get_youtube_settings`, `get_settings`)
+  - 参考実装: `promo.rs`の`get_promo_state`（JSON破損時にバックアップ保存 + デフォルト値フォールバック）
+  - 優先度: 中（UIが復旧不能になるリスク回避）
+
 - [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
   - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
   - 改善案: `serde_json::from_str::<OverlaySettings>`で直接デシリアライズ

@@ -22,6 +22,14 @@ pub struct PromoState {
 }
 
 /// 告知状態を取得
+///
+/// ## JSON破損時のフォールバック
+/// 保存されているJSONが破損している場合:
+/// 1. 破損データを`promo_state_backup`キーに退避保存
+/// 2. デフォルト状態にフォールバックして返却
+/// 3. 警告ログを出力
+///
+/// これにより、UIが復旧不能な状態になることを防止する。
 #[tauri::command]
 pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoState, String> {
     let pool = &state.db;
@@ -33,9 +41,35 @@ pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoS
             .map_err(|e| format!("DB error: {}", e))?;
 
     if let Some((json_str,)) = result {
-        let promo_state: PromoState =
-            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
-        Ok(promo_state)
+        match serde_json::from_str::<PromoState>(&json_str) {
+            Ok(promo_state) => Ok(promo_state),
+            Err(e) => {
+                // JSON破損時: 破損データを退避してデフォルト値を返す
+                log::warn!(
+                    "Promo state JSON corrupted, falling back to default. Error: {}",
+                    e
+                );
+
+                // 破損データをバックアップキーに退避（復旧調査用）
+                let now = chrono::Utc::now().to_rfc3339();
+                if let Err(backup_err) = sqlx::query(
+                    r#"
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES ('promo_state_backup', ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    "#,
+                )
+                .bind(&json_str)
+                .bind(&now)
+                .execute(pool)
+                .await
+                {
+                    log::error!("Failed to backup corrupted promo state: {}", backup_err);
+                }
+
+                Ok(PromoState::default())
+            }
+        }
     } else {
         Ok(PromoState::default())
     }
@@ -192,8 +226,9 @@ pub async fn set_promo_settings(
         promo_state.show_sec = Some(sec.clamp(3, 15));
     }
 
-    save_promo_state(promo_state.clone(), state).await?;
-    Ok(promo_state)
+    // save_promo_stateはクランプ適用後の値を返すため、その値を使用
+    let saved = save_promo_state(promo_state, state).await?;
+    Ok(saved)
 }
 
 /// 告知更新をWebSocketでブロードキャスト

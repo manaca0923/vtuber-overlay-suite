@@ -25,6 +25,15 @@ pub struct QueueState {
 /// ## 旧データ互換性
 /// `id: None`のアイテムが含まれる場合、新しいUUIDを付与して正規化する。
 /// これにより、旧データでも削除操作が可能になる。
+///
+/// ## JSON破損時のフォールバック
+/// 保存されているJSONが破損している場合:
+/// 1. 破損データを`queue_state_backup_{timestamp}`キーに退避保存
+/// 2. 破損した`queue_state`キーを削除（次回以降のフォールバックを防止）
+/// 3. デフォルト状態にフォールバックして返却
+/// 4. 警告ログを出力
+///
+/// これにより、UIが復旧不能な状態になることを防止する。
 #[tauri::command]
 pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueState, String> {
     let pool = &state.db;
@@ -36,40 +45,79 @@ pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueS
             .map_err(|e| format!("DB error: {}", e))?;
 
     if let Some((json_str,)) = result {
-        let mut queue_state: QueueState =
-            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+        match serde_json::from_str::<QueueState>(&json_str) {
+            Ok(mut queue_state) => {
+                // 旧データ互換性: id: None のアイテムにUUIDを付与
+                let mut needs_save = false;
+                for item in &mut queue_state.items {
+                    if item.id.is_none() {
+                        item.id = Some(Uuid::new_v4().to_string());
+                        needs_save = true;
+                    }
+                }
 
-        // 旧データ互換性: id: None のアイテムにUUIDを付与
-        let mut needs_save = false;
-        for item in &mut queue_state.items {
-            if item.id.is_none() {
-                item.id = Some(Uuid::new_v4().to_string());
-                needs_save = true;
+                // 正規化したデータを保存（マイグレーション）
+                if needs_save {
+                    log::info!("Migrating queue items: assigning UUIDs to items without id");
+                    let now = chrono::Utc::now().to_rfc3339();
+                    let json_str = serde_json::to_string(&queue_state)
+                        .map_err(|e| format!("JSON serialize error: {}", e))?;
+
+                    sqlx::query(
+                        r#"
+                        INSERT INTO settings (key, value, updated_at)
+                        VALUES ('queue_state', ?, ?)
+                        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                        "#,
+                    )
+                    .bind(&json_str)
+                    .bind(&now)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| format!("DB error during migration: {}", e))?;
+                }
+
+                Ok(queue_state)
+            }
+            Err(e) => {
+                // JSON破損時: 破損データを退避してデフォルト値を返す
+                log::warn!(
+                    "Queue state JSON corrupted, falling back to default. Error: {}",
+                    e
+                );
+
+                // 破損データをバックアップキーに退避（復旧調査用）
+                let now = chrono::Utc::now().to_rfc3339();
+                if let Err(backup_err) = sqlx::query(
+                    r#"
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    "#,
+                )
+                .bind(format!("queue_state_backup_{}", now))
+                .bind(&json_str)
+                .bind(&now)
+                .execute(pool)
+                .await
+                {
+                    log::error!("Failed to backup corrupted queue state: {}", backup_err);
+                }
+
+                // 破損した queue_state キーを削除（次回以降のフォールバックを防止）
+                if let Err(delete_err) =
+                    sqlx::query("DELETE FROM settings WHERE key = 'queue_state'")
+                        .execute(pool)
+                        .await
+                {
+                    log::error!("Failed to delete corrupted queue state: {}", delete_err);
+                } else {
+                    log::info!("Deleted corrupted queue_state key to prevent repeated fallback");
+                }
+
+                Ok(QueueState::default())
             }
         }
-
-        // 正規化したデータを保存（マイグレーション）
-        if needs_save {
-            log::info!("Migrating queue items: assigning UUIDs to items without id");
-            let now = chrono::Utc::now().to_rfc3339();
-            let json_str = serde_json::to_string(&queue_state)
-                .map_err(|e| format!("JSON serialize error: {}", e))?;
-
-            sqlx::query(
-                r#"
-                INSERT INTO settings (key, value, updated_at)
-                VALUES ('queue_state', ?, ?)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-                "#,
-            )
-            .bind(&json_str)
-            .bind(&now)
-            .execute(pool)
-            .await
-            .map_err(|e| format!("DB error during migration: {}", e))?;
-        }
-
-        Ok(queue_state)
     } else {
         Ok(QueueState::default())
     }

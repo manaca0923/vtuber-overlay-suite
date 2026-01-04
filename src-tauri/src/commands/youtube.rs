@@ -357,6 +357,15 @@ const POLLING_STATE_EXPIRY_HOURS: i64 = 24;
 
 /// 保存されたポーリング状態をDBから読み込む
 /// 有効期限（24時間）を超えた状態は無効として削除し、Noneを返す
+///
+/// ## JSON破損時のフォールバック
+/// 保存されているJSONが破損している場合:
+/// 1. 破損データを`polling_state_backup_{timestamp}`キーに退避保存
+/// 2. 破損した`polling_state`キーを削除（次回以降のフォールバックを防止）
+/// 3. Noneを返却
+/// 4. 警告ログを出力
+///
+/// これにより、UIが復旧不能な状態になることを防止する。
 #[tauri::command]
 pub async fn load_polling_state(
     state: tauri::State<'_, AppState>,
@@ -371,45 +380,86 @@ pub async fn load_polling_state(
     .map_err(|e| format!("DB error: {}", e))?;
 
     if let Some(json_str) = result {
-        let data: PollingStateData =
-            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+        match serde_json::from_str::<PollingStateData>(&json_str) {
+            Ok(data) => {
+                // 有効期限チェック
+                if let Ok(saved_time) = chrono::DateTime::parse_from_rfc3339(&data.saved_at) {
+                    let now = chrono::Utc::now();
+                    let elapsed = now.signed_duration_since(saved_time);
 
-        // 有効期限チェック
-        if let Ok(saved_time) = chrono::DateTime::parse_from_rfc3339(&data.saved_at) {
-            let now = chrono::Utc::now();
-            let elapsed = now.signed_duration_since(saved_time);
+                    if elapsed.num_hours() >= POLLING_STATE_EXPIRY_HOURS {
+                        log::info!(
+                            "Polling state expired (saved {} hours ago, limit {} hours). Clearing state.",
+                            elapsed.num_hours(),
+                            POLLING_STATE_EXPIRY_HOURS
+                        );
 
-            if elapsed.num_hours() >= POLLING_STATE_EXPIRY_HOURS {
-                log::info!(
-                    "Polling state expired (saved {} hours ago, limit {} hours). Clearing state.",
-                    elapsed.num_hours(),
-                    POLLING_STATE_EXPIRY_HOURS
+                        // 期限切れの状態を削除
+                        sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                            .execute(pool)
+                            .await
+                            .map_err(|e| format!("DB error while clearing expired state: {}", e))?;
+
+                        return Ok(None);
+                    }
+
+                    log::debug!(
+                        "Polling state is valid (saved {} hours ago)",
+                        elapsed.num_hours()
+                    );
+                } else {
+                    log::warn!("Failed to parse saved_at timestamp: {}", data.saved_at);
+                    // パース失敗時は安全のため状態を削除
+                    sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                        .execute(pool)
+                        .await
+                        .map_err(|e| format!("DB error while clearing invalid state: {}", e))?;
+                    return Ok(None);
+                }
+
+                Ok(Some(data))
+            }
+            Err(e) => {
+                // JSON破損時: 破損データを退避してNoneを返す
+                log::warn!(
+                    "Polling state JSON corrupted, falling back to None. Error: {}",
+                    e
                 );
 
-                // 期限切れの状態を削除
-                sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
-                    .execute(pool)
-                    .await
-                    .map_err(|e| format!("DB error while clearing expired state: {}", e))?;
-
-                return Ok(None);
-            }
-
-            log::debug!(
-                "Polling state is valid (saved {} hours ago)",
-                elapsed.num_hours()
-            );
-        } else {
-            log::warn!("Failed to parse saved_at timestamp: {}", data.saved_at);
-            // パース失敗時は安全のため状態を削除
-            sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                // 破損データをバックアップキーに退避（復旧調査用）
+                let now = chrono::Utc::now().to_rfc3339();
+                if let Err(backup_err) = sqlx::query(
+                    r#"
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    "#,
+                )
+                .bind(format!("polling_state_backup_{}", now))
+                .bind(&json_str)
+                .bind(&now)
                 .execute(pool)
                 .await
-                .map_err(|e| format!("DB error while clearing invalid state: {}", e))?;
-            return Ok(None);
-        }
+                {
+                    log::error!("Failed to backup corrupted polling state: {}", backup_err);
+                }
 
-        Ok(Some(data))
+                // 破損した polling_state キーを削除（次回以降のフォールバックを防止）
+                if let Err(delete_err) =
+                    sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                        .execute(pool)
+                        .await
+                {
+                    log::error!("Failed to delete corrupted polling state: {}", delete_err);
+                } else {
+                    log::info!(
+                        "Deleted corrupted polling_state key to prevent repeated fallback"
+                    );
+                }
+
+                Ok(None)
+            }
+        }
     } else {
         Ok(None)
     }
@@ -590,6 +640,15 @@ pub async fn save_wizard_settings(
 }
 
 /// 保存されたウィザード設定を読み込む
+///
+/// ## JSON破損時のフォールバック
+/// 保存されているJSONが破損している場合:
+/// 1. 破損データを`wizard_settings_backup_{timestamp}`キーに退避保存
+/// 2. 破損した`wizard_settings`キーを削除（次回以降のフォールバックを防止）
+/// 3. Noneを返却
+/// 4. 警告ログを出力
+///
+/// これにより、UIが復旧不能な状態になることを防止する。
 #[tauri::command]
 pub async fn load_wizard_settings(
     state: tauri::State<'_, AppState>,
@@ -604,9 +663,49 @@ pub async fn load_wizard_settings(
     .map_err(|e| format!("DB error: {}", e))?;
 
     if let Some(json_str) = result {
-        let data: WizardSettingsData =
-            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
-        Ok(Some(data))
+        match serde_json::from_str::<WizardSettingsData>(&json_str) {
+            Ok(data) => Ok(Some(data)),
+            Err(e) => {
+                // JSON破損時: 破損データを退避してNoneを返す
+                log::warn!(
+                    "Wizard settings JSON corrupted, falling back to None. Error: {}",
+                    e
+                );
+
+                // 破損データをバックアップキーに退避（復旧調査用）
+                let now = chrono::Utc::now().to_rfc3339();
+                if let Err(backup_err) = sqlx::query(
+                    r#"
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    "#,
+                )
+                .bind(format!("wizard_settings_backup_{}", now))
+                .bind(&json_str)
+                .bind(&now)
+                .execute(pool)
+                .await
+                {
+                    log::error!("Failed to backup corrupted wizard settings: {}", backup_err);
+                }
+
+                // 破損した wizard_settings キーを削除（次回以降のフォールバックを防止）
+                if let Err(delete_err) =
+                    sqlx::query("DELETE FROM settings WHERE key = 'wizard_settings'")
+                        .execute(pool)
+                        .await
+                {
+                    log::error!("Failed to delete corrupted wizard settings: {}", delete_err);
+                } else {
+                    log::info!(
+                        "Deleted corrupted wizard_settings key to prevent repeated fallback"
+                    );
+                }
+
+                Ok(None)
+            }
+        }
     } else {
         Ok(None)
     }
@@ -1268,6 +1367,9 @@ pub async fn get_live_stream_stats(
 /// KPI情報をWebSocketでブロードキャスト
 ///
 /// 視聴者数と高評価数をオーバーレイに配信
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command(rename_all = "snake_case")]
 pub async fn broadcast_kpi_update(
     main: Option<i64>,
@@ -1283,12 +1385,24 @@ pub async fn broadcast_kpi_update(
         sub_label,
     };
 
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = crate::server::types::WsMessage::KpiUpdate { payload };
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::debug!("KPI update broadcasted");
+    });
 
-    log::debug!("KPI update broadcasted");
     Ok(())
 }
 
@@ -1296,6 +1410,10 @@ pub async fn broadcast_kpi_update(
 ///
 /// YouTube APIから統計情報を取得し、WebSocketでオーバーレイに配信する。
 /// フロントエンドからの定期呼び出し（30秒間隔）を想定。
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fetch_and_broadcast_viewer_count(
     video_id: String,
@@ -1346,13 +1464,24 @@ pub async fn fetch_and_broadcast_viewer_count(
         stats.like_count
     );
 
-    // ブロードキャスト
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = crate::server::types::WsMessage::KpiUpdate { payload };
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::trace!("Viewer count broadcasted");
+    });
 
-    log::trace!("Viewer count broadcasted");
     Ok(())
 }
 
@@ -1367,6 +1496,10 @@ pub async fn fetch_and_broadcast_viewer_count(
 ///
 /// 注: 本番ではKPI取得は常に同梱APIキーを使用するため、この関数は呼ばれません。
 /// デバッグ・検証目的でのみ使用されます。
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[cfg(debug_assertions)]
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fetch_viewer_count_innertube(
@@ -1409,13 +1542,24 @@ pub async fn fetch_viewer_count_innertube(
         sub_label: None,
     };
 
-    // ブロードキャスト
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(crate::server::types::WsMessage::KpiUpdate { payload })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = crate::server::types::WsMessage::KpiUpdate { payload };
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::trace!("InnerTube viewer count broadcasted");
+    });
 
-    log::trace!("InnerTube viewer count broadcasted");
     Ok(())
 }
 

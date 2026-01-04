@@ -129,6 +129,10 @@ impl WeatherAutoUpdater {
     }
 
     /// 単一都市モード: 天気を取得してWebSocketでブロードキャスト
+    ///
+    /// ## 設計ノート
+    /// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+    /// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
     async fn fetch_and_broadcast_single(
         weather: &WeatherClient,
         server: &ServerState,
@@ -136,19 +140,36 @@ impl WeatherAutoUpdater {
         // キャッシュをクリアして最新データを取得
         weather.clear_cache().await;
         let data = weather.get_weather().await.map_err(|e| e.to_string())?;
+        let temp = data.temp;
 
-        let ws_state = server.read().await;
-        ws_state
-            .broadcast(WsMessage::WeatherUpdate {
-                payload: (&data).into(),
-            })
-            .await;
+        // WebSocketでブロードキャスト（Fire-and-forget）
+        let server = Arc::clone(server);
+        let message = WsMessage::WeatherUpdate {
+            payload: (&data).into(),
+        };
+        tokio::spawn(async move {
+            let peers_arc = {
+                let ws_state = server.read().await;
+                ws_state.get_peers_arc()
+            };
+            let peers_guard = peers_arc.read().await;
+            let peers: Vec<_> = peers_guard
+                .iter()
+                .map(|(id, tx)| (*id, tx.clone()))
+                .collect();
+            drop(peers_guard);
+            crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+            log::info!("Weather auto-update broadcasted: {}°C", temp);
+        });
 
-        log::info!("Weather auto-update broadcasted: {}°C", data.temp);
         Ok(())
     }
 
     /// マルチシティモード: 複数都市の天気を取得してWebSocketでブロードキャスト
+    ///
+    /// ## 設計ノート
+    /// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+    /// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
     async fn fetch_and_broadcast_multi(
         weather: &WeatherClient,
         server: &ServerState,
@@ -197,22 +218,35 @@ impl WeatherAutoUpdater {
             return Err("No weather data available for any city".to_string());
         }
 
-        // WebSocketでブロードキャスト
-        let ws_state = server.read().await;
-        ws_state
-            .broadcast(WsMessage::WeatherMultiUpdate {
-                payload: WeatherMultiUpdatePayload {
-                    cities: weather_data.clone(),
-                    rotation_interval_sec: config.rotation_interval_sec,
-                },
-            })
-            .await;
+        // WebSocketでブロードキャスト（Fire-and-forget）
+        let server = Arc::clone(server);
+        let city_count = weather_data.len();
+        let rotation_interval = config.rotation_interval_sec;
+        let message = WsMessage::WeatherMultiUpdate {
+            payload: WeatherMultiUpdatePayload {
+                cities: weather_data,
+                rotation_interval_sec: rotation_interval,
+            },
+        };
+        tokio::spawn(async move {
+            let peers_arc = {
+                let ws_state = server.read().await;
+                ws_state.get_peers_arc()
+            };
+            let peers_guard = peers_arc.read().await;
+            let peers: Vec<_> = peers_guard
+                .iter()
+                .map(|(id, tx)| (*id, tx.clone()))
+                .collect();
+            drop(peers_guard);
+            crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+            log::info!(
+                "Weather multi-city auto-update broadcasted: {} cities (interval: {}s)",
+                city_count,
+                rotation_interval
+            );
+        });
 
-        log::info!(
-            "Weather multi-city auto-update broadcasted: {} cities (interval: {}s)",
-            weather_data.len(),
-            config.rotation_interval_sec
-        );
         Ok(())
     }
 

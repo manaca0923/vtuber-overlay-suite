@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::server::types::{
     CommentSettings, LayoutPreset, SetlistSettings, SettingsUpdatePayload, SuperchatSettings,
@@ -161,6 +162,15 @@ pub async fn save_overlay_settings(
 }
 
 /// オーバーレイ設定を読み込み
+///
+/// ## JSON破損時のフォールバック
+/// 保存されているJSONが破損している場合:
+/// 1. 破損データを`overlay_settings_backup_{timestamp}`キーに退避保存
+/// 2. 破損した`overlay_settings`キーを削除（次回以降のフォールバックを防止）
+/// 3. Noneを返却（フロントエンドがデフォルト設定を使用）
+/// 4. 警告ログを出力
+///
+/// これにより、UIが復旧不能な状態になることを防止する。
 #[tauri::command]
 pub async fn load_overlay_settings(
     state: tauri::State<'_, AppState>,
@@ -174,15 +184,61 @@ pub async fn load_overlay_settings(
             .map_err(|e| format!("DB error: {}", e))?;
 
     if let Some((json_str,)) = result {
-        let settings: OverlaySettings =
-            serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error: {}", e))?;
-        Ok(Some(settings))
+        match serde_json::from_str::<OverlaySettings>(&json_str) {
+            Ok(settings) => Ok(Some(settings)),
+            Err(e) => {
+                // JSON破損時: 破損データを退避してNoneを返す
+                log::warn!(
+                    "Overlay settings JSON corrupted, falling back to None. Error: {}",
+                    e
+                );
+
+                // 破損データをバックアップキーに退避（復旧調査用）
+                let now = chrono::Utc::now().to_rfc3339();
+                if let Err(backup_err) = sqlx::query(
+                    r#"
+                    INSERT INTO settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    "#,
+                )
+                .bind(format!("overlay_settings_backup_{}", now))
+                .bind(&json_str)
+                .bind(&now)
+                .execute(pool)
+                .await
+                {
+                    log::error!("Failed to backup corrupted overlay settings: {}", backup_err);
+                }
+
+                // 破損した overlay_settings キーを削除（次回以降のフォールバックを防止）
+                if let Err(delete_err) =
+                    sqlx::query("DELETE FROM settings WHERE key = 'overlay_settings'")
+                        .execute(pool)
+                        .await
+                {
+                    log::error!("Failed to delete corrupted overlay settings: {}", delete_err);
+                } else {
+                    log::info!(
+                        "Deleted corrupted overlay_settings key to prevent repeated fallback"
+                    );
+                }
+
+                Ok(None)
+            }
+        }
     } else {
         Ok(None)
     }
 }
 
 /// 設定変更をWebSocketでブロードキャスト
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - 呼び出し元はブロードキャスト完了を待たずに即座に`Ok(())`を返す
+/// - ブロードキャスト失敗はログ出力のみで、呼び出し元のコマンド成功には影響しない
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command]
 pub async fn broadcast_settings_update(
     settings: OverlaySettings,
@@ -206,11 +262,35 @@ pub async fn broadcast_settings_update(
         theme_settings: settings.theme_settings,
     };
 
-    let server_state = state.server.read().await;
-    server_state
-        .broadcast(WsMessage::SettingsUpdate { payload })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    //
+    // ## 設計根拠
+    // - `tokio::spawn`で独立したタスクとして実行
+    // - RwLockガードをawait境界をまたいで保持しないため、2段階で処理:
+    //   1. serverのガードを取得→peersのArcをクローン→ガード解放
+    //   2. ガード解放後にpeersのRwLockをawait
+    // - これにより「ガード保持中にawait」を完全に回避
+    let server = Arc::clone(&state.server);
+    let message = WsMessage::SettingsUpdate { payload };
+    tokio::spawn(async move {
+        // ステップ1: serverのガードを取得してpeersのArcをクローン、即座にガード解放
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        }; // ここでws_stateのガード解放
 
-    log::info!("Settings update broadcasted");
+        // ステップ2: ガード解放後にpeersをawait（ガード保持中にawaitしていない）
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard); // 明示的にガード解放
+
+        // ステップ3: ガード解放後に送信（awaitなし）
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::debug!("Settings update broadcasted");
+    });
+
     Ok(())
 }

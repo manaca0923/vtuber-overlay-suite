@@ -94,16 +94,19 @@ pub async fn broadcast_brand_update(
 
     let message = WsMessage::BrandUpdate { payload };
 
-    // RwLockガードをawait境界をまたがないよう、先にpeersを収集
-    let peers = {
+    // ステップ1: serverのガードを取得してpeersのArcをクローン、即座にガード解放
+    let peers_arc = {
         let ws_state = state.server.read().await;
-        let peers_arc = ws_state.get_peers_arc();
-        let peers_guard = peers_arc.read().await;
-        peers_guard
-            .iter()
-            .map(|(id, tx)| (*id, tx.clone()))
-            .collect::<Vec<_>>()
-    };
+        ws_state.get_peers_arc()
+    }; // ここでws_stateのガード解放
+
+    // ステップ2: ガード解放後にpeersをawait（ガード保持中にawaitしていない）
+    let peers_guard = peers_arc.read().await;
+    let peers: Vec<_> = peers_guard
+        .iter()
+        .map(|(id, tx)| (*id, tx.clone()))
+        .collect();
+    drop(peers_guard);
 
     crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
     log::debug!("Brand update broadcasted to {} peers", peers.len());

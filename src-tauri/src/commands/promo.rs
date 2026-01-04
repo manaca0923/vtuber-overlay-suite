@@ -34,10 +34,12 @@ pub struct PromoState {
 /// ## JSON破損時のフォールバック
 /// 保存されているJSONが破損している場合:
 /// 1. 破損データを`promo_state_backup`キーに退避保存
-/// 2. デフォルト状態にフォールバックして返却
-/// 3. 警告ログを出力
+/// 2. 破損した`promo_state`キーを削除（次回以降のフォールバックを防止）
+/// 3. デフォルト状態にフォールバックして返却
+/// 4. 警告ログを出力
 ///
-/// これにより、UIが復旧不能な状態になることを防止する。
+/// これにより、UIが復旧不能な状態になることを防止し、
+/// 破損データが永続化されて毎回フォールバックし続ける問題を回避する。
 #[tauri::command]
 pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoState, String> {
     let pool = &state.db;
@@ -73,6 +75,17 @@ pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoS
                 .await
                 {
                     log::error!("Failed to backup corrupted promo state: {}", backup_err);
+                }
+
+                // 破損した promo_state キーを削除（次回以降のフォールバックを防止）
+                if let Err(delete_err) =
+                    sqlx::query("DELETE FROM settings WHERE key = 'promo_state'")
+                        .execute(pool)
+                        .await
+                {
+                    log::error!("Failed to delete corrupted promo state: {}", delete_err);
+                } else {
+                    log::info!("Deleted corrupted promo_state key to prevent repeated fallback");
                 }
 
                 Ok(PromoState::default())

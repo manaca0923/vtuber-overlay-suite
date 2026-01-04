@@ -97,6 +97,39 @@ let payload = PromoUpdatePayload {
 };
 ```
 
+### 4. JSON破損時の修復保存
+
+バックアップ保存だけでは破損データが残り続け、毎回フォールバックが発生する。
+破損キーを削除して次回以降のフォールバックを防止する必要がある。
+
+**問題のあるコード:**
+```rust
+// バックアップ保存後、デフォルト値を返すだけ
+// → 次回呼び出しでも同じ破損JSONが読み込まれる
+if let Err(backup_err) = sqlx::query(...).execute(pool).await {
+    log::error!("Failed to backup: {}", backup_err);
+}
+Ok(PromoState::default())  // 破損キーはそのまま
+```
+
+**修正後:**
+```rust
+// バックアップ保存後、破損キーを削除
+if let Err(backup_err) = sqlx::query(...).execute(pool).await {
+    log::error!("Failed to backup: {}", backup_err);
+}
+
+// 破損した promo_state キーを削除
+if let Err(delete_err) = sqlx::query("DELETE FROM settings WHERE key = 'promo_state'")
+    .execute(pool).await {
+    log::error!("Failed to delete corrupted promo state: {}", delete_err);
+} else {
+    log::info!("Deleted corrupted promo_state key to prevent repeated fallback");
+}
+
+Ok(PromoState::default())
+```
+
 ## 教訓
 
 ### 公開APIには防御的バリデーションを
@@ -107,6 +140,7 @@ Tauriコマンドとして外部公開される関数は、任意の入力が渡
 2. **インデックスベースの操作**: 境界チェックを行い、範囲外ならエラーを返す
 3. **フロントエンドとの整合性**: バックエンドがエラーを返さないと、UIは成功と判断する
 4. **ブロードキャスト時のOption値**: Noneをそのまま送信するとJSで`null`になり、想定外の挙動を招く。デフォルト値を適用する
+5. **JSON破損時の修復保存**: バックアップ保存だけでなく、破損キーを削除して次回以降のフォールバックを防止する
 
 ### 複数の経路で同じデータを保存する場合
 

@@ -635,6 +635,24 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### 機能改善（中優先度）
 
+- [ ] **起動時/WebSocket再接続時のPromo/Queue初期状態送信** (PR#116レビューで提案)
+  - 問題: 保存済みのPromo/Queue状態がWebSocket経由でしか送信されないため、
+    アプリ再起動やオーバーレイ再接続時にデフォルト/スタブ表示になる
+  - 対応案A: HTTP API `/overlay/promo`, `/overlay/queue` エンドポイントを追加し、
+    SettingsFetcherで取得・適用
+  - 対応案B: WebSocket接続時にサーバー側から初期状態を自動送信
+  - 優先度: 中（保存したデータが表示されないUX問題）
+
+- [ ] **Promo/Queue入力サイズ上限の追加** (PR#116レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/promo.rs` (`save_promo_state`, `add_promo_item`)
+    - `src-tauri/src/commands/queue.rs` (`save_queue_state`, `add_queue_item`)
+  - 問題: Tauri公開コマンドとして入力サイズ上限がなく、巨大データでDB肥大化やブロードキャスト負荷が発生する可能性
+  - 改善案:
+    - `MAX_PROMO_ITEMS = 20`, `MAX_TEXT_LENGTH = 200` 等の定数を設けてバリデーション
+    - 超過時はエラーを返す
+  - 優先度: 低（現実的には問題になりにくいが、防御的プログラミングとして推奨）
+
 - [ ] **オーバーレイのカスタムCSS機能**
   - 設定画面にカスタムCSSテキストエリアを追加
   - APIで保存し、オーバーレイ読み込み時に適用

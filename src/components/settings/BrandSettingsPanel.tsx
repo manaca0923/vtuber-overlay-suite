@@ -16,7 +16,6 @@ interface BrandSettings {
 }
 
 export function BrandSettingsPanel() {
-  const [, setBrandSettings] = useState<BrandSettings>({ logoUrl: null, text: null });
   // 入力用のローカル状態（debounce用）
   const [localLogoUrl, setLocalLogoUrl] = useState('');
   const [localText, setLocalText] = useState('');
@@ -30,14 +29,19 @@ export function BrandSettingsPanel() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 保存のシーケンス番号（非同期競合対策）
   const saveSeqRef = useRef(0);
+  // 最新値を保持するref（debounce内で最新値を参照するため）
+  const latestValuesRef = useRef({ logoUrl: '', text: '' });
 
   // ブランド設定を読み込み
   const loadBrandSettings = useCallback(async () => {
     try {
       const settings = await invoke<BrandSettings>('get_brand_settings');
-      setBrandSettings(settings);
-      setLocalLogoUrl(settings.logoUrl ?? '');
-      setLocalText(settings.text ?? '');
+      const logoUrl = settings.logoUrl ?? '';
+      const text = settings.text ?? '';
+      setLocalLogoUrl(logoUrl);
+      setLocalText(text);
+      // refも同期
+      latestValuesRef.current = { logoUrl, text };
     } catch (err) {
       console.error('Failed to load brand settings:', err);
       setError('ブランド設定の読み込みに失敗しました');
@@ -73,8 +77,11 @@ export function BrandSettingsPanel() {
     return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:');
   };
 
-  // 設定を保存
-  const handleSave = async (logoUrl: string, text: string) => {
+  // 設定を保存（latestValuesRefから最新値を取得）
+  const handleSave = async () => {
+    // 最新値をrefから取得
+    const { logoUrl, text } = latestValuesRef.current;
+
     // シーケンス番号をインクリメント
     saveSeqRef.current += 1;
     const currentSeq = saveSeqRef.current;
@@ -99,13 +106,11 @@ export function BrandSettingsPanel() {
         text: text.trim() || null,
       };
 
-      const saved = await invoke<BrandSettings>('save_brand_settings', { brand_settings: newSettings });
+      // 保存とブロードキャストを単一コマンドで実行（原子性を担保）
+      await invoke('save_and_broadcast_brand', { brand_settings: newSettings });
 
-      // 最新のリクエストのみ状態を更新
+      // 最新のリクエストのみ成功メッセージを表示
       if (currentSeq === saveSeqRef.current) {
-        setBrandSettings(saved);
-        // ブロードキャスト
-        await invoke('broadcast_brand_update', { brand_settings: saved });
         setSuccess('設定を保存しました');
         setTimeout(() => setSuccess(''), 2000);
       }
@@ -129,14 +134,17 @@ export function BrandSettingsPanel() {
     setLocalLogoUrl(value);
     setPreviewError(false); // プレビューエラーをリセット
 
+    // refを更新（debounceコールバック内で最新値を参照するため）
+    latestValuesRef.current.logoUrl = value;
+
     // 既存のタイマーをクリア
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
     }
 
-    // debounce後に保存
+    // debounce後に保存（handleSaveはlatestValuesRefから最新値を取得）
     saveTimerRef.current = setTimeout(() => {
-      handleSave(value, localText);
+      handleSave();
     }, SAVE_DEBOUNCE_MS);
   };
 
@@ -145,14 +153,17 @@ export function BrandSettingsPanel() {
     const value = e.target.value;
     setLocalText(value);
 
+    // refを更新（debounceコールバック内で最新値を参照するため）
+    latestValuesRef.current.text = value;
+
     // 既存のタイマーをクリア
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
     }
 
-    // debounce後に保存
+    // debounce後に保存（handleSaveはlatestValuesRefから最新値を取得）
     saveTimerRef.current = setTimeout(() => {
-      handleSave(localLogoUrl, value);
+      handleSave();
     }, SAVE_DEBOUNCE_MS);
   };
 
@@ -163,12 +174,15 @@ export function BrandSettingsPanel() {
     setPreviewError(false);
     clearMessages();
 
+    // refも更新
+    latestValuesRef.current = { logoUrl: '', text: '' };
+
     // タイマーをキャンセル
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
     }
 
-    await handleSave('', '');
+    await handleSave();
   };
 
   if (loading) {

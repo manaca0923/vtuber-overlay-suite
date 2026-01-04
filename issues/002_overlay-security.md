@@ -362,10 +362,37 @@ const handleSave = async () => {
 };
 ```
 
+**バックエンド側（Rust）** - 深層防御
+```rust
+// brand.rs - フロント以外の呼び出し（将来のAPI/他クライアント）にも対応
+fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, String> {
+    let mut validated = settings;
+
+    if let Some(ref url) = validated.logo_url {
+        // トリムしてから検証
+        let trimmed_url = url.trim();
+
+        // 空文字列はNoneに正規化
+        if trimmed_url.is_empty() {
+            validated.logo_url = None;
+        } else {
+            // トリム後の値で検証
+            if trimmed_url.len() > MAX_LOGO_URL_LENGTH {
+                return Err("Logo URL too long".to_string());
+            }
+            // トリム済みの値で更新
+            validated.logo_url = Some(trimmed_url.to_string());
+        }
+    }
+    Ok(validated)
+}
+```
+
 ### 今後の対策
 - 検証と保存で同じ値（トリム済み）を使用
 - トリム処理は検証の前に行う
 - バックエンド側でも同様のトリム処理を行い、空文字列はNoneに正規化
+- **深層防御**: フロント以外の呼び出し（将来のAPI/他クライアント）にも対応するため、バックエンドでも必ずトリムする
 
 ---
 
@@ -382,4 +409,5 @@ const handleSave = async () => {
 - [ ] カスタム値の上限はバックエンドでも検証しているか
 - [ ] 外部リソース（Google Fonts等）のURLホスト名を検証しているか
 - [ ] `data:image/`を許可する場合、MIMEタイプを限定しているか（SVG除外）
-- [ ] URL検証はトリム後の値で行っているか
+- [ ] URL検証はトリム後の値で行っているか（フロント・バックエンド両方）
+- [ ] バックエンドでもトリム処理を行っているか（深層防御）

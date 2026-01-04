@@ -135,27 +135,41 @@ pub async fn save_and_broadcast_brand(
 }
 
 /// ブランド設定の入力検証
+///
+/// ## 正規化処理
+/// - 前後空白をトリム
+/// - 空文字列はNoneに正規化
+///
+/// NOTE: フロント側でもトリムするが、深層防御として
+/// バックエンドでも同様の処理を行う（将来のAPI/他クライアント対応）
 fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, String> {
     let mut validated = settings;
 
     // ロゴURL検証
     if let Some(ref url) = validated.logo_url {
-        // 長さチェック
-        if url.len() > MAX_LOGO_URL_LENGTH {
-            return Err(format!(
-                "Logo URL too long: {} bytes (max {})",
-                url.len(),
-                MAX_LOGO_URL_LENGTH
-            ));
-        }
+        // トリムしてから検証（深層防御: フロント以外の呼び出しにも対応）
+        let trimmed_url = url.trim();
 
-        // スキーム検証（http, https, data:image/(許可リスト) のみ許可）
-        // NOTE: SVGはスクリプト/外部参照によるセキュリティリスクがあるため除外
-        if !url.is_empty() {
-            let is_http = url.starts_with("http://") || url.starts_with("https://");
+        // 空文字列はNoneに正規化
+        if trimmed_url.is_empty() {
+            validated.logo_url = None;
+        } else {
+            // 長さチェック（トリム後の値で検証）
+            if trimmed_url.len() > MAX_LOGO_URL_LENGTH {
+                return Err(format!(
+                    "Logo URL too long: {} bytes (max {})",
+                    trimmed_url.len(),
+                    MAX_LOGO_URL_LENGTH
+                ));
+            }
+
+            // スキーム検証（http, https, data:image/(許可リスト) のみ許可）
+            // NOTE: SVGはスクリプト/外部参照によるセキュリティリスクがあるため除外
+            let is_http =
+                trimmed_url.starts_with("http://") || trimmed_url.starts_with("https://");
             let is_allowed_data = ALLOWED_DATA_IMAGE_PREFIXES
                 .iter()
-                .any(|prefix| url.starts_with(prefix));
+                .any(|prefix| trimmed_url.starts_with(prefix));
 
             if !is_http && !is_allowed_data {
                 return Err(
@@ -163,27 +177,31 @@ fn validate_brand_settings(settings: BrandSettings) -> Result<BrandSettings, Str
                         .to_string(),
                 );
             }
-        }
 
-        // 空文字列はNoneに正規化
-        if url.is_empty() {
-            validated.logo_url = None;
+            // トリム済みの値で更新
+            validated.logo_url = Some(trimmed_url.to_string());
         }
     }
 
     // テキスト検証
     if let Some(ref text) = validated.text {
-        if text.chars().count() > MAX_TEXT_LENGTH {
-            return Err(format!(
-                "Text too long: {} chars (max {})",
-                text.chars().count(),
-                MAX_TEXT_LENGTH
-            ));
-        }
+        // トリムしてから検証（深層防御: フロント以外の呼び出しにも対応）
+        let trimmed_text = text.trim();
 
         // 空文字列はNoneに正規化
-        if text.is_empty() {
+        if trimmed_text.is_empty() {
             validated.text = None;
+        } else {
+            if trimmed_text.chars().count() > MAX_TEXT_LENGTH {
+                return Err(format!(
+                    "Text too long: {} chars (max {})",
+                    trimmed_text.chars().count(),
+                    MAX_TEXT_LENGTH
+                ));
+            }
+
+            // トリム済みの値で更新
+            validated.text = Some(trimmed_text.to_string());
         }
     }
 

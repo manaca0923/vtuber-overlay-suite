@@ -257,22 +257,27 @@ export function BrandSettingsPanel() {
       </div>
 
       {/* プレビュー */}
-      {localLogoUrl && !previewError && (
-        <div className="p-4 bg-gray-800 rounded-lg">
-          <p className="text-xs text-gray-400 mb-2">プレビュー</p>
-          <div className="flex items-center justify-center min-h-16">
-            <img
-              src={localLogoUrl}
-              alt="Logo preview"
-              onError={() => setPreviewError(true)}
-              className="max-h-16 max-w-full object-contain"
-            />
+      {/* NOTE: トリム済み＆検証済みのURLのみ表示（SVG等の拒否対象をUI上で読み込まない） */}
+      {(() => {
+        const trimmedUrl = localLogoUrl.trim();
+        const isValidForPreview = trimmedUrl && validateUrl(trimmedUrl) && !previewError;
+        return isValidForPreview ? (
+          <div className="p-4 bg-gray-800 rounded-lg">
+            <p className="text-xs text-gray-400 mb-2">プレビュー</p>
+            <div className="flex items-center justify-center min-h-16">
+              <img
+                src={trimmedUrl}
+                alt="Logo preview"
+                onError={() => setPreviewError(true)}
+                className="max-h-16 max-w-full object-contain"
+              />
+            </div>
           </div>
-        </div>
-      )}
+        ) : null;
+      })()}
 
       {/* プレビューエラー */}
-      {previewError && localLogoUrl && (
+      {previewError && localLogoUrl.trim() && validateUrl(localLogoUrl.trim()) && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
           画像の読み込みに失敗しました。URLが正しいか確認してください。
         </div>

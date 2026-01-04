@@ -704,6 +704,15 @@
             updateBatcher.queue('PromoPanel', data.payload);
             densityManager.recordUpdate('right.bottom');
             break;
+          case 'brand:update':
+            // ブランド（ロゴ）更新 - 左下スロット（left.bottom）
+            {
+              const brandBlock = ComponentRegistry.getInstance('left.bottom');
+              if (brandBlock && typeof brandBlock.update === 'function') {
+                brandBlock.update(data.payload);
+              }
+            }
+            break;
           case 'weather:update':
             // 天気ウィジェットは左カラム（slot-left-topBelow）に配置されるため、
             // 右下エリアの過密検出（densityManager）には記録しない。

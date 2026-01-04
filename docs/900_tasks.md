@@ -903,7 +903,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 | 天気 | left.topBelow | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | コメント | left.middle | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | スパチャ | left.lower | ✅ | ✅ | ✅ | ✅ **完全動作** |
-| **ロゴ** | left.bottom | ❌ | ❌ | ✅ | ⚠️ UI のみ（設定UIなし） |
+| **ロゴ** | left.bottom | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | セトリ | right.upper | ✅ | ✅ | ✅ | ✅ **完全動作** |
 | **KPI** | right.lowerLeft | ✅ | ✅ | ✅ | ✅ **完全動作**（gRPC/公式APIモード時） |
 | **短冊** | right.lowerRight | ✅ | ✅ | ✅ | ✅ **完全動作** |
@@ -911,7 +911,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
 
 ### 詳細説明
 
-#### ✅ 完全動作（8個）
+#### ✅ 完全動作（9個）
 
 1. **時計** (`ClockWidget`)
    - 設計上バックエンド不要（ブラウザのローカル時刻を使用）
@@ -967,12 +967,12 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
    - 設定UI完成（アイテム追加/編集/削除、表示間隔設定）
    - ファイル: `src-tauri/overlays/components/promo-panel.js`, `src-tauri/src/commands/promo.rs`
 
-#### ⚠️ 部分実装（1個）
-
 9. **ロゴ** (`BrandBlock`)
-   - UIコンポーネントは完成（画像URL/テキスト表示対応）
-   - **欠けているもの**: 設定画面からロゴURL/テキストを入力するUI
-   - ファイル: `src-tauri/overlays/components/brand-block.js`
+   - UIコンポーネント完成（画像URL/テキスト表示対応）
+   - ブランド設定バックエンド完成（DB保存、URL/テキスト検証）
+   - WebSocket: `brand:update` メッセージでリアルタイム反映
+   - 設定UI完成（ロゴURL入力、代替テキスト入力、プレビュー表示）
+   - ファイル: `src-tauri/overlays/components/brand-block.js`, `src-tauri/src/commands/brand.rs`
 
 ### 関連ファイル
 
@@ -1176,7 +1176,7 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ## T29: ロゴ設定UI
 **優先度**: P3 | **見積**: 1日 | **依存**: なし
-**ステータス**: 未着手
+**ステータス**: ✅ **完了**（2026-01-04）
 
 ### 概要
 ロゴウィジェット（left.bottom）の設定UIを実装。
@@ -1184,16 +1184,21 @@ YouTube APIから同時接続者数・高評価数を取得してリアルタイ
 
 ### 背景
 - BrandBlockコンポーネントは完成済み（UI、画像/テキスト表示）
-- **欠けているもの**: 設定画面からロゴを設定するUI
-- 現状: データがないため何も表示されない
+- ~~**欠けているもの**: 設定画面からロゴを設定するUI~~ → 実装完了
+- ~~現状: データがないため何も表示されない~~ → 設定データを表示
 
 ### チェックリスト
-- [ ] ロゴ設定の保存（DB or 設定ファイル）
-- [ ] 設定UI: ロゴURL入力、代替テキスト入力、プレビュー表示
-- [ ] 設定変更時のWebSocketブロードキャスト
+- [x] ロゴ設定の保存（settingsテーブル）
+- [x] 設定UI: ロゴURL入力、代替テキスト入力、プレビュー表示
+- [x] 設定変更時のWebSocketブロードキャスト
+- [x] 入力検証（URL長、スキーム、テキスト長）
 
 ### 成果物
-- `src/components/settings/BrandSettingsPanel.tsx` - 設定UI
-- 設定保存ロジック追加
+- `src-tauri/src/commands/brand.rs` - ブランド設定コマンド
+  - `get_brand_settings`, `save_brand_settings` - 状態取得・保存
+  - `broadcast_brand_update`, `save_and_broadcast_brand` - WebSocketブロードキャスト
+- `src-tauri/src/server/types.rs` - `BrandSettings`, `BrandUpdatePayload` 型追加
+- `src/components/settings/BrandSettingsPanel.tsx` - 設定UI（URL入力、テキスト入力、プレビュー）
+- `src-tauri/overlays/combined-v2.html` - `brand:update` WebSocketハンドラ追加
 
 ---

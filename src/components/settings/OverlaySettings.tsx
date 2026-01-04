@@ -11,6 +11,7 @@ import { ApiKeySettingsPanel } from './ApiKeySettingsPanel';
 import { WidgetSettingsPanel } from './WidgetSettingsPanel';
 import { QueueSettingsPanel } from './QueueSettingsPanel';
 import { PromoSettingsPanel } from './PromoSettingsPanel';
+import { BrandSettingsPanel } from './BrandSettingsPanel';
 import { OverlayPreview } from './OverlayPreview';
 import {
   DEFAULT_OVERLAY_SETTINGS,
@@ -35,7 +36,7 @@ export function OverlaySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activePanel, setActivePanel] = useState<'widget' | 'comment' | 'superchat' | 'setlist' | 'queue' | 'promo' | 'weather' | 'performance'>('widget');
+  const [activePanel, setActivePanel] = useState<'widget' | 'comment' | 'superchat' | 'setlist' | 'queue' | 'promo' | 'brand' | 'weather' | 'performance'>('widget');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('combined');
 
   // 変更検出（リセットボタンの表示/非表示制御用）
@@ -302,6 +303,16 @@ export function OverlaySettings() {
                 告知
               </button>
               <button
+                onClick={() => setActivePanel('brand')}
+                className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
+                  activePanel === 'brand'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                ロゴ
+              </button>
+              <button
                 onClick={() => setActivePanel('weather')}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
                   activePanel === 'weather'
@@ -370,6 +381,9 @@ export function OverlaySettings() {
               )}
               {activePanel === 'promo' && (
                 <PromoSettingsPanel />
+              )}
+              {activePanel === 'brand' && (
+                <BrandSettingsPanel />
               )}
               {activePanel === 'weather' && (
                 <WeatherSettingsPanel
@@ -460,7 +474,7 @@ export function OverlaySettings() {
           <div className="h-[500px]">
             <OverlayPreview
               settings={settings}
-              activePanel={activePanel === 'widget' || activePanel === 'weather' || activePanel === 'performance' || activePanel === 'superchat' || activePanel === 'queue' || activePanel === 'promo' ? 'comment' : activePanel}
+              activePanel={activePanel === 'widget' || activePanel === 'weather' || activePanel === 'performance' || activePanel === 'superchat' || activePanel === 'queue' || activePanel === 'promo' || activePanel === 'brand' ? 'comment' : activePanel}
               mode={previewMode}
             />
           </div>

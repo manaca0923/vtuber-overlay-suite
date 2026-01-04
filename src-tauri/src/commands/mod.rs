@@ -1,3 +1,4 @@
+pub mod brand;
 pub mod keyring;
 pub mod overlay;
 pub mod promo;

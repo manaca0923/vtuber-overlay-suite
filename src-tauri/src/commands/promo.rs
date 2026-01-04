@@ -9,6 +9,14 @@ use std::sync::Arc;
 use crate::server::types::{PromoItem, PromoUpdatePayload, WsMessage};
 use crate::AppState;
 
+/// デフォルトの各アイテム表示時間（秒）
+/// オーバーレイ側のPromoPanel.jsと同期（デフォルト: 6秒）
+const DEFAULT_SHOW_SEC: u32 = 6;
+
+/// デフォルトのサイクル間隔（秒）
+/// オーバーレイ側のPromoPanel.jsと同期（デフォルト: 30秒）
+const DEFAULT_CYCLE_SEC: u32 = 30;
+
 /// 告知状態（保存用）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -238,15 +246,20 @@ pub async fn set_promo_settings(
 /// - 呼び出し元はブロードキャスト完了を待たずに即座に`Ok(())`を返す
 /// - ブロードキャスト失敗はログ出力のみで、呼び出し元のコマンド成功には影響しない
 /// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
+///
+/// ## デフォルト値の適用
+/// `show_sec`/`cycle_sec`がNoneの場合、オーバーレイ側で`null`がクランプされて
+/// 最小値になってしまう問題を回避するため、ブロードキャスト時にデフォルト値を適用する。
 #[tauri::command]
 pub async fn broadcast_promo_update(
     promo_state: PromoState,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // Noneの場合はデフォルト値を適用（オーバーレイ側でnullが最小値にクランプされる問題を回避）
     let payload = PromoUpdatePayload {
         items: promo_state.items,
-        cycle_sec: promo_state.cycle_sec,
-        show_sec: promo_state.show_sec,
+        cycle_sec: Some(promo_state.cycle_sec.unwrap_or(DEFAULT_CYCLE_SEC)),
+        show_sec: Some(promo_state.show_sec.unwrap_or(DEFAULT_SHOW_SEC)),
     };
 
     // WebSocketでブロードキャスト（Fire-and-forget）

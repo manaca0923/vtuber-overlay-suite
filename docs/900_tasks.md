@@ -364,13 +364,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（Tauriマクロの制約により複雑）
 
-- [ ] **キュー操作のread-modify-write競合対策** (PR#115レビューで提案)
-  - 対象ファイル: `src-tauri/src/commands/queue.rs`
-  - 問題: `get_queue_state`→変更→`save_queue_state`のパターンが非原子的
-  - 影響: 同時に`add_queue_item`/`clear_queue`が走ると更新が失われる可能性
+- [ ] **設定操作のread-modify-write競合対策** (PR#115, PR#116レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/queue.rs`
+    - `src-tauri/src/commands/promo.rs`
+  - 問題: `get_*_state`→変更→`save_*_state`のパターンが非原子的
+  - 影響: 同時に複数の操作（add/remove/update/clear等）が走ると更新が失われる可能性
   - 改善案:
     - A) SQLiteトランザクションで囲む
     - B) ETag/バージョン管理で楽観的ロック
+    - C) `save_and_broadcast_*`を唯一の保存経路にして、フロントからは常に最新版を送る
+    - D) テーブルを分割し、更新対象のみSQL更新（items/settings分離）
   - 優先度: 低（単一ユーザー操作が前提、既存パターンと同様）
   - 備考: setlist等も同様のパターンを使用しており、全体的な改修が必要
 

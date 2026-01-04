@@ -67,6 +67,36 @@ save_promo_state(promo_state.clone(), state).await?;
 Ok(promo_state)
 ```
 
+### 3. ブロードキャスト時のOption値のNullチェック
+
+`show_sec`/`cycle_sec`がNoneの状態でブロードキャストすると、
+オーバーレイ側（JavaScript）で`null`がクランプされて最小値（3秒）になる問題があった。
+
+**問題のあるコード:**
+```rust
+let payload = PromoUpdatePayload {
+    items: promo_state.items,
+    cycle_sec: promo_state.cycle_sec,  // None → null
+    show_sec: promo_state.show_sec,    // None → null → JS側で3秒に
+};
+```
+
+**JavaScript側の問題:**
+```javascript
+if (data.showSec !== undefined) {  // null !== undefined は true
+    this.showSec = this.clampByKey(data.showSec, 'showSec', 3, 15);  // null → 3
+}
+```
+
+**修正後:**
+```rust
+let payload = PromoUpdatePayload {
+    items: promo_state.items,
+    cycle_sec: Some(promo_state.cycle_sec.unwrap_or(DEFAULT_CYCLE_SEC)),
+    show_sec: Some(promo_state.show_sec.unwrap_or(DEFAULT_SHOW_SEC)),
+};
+```
+
 ## 教訓
 
 ### 公開APIには防御的バリデーションを
@@ -76,6 +106,7 @@ Tauriコマンドとして外部公開される関数は、任意の入力が渡
 1. **クランプ対象のフィールドを持つ保存関数**: 入力値を範囲内にクランプしてから保存
 2. **インデックスベースの操作**: 境界チェックを行い、範囲外ならエラーを返す
 3. **フロントエンドとの整合性**: バックエンドがエラーを返さないと、UIは成功と判断する
+4. **ブロードキャスト時のOption値**: Noneをそのまま送信するとJSで`null`になり、想定外の挙動を招く。デフォルト値を適用する
 
 ### 複数の経路で同じデータを保存する場合
 

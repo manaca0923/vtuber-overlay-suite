@@ -324,6 +324,33 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - `src-tauri/src/commands/youtube.rs` (`load_polling_state`, `load_wizard_settings`)
   - 実装: `promo.rs`と同様のパターンでJSON破損時にバックアップ保存 + フォールバック
 
+- [ ] **Fire-and-forgetブロードキャストのレース条件対策** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/overlay.rs` (`broadcast_settings_update`)
+    - `src-tauri/src/commands/youtube.rs` (`broadcast_kpi_update`, `fetch_and_broadcast_viewer_count`, `fetch_viewer_count_innertube`)
+    - `src-tauri/src/commands/weather.rs` (`broadcast_weather_update`, `broadcast_weather`, `set_weather_city_and_broadcast`, `broadcast_weather_multi`)
+    - `src-tauri/src/weather/auto_updater.rs` (`fetch_and_broadcast_single`, `fetch_and_broadcast_multi`)
+  - 問題: `tokio::spawn`でブロードキャストをfire-and-forget化したため、`Ok(())`が返った時点で送信完了が保証されない
+  - 影響: UI操作直後の状態取得や連続操作でレース条件が発生する可能性
+  - 改善案:
+    - A) 即時反映が必要なコマンドは同期送信（await）、定期通知はfire-and-forget
+    - B) 戻り値でブロードキャスト未完了を示す（`BroadcastPending`等）
+  - 優先度: 低（単一ユーザー操作が前提、実用上は問題になりにくい）
+  - 参考: `issues/033_fire-and-forget-broadcast.md`
+
+- [ ] **tokio::spawnタスク増大の抑制** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/youtube.rs`
+    - `src-tauri/src/commands/weather.rs`
+    - `src-tauri/src/weather/auto_updater.rs`
+  - 問題: 連続呼び出し時に無制限に`tokio::spawn`が積み上がる設計
+  - 影響: スパム的な呼び出しや高頻度更新時にタスク数増大・遅延の可能性
+  - 改善案:
+    - A) 「前回送信中ならスキップ」する簡易ガード（AtomicBool）
+    - B) 送信キュー化（最新の1つだけ保持）
+  - 優先度: 低（現状でも動作に問題なし、高負荷時の最適化として）
+  - 参考: `issues/033_fire-and-forget-broadcast.md`
+
 - [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
   - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
   - 改善案: `serde_json::from_str::<OverlaySettings>`で直接デシリアライズ
@@ -566,6 +593,21 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（UX改善のみ）
 
 ### テスト（推奨）
+
+- [ ] **JSON破損フォールバックのユニットテスト追加** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/overlay.rs` (`load_overlay_settings`)
+    - `src-tauri/src/commands/queue.rs` (`get_queue_state`)
+    - `src-tauri/src/commands/youtube.rs` (`load_polling_state`, `load_wizard_settings`)
+  - テストケース:
+    - JSON破損時にバックアップキー（`{key}_backup_{timestamp}`）が作成されること
+    - 破損した元キーが削除されること
+    - 戻り値が`None`またはデフォルト値になること
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
+
+- [ ] **Fire-and-forgetブロードキャストの統合テスト追加** (PR#118レビューで提案)
+  - テスト内容: 疑似WebSocketサーバーでブロードキャストが実際に到達することを検証
+  - 優先度: 低（サーバーモック化が必要）
 
 - [ ] **Queue機能のユニットテスト追加** (PR#115レビューで提案)
   - 対象ファイル: `src-tauri/src/commands/queue.rs`

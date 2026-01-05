@@ -159,7 +159,7 @@ impl WeatherAutoUpdater {
                 .collect();
             drop(peers_guard);
             crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
-            log::info!("Weather auto-update broadcasted: {}°C", temp);
+            log::debug!("Weather auto-update broadcasted: {}°C", temp);
         });
 
         Ok(())
@@ -240,7 +240,7 @@ impl WeatherAutoUpdater {
                 .collect();
             drop(peers_guard);
             crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
-            log::info!(
+            log::debug!(
                 "Weather multi-city auto-update broadcasted: {} cities (interval: {}s)",
                 city_count,
                 rotation_interval

@@ -172,7 +172,32 @@ loop {
 | 設定変更ブロードキャスト | Fire-and-forget（単一ユーザー前提） |
 | 高頻度イベント | スロットリング付きfire-and-forget |
 
+## バックアップキーの衝突回避（関連指摘）
+
+JSON破損時のバックアップキーに関する追加指摘：
+
+```rust
+// 現在の実装（秒精度）
+let now = chrono::Utc::now().to_rfc3339();
+let backup_key = format!("{}_backup_{}", key, now);
+// 例: "queue_state_backup_2024-01-01T12:00:00+00:00"
+```
+
+**問題**: 同一秒内に複数の設定ファイルが破損すると、バックアップキーが衝突する可能性がある。
+
+**改善案**:
+```rust
+// A) ナノ秒精度
+let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+// 例: "2024-01-01T12:00:00.123456789Z"
+
+// B) UUID付与
+let backup_key = format!("{}_backup_{}_{}", key, now, uuid::Uuid::new_v4());
+```
+
+**判断**: 優先度低（同一秒内の複数破損は稀）。`docs/900_tasks.md`に後回しタスクとして記録。
+
 ## 関連
 
 - `issues/003_tauri-rust-patterns.md#8`: RwLockガードのawait境界
-- `docs/900_tasks.md`: Fire-and-forgetブロードキャストのレース条件対策、tokio::spawnタスク増大の抑制
+- `docs/900_tasks.md`: Fire-and-forgetブロードキャストのレース条件対策、tokio::spawnタスク増大の抑制、バックアップキーのタイムスタンプ衝突回避

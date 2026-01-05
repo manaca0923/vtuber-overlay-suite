@@ -351,6 +351,19 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（現状でも動作に問題なし、高負荷時の最適化として）
   - 参考: `issues/033_fire-and-forget-broadcast.md`
 
+- [ ] **バックアップキーのタイムスタンプ衝突回避** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/overlay.rs`
+    - `src-tauri/src/commands/queue.rs`
+    - `src-tauri/src/commands/youtube.rs`
+    - `src-tauri/src/commands/promo.rs`
+    - `src-tauri/src/commands/brand.rs`
+  - 問題: バックアップキーが秒精度の`to_rfc3339()`依存のため、同一秒内の複数破損でバックアップが上書きされる可能性
+  - 改善案:
+    - A) `to_rfc3339_opts(SecondsFormat::Nanos, true)` でナノ秒精度に変更
+    - B) タイムスタンプに加えて`Uuid::new_v4()`を付与
+  - 優先度: 低（同一秒内に複数の設定ファイルが破損する確率は極めて低い）
+
 - [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
   - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
   - 改善案: `serde_json::from_str::<OverlaySettings>`で直接デシリアライズ

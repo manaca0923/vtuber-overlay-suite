@@ -87,8 +87,9 @@ pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueS
                 );
 
                 // 破損データをバックアップキーに退避（復旧調査用）
+                // バックアップ成功時のみ元キーを削除（データ損失防止）
                 let now = chrono::Utc::now().to_rfc3339();
-                if let Err(backup_err) = sqlx::query(
+                let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
                     VALUES (?, ?, ?)
@@ -99,20 +100,31 @@ pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueS
                 .bind(&json_str)
                 .bind(&now)
                 .execute(pool)
-                .await
-                {
-                    log::error!("Failed to backup corrupted queue state: {}", backup_err);
-                }
+                .await;
 
-                // 破損した queue_state キーを削除（次回以降のフォールバックを防止）
-                if let Err(delete_err) =
-                    sqlx::query("DELETE FROM settings WHERE key = 'queue_state'")
-                        .execute(pool)
-                        .await
-                {
-                    log::error!("Failed to delete corrupted queue state: {}", delete_err);
-                } else {
-                    log::info!("Deleted corrupted queue_state key to prevent repeated fallback");
+                match backup_result {
+                    Ok(_) => {
+                        log::info!("Corrupted queue state backed up successfully");
+                        // バックアップ成功時のみ破損キーを削除
+                        if let Err(delete_err) =
+                            sqlx::query("DELETE FROM settings WHERE key = 'queue_state'")
+                                .execute(pool)
+                                .await
+                        {
+                            log::error!("Failed to delete corrupted queue state: {}", delete_err);
+                        } else {
+                            log::info!(
+                                "Deleted corrupted queue_state key to prevent repeated fallback"
+                            );
+                        }
+                    }
+                    Err(backup_err) => {
+                        // バックアップ失敗時は元キーを保持（データ損失防止）
+                        log::error!(
+                            "Failed to backup corrupted queue state, keeping original key: {}",
+                            backup_err
+                        );
+                    }
                 }
 
                 Ok(QueueState::default())

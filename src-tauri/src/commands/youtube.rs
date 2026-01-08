@@ -427,8 +427,9 @@ pub async fn load_polling_state(
                 );
 
                 // 破損データをバックアップキーに退避（復旧調査用）
+                // バックアップ成功時のみ元キーを削除（データ損失防止）
                 let now = chrono::Utc::now().to_rfc3339();
-                if let Err(backup_err) = sqlx::query(
+                let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
                     VALUES (?, ?, ?)
@@ -439,22 +440,34 @@ pub async fn load_polling_state(
                 .bind(&json_str)
                 .bind(&now)
                 .execute(pool)
-                .await
-                {
-                    log::error!("Failed to backup corrupted polling state: {}", backup_err);
-                }
+                .await;
 
-                // 破損した polling_state キーを削除（次回以降のフォールバックを防止）
-                if let Err(delete_err) =
-                    sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
-                        .execute(pool)
-                        .await
-                {
-                    log::error!("Failed to delete corrupted polling state: {}", delete_err);
-                } else {
-                    log::info!(
-                        "Deleted corrupted polling_state key to prevent repeated fallback"
-                    );
+                match backup_result {
+                    Ok(_) => {
+                        log::info!("Corrupted polling state backed up successfully");
+                        // バックアップ成功時のみ破損キーを削除
+                        if let Err(delete_err) =
+                            sqlx::query("DELETE FROM settings WHERE key = 'polling_state'")
+                                .execute(pool)
+                                .await
+                        {
+                            log::error!(
+                                "Failed to delete corrupted polling state: {}",
+                                delete_err
+                            );
+                        } else {
+                            log::info!(
+                                "Deleted corrupted polling_state key to prevent repeated fallback"
+                            );
+                        }
+                    }
+                    Err(backup_err) => {
+                        // バックアップ失敗時は元キーを保持（データ損失防止）
+                        log::error!(
+                            "Failed to backup corrupted polling state, keeping original key: {}",
+                            backup_err
+                        );
+                    }
                 }
 
                 Ok(None)
@@ -673,8 +686,9 @@ pub async fn load_wizard_settings(
                 );
 
                 // 破損データをバックアップキーに退避（復旧調査用）
+                // バックアップ成功時のみ元キーを削除（データ損失防止）
                 let now = chrono::Utc::now().to_rfc3339();
-                if let Err(backup_err) = sqlx::query(
+                let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
                     VALUES (?, ?, ?)
@@ -685,22 +699,34 @@ pub async fn load_wizard_settings(
                 .bind(&json_str)
                 .bind(&now)
                 .execute(pool)
-                .await
-                {
-                    log::error!("Failed to backup corrupted wizard settings: {}", backup_err);
-                }
+                .await;
 
-                // 破損した wizard_settings キーを削除（次回以降のフォールバックを防止）
-                if let Err(delete_err) =
-                    sqlx::query("DELETE FROM settings WHERE key = 'wizard_settings'")
-                        .execute(pool)
-                        .await
-                {
-                    log::error!("Failed to delete corrupted wizard settings: {}", delete_err);
-                } else {
-                    log::info!(
-                        "Deleted corrupted wizard_settings key to prevent repeated fallback"
-                    );
+                match backup_result {
+                    Ok(_) => {
+                        log::info!("Corrupted wizard settings backed up successfully");
+                        // バックアップ成功時のみ破損キーを削除
+                        if let Err(delete_err) =
+                            sqlx::query("DELETE FROM settings WHERE key = 'wizard_settings'")
+                                .execute(pool)
+                                .await
+                        {
+                            log::error!(
+                                "Failed to delete corrupted wizard settings: {}",
+                                delete_err
+                            );
+                        } else {
+                            log::info!(
+                                "Deleted corrupted wizard_settings key to prevent repeated fallback"
+                            );
+                        }
+                    }
+                    Err(backup_err) => {
+                        // バックアップ失敗時は元キーを保持（データ損失防止）
+                        log::error!(
+                            "Failed to backup corrupted wizard settings, keeping original key: {}",
+                            backup_err
+                        );
+                    }
                 }
 
                 Ok(None)

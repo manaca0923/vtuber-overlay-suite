@@ -197,6 +197,37 @@ let backup_key = format!("{}_backup_{}_{}", key, now, uuid::Uuid::new_v4());
 
 **判断**: 優先度低（同一秒内の複数破損は稀）。`docs/900_tasks.md`に後回しタスクとして記録。
 
+## バックアップ失敗時のデータ保護（PR#118修正）
+
+**問題**: バックアップが失敗しても元キーを削除していたため、復旧・調査に必要なデータが失われる可能性があった。
+
+**修正前**:
+```rust
+if let Err(backup_err) = backup_query.execute(pool).await {
+    log::error!("Failed to backup...");
+}
+// バックアップ成功/失敗に関わらず削除を実行
+delete_query.execute(pool).await;
+```
+
+**修正後**:
+```rust
+let backup_result = backup_query.execute(pool).await;
+match backup_result {
+    Ok(_) => {
+        log::info!("Backed up successfully");
+        // バックアップ成功時のみ削除
+        delete_query.execute(pool).await;
+    }
+    Err(backup_err) => {
+        // バックアップ失敗時は元キーを保持（データ損失防止）
+        log::error!("Failed to backup, keeping original key: {}", backup_err);
+    }
+}
+```
+
+**適用ファイル**: `queue.rs`, `overlay.rs`, `youtube.rs`（2関数）, `promo.rs`
+
 ## 関連
 
 - `issues/003_tauri-rust-patterns.md#8`: RwLockガードのawait境界

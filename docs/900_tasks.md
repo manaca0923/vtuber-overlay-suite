@@ -317,13 +317,52 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - `broadcast_settings_update`での手動マッピングを直接渡しに簡略化
   - `http.rs`の`*Api`型を削除し、共通型を使用
 
-- [ ] **他の設定取得関数へのJSON破損フォールバック適用** (PR#116レビューで提案)
+- [x] **他の設定取得関数へのJSON破損フォールバック適用** (PR#116レビューで提案, PR#118で実装)
   - 対象ファイル:
     - `src-tauri/src/commands/queue.rs` (`get_queue_state`)
-    - `src-tauri/src/commands/overlay.rs` (`get_overlay_settings`)
-    - `src-tauri/src/commands/youtube.rs` (`get_youtube_settings`, `get_settings`)
-  - 参考実装: `promo.rs`の`get_promo_state`（JSON破損時にバックアップ保存 + デフォルト値フォールバック）
-  - 優先度: 中（UIが復旧不能になるリスク回避）
+    - `src-tauri/src/commands/overlay.rs` (`load_overlay_settings`)
+    - `src-tauri/src/commands/youtube.rs` (`load_polling_state`, `load_wizard_settings`)
+  - 実装: `promo.rs`と同様のパターンでJSON破損時にバックアップ保存 + フォールバック
+
+- [ ] **Fire-and-forgetブロードキャストのレース条件対策** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/overlay.rs` (`broadcast_settings_update`)
+    - `src-tauri/src/commands/youtube.rs` (`broadcast_kpi_update`, `fetch_and_broadcast_viewer_count`, `fetch_viewer_count_innertube`)
+    - `src-tauri/src/commands/weather.rs` (`broadcast_weather_update`, `broadcast_weather`, `set_weather_city_and_broadcast`, `broadcast_weather_multi`)
+    - `src-tauri/src/weather/auto_updater.rs` (`fetch_and_broadcast_single`, `fetch_and_broadcast_multi`)
+  - 問題: `tokio::spawn`でブロードキャストをfire-and-forget化したため、`Ok(())`が返った時点で送信完了が保証されない
+  - 影響: UI操作直後の状態取得や連続操作でレース条件が発生する可能性
+  - 改善案:
+    - A) 即時反映が必要なコマンドは同期送信（await）、定期通知はfire-and-forget
+    - B) 戻り値でブロードキャスト未完了を示す（`BroadcastPending`等）
+  - 優先度: 低（単一ユーザー操作が前提、実用上は問題になりにくい）
+  - 参考: `issues/033_fire-and-forget-broadcast.md`
+
+- [ ] **tokio::spawnタスク増大の抑制** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/youtube.rs`
+    - `src-tauri/src/commands/weather.rs`
+    - `src-tauri/src/weather/auto_updater.rs`
+  - 問題: 連続呼び出し時に無制限に`tokio::spawn`が積み上がる設計
+  - 影響: スパム的な呼び出しや高頻度更新時にタスク数増大・遅延の可能性
+  - 改善案:
+    - A) 「前回送信中ならスキップ」する簡易ガード（AtomicBool）
+    - B) 送信キュー化（最新の1つだけ保持）
+  - 優先度: 低（現状でも動作に問題なし、高負荷時の最適化として）
+  - 参考: `issues/033_fire-and-forget-broadcast.md`
+
+- [ ] **バックアップキーのタイムスタンプ衝突回避** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/overlay.rs`
+    - `src-tauri/src/commands/queue.rs`
+    - `src-tauri/src/commands/youtube.rs`
+    - `src-tauri/src/commands/promo.rs`
+    - `src-tauri/src/commands/brand.rs`
+  - 問題: バックアップキーが秒精度の`to_rfc3339()`依存のため、同一秒内の複数破損でバックアップが上書きされる可能性
+  - 改善案:
+    - A) `to_rfc3339_opts(SecondsFormat::Nanos, true)` でナノ秒精度に変更
+    - B) タイムスタンプに加えて`Uuid::new_v4()`を付与
+  - 優先度: 低（同一秒内に複数の設定ファイルが破損する確率は極めて低い）
 
 - [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
   - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
@@ -343,11 +382,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 正当なパターン（モーダルリセット、データフェッチング）にはeslint-disableコメントで対応
   - ノウハウ: `issues/029_react-compiler-dependency-inference.md`
 
-- [ ] **eslint-disableコメントの配置スタイル統一** (PR#114レビューで提案)
-  - 対象ファイル: `App.tsx`, `VideoIdModal.tsx`, `WizardStep2.tsx`, `CommentControlPanel.tsx`
-  - 現状: 行末コメント（`// eslint-disable-line`）と次行コメント（`// eslint-disable-next-line`）が混在
-  - 改善案: どちらかに統一（推奨: 次行コメント）
-  - 優先度: 低（動作に問題なし、コードスタイルの一貫性のみ）
+- [x] **eslint-disableコメントの配置スタイル統一** (PR#114レビューで提案, PR#118で実装)
+  - 対象ファイル: `VideoIdModal.tsx`, `WizardStep2.tsx`
+  - 実装: 行末コメント（`// eslint-disable-line`）を次行コメント（`// eslint-disable-next-line`）に統一
 
 - [x] **ContinuationType へのDefaultトレイト実装** (PR#99レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/src/youtube/innertube/types.rs`
@@ -391,16 +428,14 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（単一ユーザー操作が前提、既存パターンと同様）
   - 備考: setlist等も同様のパターンを使用しており、全体的な改修が必要
 
-- [ ] **既存コードのRwLockガードawait境界問題の修正** (PR#115レビューで発見)
+- [x] **既存コードのRwLockガードawait境界問題の修正** (PR#115レビューで発見, PR#118で実装)
   - 対象ファイル:
-    - `src-tauri/src/commands/youtube.rs` (3箇所: L1286, L1350, L1413)
-    - `src-tauri/src/commands/weather.rs` (4箇所: L66, L116, L142, L257)
-    - `src-tauri/src/commands/overlay.rs` (1箇所: L209)
-    - `src-tauri/src/weather/auto_updater.rs` (2箇所: L140, L201)
-  - 問題: `server.read().await`でガードを取得後に`.broadcast(...).await`を呼んでいる
-  - 改善案: `Arc::clone` + `tokio::spawn`パターンで分離（queue.rsで実装済み）
+    - `src-tauri/src/commands/youtube.rs` (3関数: `broadcast_kpi_update`, `fetch_and_broadcast_viewer_count`, `fetch_viewer_count_innertube`)
+    - `src-tauri/src/commands/weather.rs` (4関数: `broadcast_weather_update`, `broadcast_weather`, `set_weather_city_and_broadcast`, `broadcast_weather_multi`)
+    - `src-tauri/src/commands/overlay.rs` (1関数: `broadcast_settings_update`)
+    - `src-tauri/src/weather/auto_updater.rs` (2関数: `fetch_and_broadcast_single`, `fetch_and_broadcast_multi`)
+  - 実装: `Arc::clone` + `tokio::spawn`パターンでFire-and-forget化
   - 参考: `issues/003_tauri-rust-patterns.md#8`
-  - 優先度: 中（デッドロックのリスクあり、ただし現状問題は発生していない）
 
 - [x] **CSSキャッシュバスターのバージョン管理** (PR#110レビューで提案, PR#111で実装)
   - 対象ファイル: `src-tauri/overlays/*.html`
@@ -571,6 +606,21 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（UX改善のみ）
 
 ### テスト（推奨）
+
+- [ ] **JSON破損フォールバックのユニットテスト追加** (PR#118レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/overlay.rs` (`load_overlay_settings`)
+    - `src-tauri/src/commands/queue.rs` (`get_queue_state`)
+    - `src-tauri/src/commands/youtube.rs` (`load_polling_state`, `load_wizard_settings`)
+  - テストケース:
+    - JSON破損時にバックアップキー（`{key}_backup_{timestamp}`）が作成されること
+    - 破損した元キーが削除されること
+    - 戻り値が`None`またはデフォルト値になること
+  - 優先度: 中（動作確認済みだが回帰テストとして重要）
+
+- [ ] **Fire-and-forgetブロードキャストの統合テスト追加** (PR#118レビューで提案)
+  - テスト内容: 疑似WebSocketサーバーでブロードキャストが実際に到達することを検証
+  - 優先度: 低（サーバーモック化が必要）
 
 - [ ] **Queue機能のユニットテスト追加** (PR#115レビューで提案)
   - 対象ファイル: `src-tauri/src/commands/queue.rs`

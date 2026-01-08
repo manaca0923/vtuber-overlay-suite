@@ -55,6 +55,7 @@
 | [019](019_innertube-polling-interval.md) | ポーリング間隔 |
 | [021](021_serde-field-naming.md) | serde命名規則 |
 | [028](028_pr109-log-level-trace.md) | 定期実行ログは`trace` |
+| [033](033_fire-and-forget-broadcast.md) | Fire-and-forgetブロードキャスト |
 
 </details>
 
@@ -157,5 +158,6 @@
 
 ## 更新履歴
 
+- 2026-01: issue 033 追加（Fire-and-forgetブロードキャスト）
 - 2025-01: issue 032 追加（debounce保存パターン）
 - 2024-12: 初版作成（issues 001-025）

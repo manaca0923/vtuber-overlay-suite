@@ -5,6 +5,7 @@
 // Open-Meteo APIを使用（APIキー不要）
 // =============================================================================
 
+use std::sync::Arc;
 use tauri::State;
 
 use crate::server::types::{
@@ -48,12 +49,17 @@ pub async fn fetch_weather(state: State<'_, AppState>) -> Result<WeatherData, St
 ///
 /// # Arguments
 /// * `force_refresh` - trueの場合、キャッシュを無視して最新データを取得してからブロードキャスト
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command(rename_all = "snake_case")]
 pub async fn broadcast_weather_update(
     state: State<'_, AppState>,
     force_refresh: Option<bool>,
 ) -> Result<(), String> {
-    let weather_data = if force_refresh.unwrap_or(false) {
+    let force = force_refresh.unwrap_or(false);
+    let weather_data = if force {
         // 強制リフレッシュ: キャッシュをクリアしてから取得
         state.weather.clear_cache().await;
         log::info!("Force refresh requested for weather broadcast");
@@ -63,17 +69,26 @@ pub async fn broadcast_weather_update(
         state.weather.get_weather().await.map_err(|e| e.to_string())?
     };
 
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(WsMessage::WeatherUpdate {
-            payload: WeatherUpdatePayload::from(&weather_data),
-        })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = WsMessage::WeatherUpdate {
+        payload: WeatherUpdatePayload::from(&weather_data),
+    };
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::info!("Weather update broadcasted (force_refresh: {})", force);
+    });
 
-    log::info!(
-        "Weather update broadcasted (force_refresh: {})",
-        force_refresh.unwrap_or(false)
-    );
     Ok(())
 }
 
@@ -109,24 +124,45 @@ pub async fn refresh_weather(state: State<'_, AppState>) -> Result<WeatherData, 
 /// 天気をオーバーレイに配信
 ///
 /// UIの「配信」ボタン用。現在の天気データ（キャッシュ優先）をWebSocketでブロードキャストする。
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command]
 pub async fn broadcast_weather(state: State<'_, AppState>) -> Result<(), String> {
     let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
+    let temp = weather_data.temp;
 
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(WsMessage::WeatherUpdate {
-            payload: WeatherUpdatePayload::from(&weather_data),
-        })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = WsMessage::WeatherUpdate {
+        payload: WeatherUpdatePayload::from(&weather_data),
+    };
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::info!("Weather broadcasted to overlay: {}°C", temp);
+    });
 
-    log::info!("Weather broadcasted to overlay: {}°C", weather_data.temp);
     Ok(())
 }
 
 /// 都市名設定 + 更新 + 配信（一括処理）
 ///
 /// 都市名変更時に使用。都市名を保存し、最新の天気を取得してオーバーレイにも配信する。
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command(rename_all = "snake_case")]
 pub async fn set_weather_city_and_broadcast(
     state: State<'_, AppState>,
@@ -138,22 +174,35 @@ pub async fn set_weather_city_and_broadcast(
     // 最新の天気を取得
     let weather_data = state.weather.get_weather().await.map_err(|e| e.to_string())?;
 
-    // WebSocketでブロードキャスト
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(WsMessage::WeatherUpdate {
-            payload: WeatherUpdatePayload::from(&weather_data),
-        })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = WsMessage::WeatherUpdate {
+        payload: WeatherUpdatePayload::from(&weather_data),
+    };
+    let city_for_log = city.clone();
+    let temp = weather_data.temp;
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::info!(
+            "Weather city set to '{}', fetched and broadcasted: {}°C",
+            city_for_log,
+            temp
+        );
+    });
 
     // タイマーリセット
     state.weather_updater.reset_timer();
 
-    log::info!(
-        "Weather city set to '{}', fetched and broadcasted: {}°C",
-        city,
-        weather_data.temp
-    );
     Ok(weather_data)
 }
 
@@ -237,6 +286,10 @@ pub async fn get_weather_multi(
 /// # Arguments
 /// * `cities` - 都市リスト [(id, name, displayName), ...]
 /// * `rotation_interval_sec` - ローテーション間隔（秒）
+///
+/// ## 設計ノート
+/// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
+/// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
 #[tauri::command(rename_all = "snake_case")]
 pub async fn broadcast_weather_multi(
     state: State<'_, AppState>,
@@ -253,21 +306,32 @@ pub async fn broadcast_weather_multi(
         return Err("すべての都市の天気取得に失敗しました".to_string());
     }
 
-    // WebSocketでブロードキャスト
-    let ws_state = state.server.read().await;
-    ws_state
-        .broadcast(WsMessage::WeatherMultiUpdate {
-            payload: WeatherMultiUpdatePayload {
-                cities: weather_data,
-                rotation_interval_sec,
-            },
-        })
-        .await;
+    // WebSocketでブロードキャスト（Fire-and-forget）
+    let server = Arc::clone(&state.server);
+    let message = WsMessage::WeatherMultiUpdate {
+        payload: WeatherMultiUpdatePayload {
+            cities: weather_data,
+            rotation_interval_sec,
+        },
+    };
+    tokio::spawn(async move {
+        let peers_arc = {
+            let ws_state = server.read().await;
+            ws_state.get_peers_arc()
+        };
+        let peers_guard = peers_arc.read().await;
+        let peers: Vec<_> = peers_guard
+            .iter()
+            .map(|(id, tx)| (*id, tx.clone()))
+            .collect();
+        drop(peers_guard);
+        crate::server::websocket::WebSocketState::send_to_peers(&peers, &message);
+        log::info!(
+            "Multi-city weather broadcasted (interval: {}s)",
+            rotation_interval_sec
+        );
+    });
 
-    log::info!(
-        "Multi-city weather broadcasted (interval: {}s)",
-        rotation_interval_sec
-    );
     Ok(())
 }
 

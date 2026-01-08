@@ -264,6 +264,31 @@ pub struct WidgetColorOverrides {
     pub announcement: Option<String>,
 }
 
+/// グローバルテーマ名
+/// TypeScript側 `ThemeName` と対応
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GlobalTheme {
+    White,
+    Purple,
+    Sakura,
+    Ocean,
+    Custom,
+}
+
+/// フォントプリセット
+/// TypeScript側 `FontPresetName` と対応
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FontPreset {
+    NotoSansJp,
+    #[serde(rename = "m-plus-1")]
+    MPlusOne,
+    YuGothic,
+    Meiryo,
+    System,
+}
+
 /// テーマ設定（カラー・フォント統合）
 /// - グローバルテーマ（white/purple/sakura/ocean/custom）
 /// - ウィジェット個別カラー
@@ -271,16 +296,16 @@ pub struct WidgetColorOverrides {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeSettings {
-    /// グローバルテーマ名 (white, purple, sakura, ocean, custom)
-    pub global_theme: String,
+    /// グローバルテーマ
+    pub global_theme: GlobalTheme,
     /// グローバルプライマリカラー (#RRGGBB)
     pub global_primary_color: String,
     /// カスタムカラー（最大3件）
     pub custom_colors: Vec<CustomColorEntry>,
     /// ウィジェット個別カラーオーバーライド
     pub widget_color_overrides: WidgetColorOverrides,
-    /// フォントプリセット (noto-sans-jp, m-plus-1, yu-gothic, meiryo, system)
-    pub font_preset: String,
+    /// フォントプリセット
+    pub font_preset: FontPreset,
     /// システムフォント選択時のフォントファミリー
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_font_family: Option<String>,

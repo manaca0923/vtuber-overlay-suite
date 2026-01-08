@@ -376,23 +376,26 @@ impl WeatherClient {
     }
 
     /// 複数都市の天気を一括取得
-    /// 各都市の天気を並列で取得し、結果をベクターで返す
+    ///
+    /// 各都市の天気を順次取得し、結果をベクターで返す。
+    ///
+    /// ## 設計ノート
+    /// - 順次処理でAPIレート制限に配慮（Open-Meteo APIは寛容）
+    /// - 都市数は最大20に制限されているため、処理時間は許容範囲内
+    /// - Rustのasyncライフタイム制約により、並列化は複雑になるため
+    ///   シンプルな順次処理を採用
     pub async fn get_weather_multi(
         &self,
         cities: &[(String, String)], // (id, name) のペア
     ) -> Vec<(String, String, Result<WeatherData, WeatherError>)> {
-        use futures::future::join_all;
+        let mut results = Vec::with_capacity(cities.len());
 
-        let futures = cities.iter().map(|(id, name)| {
-            let id = id.clone();
-            let name = name.clone();
-            async move {
-                let result = self.fetch_weather_for_city(&name).await;
-                (id, name, result)
-            }
-        });
+        for (id, name) in cities {
+            let result = self.fetch_weather_for_city(name).await;
+            results.push((id.clone(), name.clone(), result));
+        }
 
-        join_all(futures).await
+        results
     }
 }
 

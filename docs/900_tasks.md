@@ -351,24 +351,17 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 優先度: 低（現状でも動作に問題なし、高負荷時の最適化として）
   - 参考: `issues/033_fire-and-forget-broadcast.md`
 
-- [ ] **バックアップキーのタイムスタンプ衝突回避** (PR#118レビューで提案)
+- [x] **バックアップキーのタイムスタンプ衝突回避** (PR#118レビューで提案, PR#119で実装)
   - 対象ファイル:
     - `src-tauri/src/commands/overlay.rs`
     - `src-tauri/src/commands/queue.rs`
     - `src-tauri/src/commands/youtube.rs`
     - `src-tauri/src/commands/promo.rs`
     - `src-tauri/src/commands/brand.rs`
-  - 問題: バックアップキーが秒精度の`to_rfc3339()`依存のため、同一秒内の複数破損でバックアップが上書きされる可能性
-  - 改善案:
-    - A) `to_rfc3339_opts(SecondsFormat::Nanos, true)` でナノ秒精度に変更
-    - B) タイムスタンプに加えて`Uuid::new_v4()`を付与
-  - 優先度: 低（同一秒内に複数の設定ファイルが破損する確率は極めて低い）
+  - 実装: `to_rfc3339_opts(SecondsFormat::Nanos, true)`でナノ秒精度に変更
 
-- [ ] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案)
-  - 現在: `get_overlay_settings_api`で手動で各フィールドをパース（390-463行目付近）
-  - 改善案: `serde_json::from_str::<OverlaySettings>`で直接デシリアライズ
-  - 注意: DBスキーマとの整合性、マイグレーション対応を考慮
-  - 優先度: 低（現状でも動作に問題なし）
+- [x] **http.rs のJSONパース処理の簡略化** (PR#95レビューで提案, PR#119で実装)
+  - 実装: `From`トレイト実装による型変換でJSONパース処理を簡略化
 
 - [ ] **types.rs の分割検討** (PR#95レビューで提案)
   - 設定関連の型が増えてきているため、将来的にファイルが肥大化した際は分割を検討
@@ -401,18 +394,9 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: マクロやcfg-ifクレートで共通部分を抽出
   - 優先度: 低（Tauriマクロの制約により複雑）
 
-- [ ] **save_and_broadcast_*の保存成功・配信失敗時のエラーハンドリング** (PR#117レビューで提案)
-  - 対象ファイル:
-    - `src-tauri/src/commands/brand.rs` (`save_and_broadcast_brand`)
-    - `src-tauri/src/commands/queue.rs` (`save_and_broadcast_queue`)
-    - `src-tauri/src/commands/promo.rs` (`save_and_broadcast_promo`)
-  - 問題: 保存成功後にブロードキャスト失敗すると「保存は完了しているのにエラー返却」になる
-  - 影響: UI側では失敗扱いになり、不要な再保存やUXの混乱を誘発
-  - 改善案:
-    - A) 保存成功時は`Ok(Settings)`を返し、ブロードキャスト失敗は`log::warn!`で記録して`Ok`返却
-    - B) 戻り値に「保存成功・配信失敗」を判別できる構造体を返す
-    - C) フロント側で保存成功を判定し、配信失敗を別メッセージとして表示
-  - 優先度: 低（実際にブロードキャスト失敗するケースは稀、単一ユーザー環境が前提）
+- [x] **save_and_broadcast_*の保存成功・配信失敗時のエラーハンドリング** (PR#117レビューで提案, PR#119で実装)
+  - 対象ファイル: `src-tauri/src/commands/brand.rs`
+  - 実装: 保存成功時は`Ok(Settings)`を返し、ブロードキャスト失敗は`log::warn!`で記録して`Ok`返却
 
 - [ ] **設定操作のread-modify-write競合対策** (PR#115, PR#116レビューで提案)
   - 対象ファイル:
@@ -508,40 +492,30 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `docs/300_overlay-specs.md`
   - 確認結果: `preview:settings:update`メッセージ型は既にドキュメント化済み（lines 250-258）
 
-- [ ] **システムフォント取得のエラーハンドリング強化** (PR#106レビューで提案)
+- [x] **システムフォント取得のエラーハンドリング強化** (PR#106レビューで提案, PR#119で実装)
   - 対象ファイル: `src-tauri/src/commands/system.rs`
-  - 現在: フォント一覧が空の場合のハンドリングが不明確
-  - 改善案: 空リストを許容するか、エラーとして扱うかを明示
-  - 優先度: 低（空リストでも動作に問題なし）
+  - 実装: 空リスト時に警告ログを出力（フロント側でフォールバック対応）、取得後にフォント数をログ
 
-- [ ] **フォントプレビューの読み込み待機** (PR#106レビューで提案)
+- [x] **フォントプレビューの読み込み待機** (PR#106レビューで提案, PR#119で実装)
   - 対象ファイル: `src/components/settings/FontSelector.tsx`
-  - 現在: Google Fonts選択時、フォント読み込み中でもプレビューが表示される
-  - 改善案: `document.fonts.ready`で読み込み完了を待つ or ローディング表示
-  - 優先度: 低（UX改善のみ）
+  - 実装: `document.fonts.ready` APIでフォント読み込み完了を待機、ローディングオーバーレイ表示
 
-- [ ] **Rust側ThemeSettings型のenum化** (PR#106レビューで提案)
+- [x] **Rust側ThemeSettings型のenum化** (PR#106レビューで提案, PR#119で実装)
   - 対象ファイル: `src-tauri/src/server/types.rs`
-  - 現在: `global_theme`と`font_preset`がString型
-  - 改善案: enumを使用して型安全性を向上
-  - 優先度: 低（後方互換性を考慮すると現状維持でも問題なし）
+  - 実装: `GlobalTheme`と`FontPreset`enumを追加し、型安全性を向上
 
 - [x] **CSS変数のフォールバック値の統一** (PR#106レビューで提案, PR#113で確認)
   - 対象ファイル: `src-tauri/overlays/shared/design-tokens.css`, `src-tauri/overlays/styles/components.css`
   - 確認結果: `--primary-color: #ffffff`が`overlay-common.css`で一元定義済み
   - 各ウィジェットカラーは`var(--widget-*-color, var(--primary-color, #ffffff))`で一貫性あり
 
-- [ ] **キャッシュTTLと自動更新間隔の表示整理** (PR#107レビューで提案)
+- [x] **キャッシュTTLと自動更新間隔の表示整理** (PR#107レビューで提案, PR#119で実装)
   - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
-  - 現在: `cache_ttl_remaining`（APIキャッシュ残り時間）を表示しているが、自動更新間隔（15分）は`WeatherAutoUpdater`で管理されており別の値
-  - 対応案: 表示テキストにコメントを追加するか、UIで自動更新までの時間も表示する
-  - 優先度: 低（動作に問題なし、UX改善のみ）
+  - 実装: 表示テキストを「次回更新まで」から「キャッシュ残」に変更し、APIキャッシュであることを明示
 
-- [ ] **マルチシティ都市数の上限チェック** (PR#108レビューで提案)
+- [x] **マルチシティ都市数の上限チェック** (PR#108レビューで提案, PR#119で実装)
   - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
-  - 現状: カスタム都市追加で無制限に増える可能性
-  - 改善案: `MAX_CITIES = 20` 等の上限を設けてエラー表示
-  - 優先度: 低（実用上10-20都市で十分）
+  - 実装: `MAX_CITIES = 20`定数を追加し、上限到達時はUI無効化とエラー表示
 
 - [x] **ローテーション間隔の最小値検証** (PR#108レビューで提案, PR#112で実装)
   - 対象ファイル: `src-tauri/src/commands/weather.rs`
@@ -564,28 +538,21 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 対象ファイル: `src-tauri/overlays/components/weather-widget.js`
   - 実装: `DEFAULT_ROTATION_INTERVAL_MS`, `FADE_OUT_DURATION_MS`, `FADE_IN_DURATION_MS`等の定数を追加
 
-- [ ] **set_multi_city_config の非同期設計の改善** (PR#108レビューで提案)
+- [x] **set_multi_city_config の非同期設計の改善** (PR#108レビューで提案, PR#119で実装)
   - 対象ファイル: `src-tauri/src/weather/auto_updater.rs`
-  - 問題: 関数は同期的に戻るが、設定の更新は非同期で行われる
-  - 改善案A: 関数をasyncにしてawait
-  - 改善案B: ドキュメントに「設定は非同期で反映される」旨を記載
-  - 優先度: 中（競合状態の可能性があるが、実用上は問題なし）
+  - 実装: ドキュメントコメントに非同期設計の理由と動作を詳細記載
 
-- [ ] **マルチシティ並列取得のレート制限対応** (PR#108レビューで提案)
+- [x] **マルチシティ並列取得のレート制限対応** (PR#108レビューで提案, PR#119で実装)
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
-  - 問題: 10都市同時リクエストでAPI制限に引っかかる可能性
-  - 改善案: `futures::stream::buffer_unordered(3)` で同時3リクエストに制限
-  - 優先度: 低（Open-Meteo APIは寛容だが、将来的に都市数が増える場合に備えて）
+  - 実装: 順次処理に変更（Rustのasyncライフタイム制約によりシンプルな実装を採用）
 
 - [x] **CityTuple型エイリアスの追加** (PR#108レビューで提案, PR#112で実装)
   - 対象ファイル: `src/types/weather.ts`, `src/components/settings/WeatherSettingsPanel.tsx`
   - 実装: `CityTuple`型エイリアスを`weather.ts`に定義し、各所でインポートして使用
 
-- [ ] **マルチシティ部分的成功時のUI通知** (PR#108レビューで提案)
+- [x] **マルチシティ部分的成功時のUI通知** (PR#108レビューで提案, PR#119で実装)
   - 対象ファイル: `src/components/settings/WeatherSettingsPanel.tsx`
-  - 問題: 一部都市のみ取得成功した場合のフロントエンド通知がない
-  - 改善案: 「X/Y 都市の天気を取得しました」等の通知を表示
-  - 優先度: 低（ログには記録されているため運用上は問題なし）
+  - 実装: 「X/Y 都市の天気を取得しました」等の成功通知を表示
 
 - [x] **天気ウィジェットCSSトランジションの確認** (PR#108レビューで提案, PR#113で修正)
   - 対象ファイル: `src-tauri/overlays/styles/components.css`

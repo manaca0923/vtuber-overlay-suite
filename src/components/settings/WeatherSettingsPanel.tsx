@@ -7,6 +7,7 @@ import {
   setWeatherCityAndBroadcast,
   broadcastWeatherMulti,
   setMultiCityMode,
+  getWeatherMulti,
   type WeatherData,
   type CityTuple,
 } from '../../types/weather';
@@ -29,6 +30,9 @@ const WEATHER_POSITION_OPTIONS: { value: WeatherPosition; label: string }[] = [
   { value: 'right-top', label: '右上' },
   { value: 'right-bottom', label: '右下' },
 ];
+
+// 都市数の上限（パフォーマンスと実用性を考慮）
+const MAX_CITIES = 20;
 
 interface WeatherSettingsPanelProps {
   className?: string;
@@ -160,6 +164,12 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
   const handleAddCity = useCallback(() => {
     if (!newCityName.trim() || !newCityDisplayName.trim()) return;
 
+    // 都市数上限チェック
+    if (multiCitySettings.cities.length >= MAX_CITIES) {
+      setError(`都市数の上限（${MAX_CITIES}都市）に達しています`);
+      return;
+    }
+
     // より堅牢なID生成: タイムスタンプ + ランダム文字列
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     const newCity: CityEntry = {
@@ -232,10 +242,14 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     }
   }, []);
 
+  // 成功通知状態（部分的成功時に表示）
+  const [successInfo, setSuccessInfo] = useState<string | null>(null);
+
   // マルチシティ配信
   const handleBroadcastMulti = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSuccessInfo(null);
     try {
       const enabledCities = multiCitySettings.cities
         .filter((c) => c.enabled)
@@ -255,6 +269,20 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       // 自動更新にマルチシティモードを反映（15分ごとの更新で使用）
       await setMultiCityMode(true, cityTuples, multiCitySettings.rotationIntervalSec);
 
+      // まず天気データを取得して成功/失敗をカウント
+      const results = await getWeatherMulti(cityTuples);
+      const successCount = results.length;
+      const totalCount = enabledCities.length;
+
+      // 部分的成功時の通知
+      if (successCount < totalCount) {
+        const failedCount = totalCount - successCount;
+        console.warn(`Weather fetch partial success: ${successCount}/${totalCount} cities`);
+        setSuccessInfo(`${successCount}/${totalCount} 都市の天気を取得しました（${failedCount}都市が失敗）`);
+      } else if (successCount === totalCount) {
+        setSuccessInfo(`${successCount}都市の天気を取得しました`);
+      }
+
       // 今すぐ配信
       await broadcastWeatherMulti(cityTuples, multiCitySettings.rotationIntervalSec);
     } catch (err) {
@@ -265,11 +293,18 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     }
   }, [multiCitySettings]);
 
+  /**
+   * キャッシュTTL残り時間をフォーマット
+   *
+   * NOTE: これはAPIキャッシュの残り時間であり、自動更新間隔（15分）とは異なる。
+   * - APIキャッシュ: 10分間、同じ都市の天気データをキャッシュして再利用
+   * - 自動更新: 15分ごとにWeatherAutoUpdaterが最新の天気を取得・配信
+   */
   const formatTtl = (seconds: number) => {
-    if (seconds === 0) return '次回更新まで: --:--';
+    if (seconds === 0) return 'キャッシュなし';
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `次回更新まで: ${minutes}:${secs.toString().padStart(2, '0')}`;
+    return `キャッシュ残: ${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
   // 設定変更ハンドラ
@@ -293,6 +328,13 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
+        </div>
+      )}
+
+      {/* 成功通知（部分的成功含む） */}
+      {successInfo && !error && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+          {successInfo}
         </div>
       )}
 
@@ -469,7 +511,13 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
                 <button
                   type="button"
                   onClick={() => setShowAddCity(true)}
-                  className="text-xs text-blue-600 hover:text-blue-800"
+                  disabled={multiCitySettings.cities.length >= MAX_CITIES}
+                  className={`text-xs ${
+                    multiCitySettings.cities.length >= MAX_CITIES
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'text-blue-600 hover:text-blue-800'
+                  }`}
+                  title={multiCitySettings.cities.length >= MAX_CITIES ? `上限（${MAX_CITIES}都市）に達しています` : ''}
                 >
                   + 都市を追加
                 </button>

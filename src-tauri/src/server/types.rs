@@ -331,6 +331,10 @@ impl FontPreset {
     }
 }
 
+/// デフォルトのプライマリカラー
+/// ThemeSettings::default() と serde の両方で使用
+const DEFAULT_PRIMARY_COLOR: &str = "#6366f1";
+
 /// テーマ設定（カラー・フォント統合）
 /// - グローバルテーマ（white/purple/sakura/ocean/custom）
 /// - ウィジェット個別カラー
@@ -338,9 +342,9 @@ impl FontPreset {
 ///
 /// ## 後方互換性
 /// - 全フィールドに`#[serde(default)]`を付与し、部分欠損を許容
-/// - `Default`実装で安全なデフォルト値を提供
+/// - `Default`実装で安全なデフォルト値を提供（`global_primary_color`含む）
 /// - `normalize()`でUnknown値をデフォルト値に正規化
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ThemeSettings {
     /// グローバルテーマ
@@ -361,6 +365,24 @@ pub struct ThemeSettings {
     pub custom_font_family: Option<String>,
 }
 
+/// ThemeSettingsのDefaultトレイト実装
+///
+/// ## 注意
+/// `#[derive(Default)]`を使用すると`global_primary_color`が空文字になるため、
+/// 手動で実装して適切なデフォルト値を設定する
+impl Default for ThemeSettings {
+    fn default() -> Self {
+        Self {
+            global_theme: GlobalTheme::default(),
+            global_primary_color: DEFAULT_PRIMARY_COLOR.to_string(),
+            custom_colors: Vec::new(),
+            widget_color_overrides: WidgetColorOverrides::default(),
+            font_preset: FontPreset::default(),
+            custom_font_family: None,
+        }
+    }
+}
+
 impl ThemeSettings {
     /// Unknown値をデフォルト値に正規化
     /// API応答やWebSocket配信前に呼び出すことで、フロントエンドに未知値が渡るのを防ぐ
@@ -372,7 +394,7 @@ impl ThemeSettings {
 }
 
 fn default_primary_color() -> String {
-    "#6366f1".to_string()
+    DEFAULT_PRIMARY_COLOR.to_string()
 }
 
 /// 天気ウィジェットの表示位置

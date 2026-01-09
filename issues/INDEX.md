@@ -59,6 +59,7 @@
 | [034](034_api-fallback-patterns.md) | APIフォールバックパターン |
 | [035](035_avoid-duplicate-api-calls.md) | 二重API呼び出し回避 |
 | [036](036_enum-unknown-normalization.md) | enum未知値の正規化 |
+| [037](037_derive-default-serde-conflict.md) | derive(Default)とserdeの競合 |
 
 </details>
 
@@ -161,6 +162,7 @@
 
 ## 更新履歴
 
+- 2026-01: issue 037 追加（derive(Default)とserdeの競合）
 - 2026-01: issue 034-036 追加（APIフォールバック、二重API回避、enum正規化）
 - 2026-01: issue 033 追加（Fire-and-forgetブロードキャスト）
 - 2025-01: issue 032 追加（debounce保存パターン）

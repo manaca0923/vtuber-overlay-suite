@@ -127,31 +127,82 @@ pub struct SettingsUpdatePayload {
 }
 
 /// マルチシティ用都市エントリ
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CityEntry {
     /// ユニークID
+    #[serde(default)]
     pub id: String,
     /// API用都市名（英語）
+    #[serde(default)]
     pub name: String,
     /// 表示用都市名（日本語）
+    #[serde(default)]
     pub display_name: String,
     /// 有効/無効
+    #[serde(default = "CityEntry::default_enabled")]
     pub enabled: bool,
     /// 並び順
+    #[serde(default)]
     pub order: u32,
 }
 
+impl CityEntry {
+    fn default_enabled() -> bool {
+        true
+    }
+}
+
+impl Default for CityEntry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            display_name: String::new(),
+            enabled: true,
+            order: 0,
+        }
+    }
+}
+
+/// デフォルトのローテーション間隔（秒）
+const DEFAULT_ROTATION_INTERVAL_SEC: u32 = 10;
+
 /// マルチシティ設定
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct MultiCitySettings {
     /// マルチシティモード有効
+    #[serde(default)]
     pub enabled: bool,
     /// ローテーション間隔（秒）
+    #[serde(default = "MultiCitySettings::default_rotation_interval_sec")]
     pub rotation_interval_sec: u32,
     /// 都市リスト
+    #[serde(default)]
     pub cities: Vec<CityEntry>,
+}
+
+impl MultiCitySettings {
+    fn default_rotation_interval_sec() -> u32 {
+        DEFAULT_ROTATION_INTERVAL_SEC
+    }
+}
+
+impl Default for MultiCitySettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            rotation_interval_sec: DEFAULT_ROTATION_INTERVAL_SEC,
+            cities: Vec::new(),
+        }
+    }
 }
 
 /// 天気ウィジェット設定（共通型）

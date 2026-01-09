@@ -153,8 +153,13 @@ const DEFAULT_THEME: &str = "default";
 ///
 /// ## 部分的デシリアライズ
 /// - 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
-/// - `Default`実装で安全なデフォルト値を提供
+/// - `Default`実装で安全なデフォルト値を提供（新規作成時）
 /// - 旧スキーマからの移行時も破損せずにフォールバック
+///
+/// ## Option<T>フィールドの欠損時挙動
+/// - `weather`/`widget`/`theme_settings`: 欠損時は`None`を維持（旧データ互換性）
+/// - `Default::default()`で新規作成時は`Some(...)`を設定
+/// - これにより「未設定」と「明示的に無効」を区別可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct OverlaySettings {
@@ -168,32 +173,23 @@ pub struct OverlaySettings {
     pub comment: CommentSettings,
     #[serde(default)]
     pub setlist: SetlistSettings,
-    #[serde(default = "OverlaySettings::default_weather")]
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
+    #[serde(default)]
     pub weather: Option<WeatherSettings>,
-    #[serde(default = "OverlaySettings::default_widget")]
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
+    #[serde(default)]
     pub widget: Option<WidgetVisibilitySettings>,
     #[serde(default)]
     pub superchat: Option<SuperchatSettings>,
     /// テーマ設定（カラー・フォント統合）
-    #[serde(default = "OverlaySettings::default_theme_settings")]
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
+    #[serde(default)]
     pub theme_settings: Option<ThemeSettings>,
 }
 
 impl OverlaySettings {
     fn default_theme() -> String {
         DEFAULT_THEME.to_string()
-    }
-
-    fn default_weather() -> Option<WeatherSettings> {
-        Some(WeatherSettings::default())
-    }
-
-    fn default_widget() -> Option<WidgetVisibilitySettings> {
-        Some(WidgetVisibilitySettings::default())
-    }
-
-    fn default_theme_settings() -> Option<ThemeSettings> {
-        Some(ThemeSettings::default())
     }
 }
 

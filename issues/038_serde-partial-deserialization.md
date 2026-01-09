@@ -99,6 +99,50 @@ pub enum Position {
 }
 ```
 
+### Option<T>フィールドの欠損時挙動（重要）
+
+`Option<T>`フィールドの欠損時挙動には注意が必要：
+
+```rust
+// パターン1: 欠損時にNone（旧データ互換性を優先）
+#[serde(default)]  // Option::default() = None
+pub weather: Option<WeatherSettings>,
+
+// パターン2: 欠損時にSome(default)（新規作成時と同じ挙動）
+#[serde(default = "default_weather")]
+pub weather: Option<WeatherSettings>,
+
+fn default_weather() -> Option<WeatherSettings> {
+    Some(WeatherSettings::default())
+}
+```
+
+**推奨**: 旧データとの互換性を維持したい場合は`#[serde(default)]`を使い、
+新規作成時のみ`Some(...)`にしたい場合は`Default`トレイト実装で区別する：
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OverlaySettings {
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
+    #[serde(default)]  // 欠損時は None
+    pub weather: Option<WeatherSettings>,
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self {
+            weather: Some(WeatherSettings::default()),  // 新規作成時は Some(...)
+        }
+    }
+}
+```
+
+この設計により：
+- **旧JSON（フィールド欠損）**: `weather` は `None`（未設定扱い）
+- **新規作成（`Default::default()`）**: `weather` は `Some(default)`（有効化）
+- **「未設定」と「明示的に無効」を区別可能**
+
 ## 実装例
 
 ### OverlaySettings（PR#120対応）
@@ -113,28 +157,18 @@ pub struct OverlaySettings {
     pub layout: LayoutPreset,  // enumにDefaultあり
     #[serde(default)]
     pub comment: CommentSettings,  // structにDefaultあり
-    // Option<T>はserde(default)でNoneになる
-    #[serde(default = "OverlaySettings::default_weather")]
-    pub weather: Option<WeatherSettings>,  // Some(...)をデフォルトにしたい場合
-}
-
-impl OverlaySettings {
-    fn default_theme() -> String {
-        "default".to_string()
-    }
-
-    fn default_weather() -> Option<WeatherSettings> {
-        Some(WeatherSettings::default())
-    }
+    /// 欠損時はNone（旧データ互換性）
+    #[serde(default)]
+    pub weather: Option<WeatherSettings>,
 }
 
 impl Default for OverlaySettings {
     fn default() -> Self {
         Self {
-            theme: Self::default_theme(),
+            theme: "default".to_string(),
             layout: LayoutPreset::default(),
             comment: CommentSettings::default(),
-            weather: Self::default_weather(),
+            weather: Some(WeatherSettings::default()),  // 新規作成時はSome
         }
     }
 }

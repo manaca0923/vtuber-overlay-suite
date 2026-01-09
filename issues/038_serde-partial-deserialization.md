@@ -99,6 +99,34 @@ pub enum Position {
 }
 ```
 
+### boolフィールドの欠損時挙動（重要）
+
+`bool`型フィールドに`#[serde(default)]`を使うと、欠損時に`false`になる（`bool::default()` = `false`）。
+既存ユーザーの設定が意図せずオフになるリスクがある。
+
+**解決策**: `default_true`関数を用意して明示的にtrueをデフォルトにする：
+
+```rust
+/// bool型フィールドのデフォルト値（true）
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CommentSettings {
+    #[serde(default = "default_true")]  // 欠損時はtrue
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub show_avatar: bool,
+}
+```
+
+**適用対象**:
+- `enabled` フィールド（コメント、セットリスト、天気ウィジェット等）
+- `show_avatar`, `show_artist` 等の表示フラグ
+- `WidgetVisibilitySettings` の全boolフィールド
+
 ### Option<T>フィールドの欠損時挙動（重要）
 
 `Option<T>`フィールドの欠損時挙動には注意が必要：

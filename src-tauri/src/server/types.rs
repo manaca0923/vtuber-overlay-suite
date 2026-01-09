@@ -5,6 +5,13 @@ use tokio::sync::RwLock;
 use super::websocket::WebSocketState;
 use crate::weather::WeatherData;
 
+/// bool型フィールドのデフォルト値（true）
+/// 欠損時に既定で有効化されるべきフィールドに使用
+/// enabled, show_avatar, show_artist, 各widgetフラグ等
+fn default_true() -> bool {
+    true
+}
+
 /// サーバー共有状態
 pub type ServerState = Arc<RwLock<WebSocketState>>;
 
@@ -130,6 +137,7 @@ pub struct SettingsUpdatePayload {
 ///
 /// ## 部分的デシリアライズ
 /// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CityEntry {
@@ -143,17 +151,11 @@ pub struct CityEntry {
     #[serde(default)]
     pub display_name: String,
     /// 有効/無効
-    #[serde(default = "CityEntry::default_enabled")]
+    #[serde(default = "default_true")]
     pub enabled: bool,
     /// 並び順
     #[serde(default)]
     pub order: u32,
-}
-
-impl CityEntry {
-    fn default_enabled() -> bool {
-        true
-    }
 }
 
 impl Default for CityEntry {
@@ -212,9 +214,11 @@ impl Default for MultiCitySettings {
 ///
 /// ## 部分的デシリアライズ
 /// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct WeatherSettings {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     pub position: WeatherPosition,
     /// マルチシティモード設定（オプション）
@@ -239,17 +243,27 @@ impl Default for WeatherSettings {
 ///
 /// ## 部分的デシリアライズ
 /// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct WidgetVisibilitySettings {
+    #[serde(default = "default_true")]
     pub clock: bool,
+    #[serde(default = "default_true")]
     pub weather: bool,
+    #[serde(default = "default_true")]
     pub comment: bool,
+    #[serde(default = "default_true")]
     pub superchat: bool,
+    #[serde(default = "default_true")]
     pub logo: bool,
+    #[serde(default = "default_true")]
     pub setlist: bool,
+    #[serde(default = "default_true")]
     pub kpi: bool,
+    #[serde(default = "default_true")]
     pub tanzaku: bool,
+    #[serde(default = "default_true")]
     pub announcement: bool,
 }
 
@@ -538,11 +552,14 @@ const COMMENT_DEFAULT_FONT_SIZE: u32 = 16;
 ///
 /// ## 部分的デシリアライズ
 /// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CommentSettings {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     pub position: CommentPosition,
+    #[serde(default = "default_true")]
     pub show_avatar: bool,
     #[serde(default = "CommentSettings::default_font_size")]
     pub font_size: u32,
@@ -575,11 +592,14 @@ const SETLIST_DEFAULT_FONT_SIZE: u32 = 24;
 ///
 /// ## 部分的デシリアライズ
 /// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SetlistSettings {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     pub position: SetlistPosition,
+    #[serde(default = "default_true")]
     pub show_artist: bool,
     #[serde(default = "SetlistSettings::default_font_size")]
     pub font_size: u32,

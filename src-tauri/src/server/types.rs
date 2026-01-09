@@ -270,6 +270,7 @@ pub struct WidgetColorOverrides {
 /// ## 後方互換性
 /// - `#[serde(other)]` により未知の値は `Unknown` にフォールバック
 /// - `Default` は `White` を返す（最も汎用的なテーマ）
+/// - `normalize()` で `Unknown` を `White` に正規化（API応答前に呼び出す）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum GlobalTheme {
@@ -280,8 +281,20 @@ pub enum GlobalTheme {
     Ocean,
     Custom,
     /// 未知の値（旧バージョンとの互換性用）
+    /// API応答前に `normalize()` でデフォルト値に変換される
     #[serde(other)]
     Unknown,
+}
+
+impl GlobalTheme {
+    /// Unknown値をデフォルト値に正規化
+    /// API応答でフロントエンドに渡す前に呼び出す
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::Unknown => Self::default(),
+            other => other,
+        }
+    }
 }
 
 /// フォントプリセット
@@ -290,6 +303,7 @@ pub enum GlobalTheme {
 /// ## 後方互換性
 /// - `#[serde(other)]` により未知の値は `Unknown` にフォールバック
 /// - `Default` は `NotoSansJp` を返す（最も互換性の高いフォント）
+/// - `normalize()` で `Unknown` を `NotoSansJp` に正規化（API応答前に呼び出す）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum FontPreset {
@@ -301,8 +315,20 @@ pub enum FontPreset {
     Meiryo,
     System,
     /// 未知の値（旧バージョンとの互換性用）
+    /// API応答前に `normalize()` でデフォルト値に変換される
     #[serde(other)]
     Unknown,
+}
+
+impl FontPreset {
+    /// Unknown値をデフォルト値に正規化
+    /// API応答でフロントエンドに渡す前に呼び出す
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::Unknown => Self::default(),
+            other => other,
+        }
+    }
 }
 
 /// テーマ設定（カラー・フォント統合）
@@ -313,6 +339,7 @@ pub enum FontPreset {
 /// ## 後方互換性
 /// - 全フィールドに`#[serde(default)]`を付与し、部分欠損を許容
 /// - `Default`実装で安全なデフォルト値を提供
+/// - `normalize()`でUnknown値をデフォルト値に正規化
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ThemeSettings {
@@ -332,6 +359,16 @@ pub struct ThemeSettings {
     /// システムフォント選択時のフォントファミリー
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_font_family: Option<String>,
+}
+
+impl ThemeSettings {
+    /// Unknown値をデフォルト値に正規化
+    /// API応答やWebSocket配信前に呼び出すことで、フロントエンドに未知値が渡るのを防ぐ
+    pub fn normalize(mut self) -> Self {
+        self.global_theme = self.global_theme.normalize();
+        self.font_preset = self.font_preset.normalize();
+        self
+    }
 }
 
 fn default_primary_color() -> String {

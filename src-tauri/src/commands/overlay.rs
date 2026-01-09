@@ -263,6 +263,7 @@ pub async fn broadcast_settings_update(
     validate_overlay_settings(&settings)?;
 
     // 型が統一されたため、直接設定を渡せる
+    // theme_settingsはnormalize()でUnknown値をデフォルト値に正規化してからフロントへ渡す
     let payload = SettingsUpdatePayload {
         theme: settings.theme.clone(),
         layout: settings.layout,
@@ -274,7 +275,7 @@ pub async fn broadcast_settings_update(
         weather: settings.weather,
         widget: settings.widget,
         superchat: settings.superchat,
-        theme_settings: settings.theme_settings,
+        theme_settings: settings.theme_settings.map(|ts| ts.normalize()),
     };
 
     // WebSocketでブロードキャスト（Fire-and-forget）

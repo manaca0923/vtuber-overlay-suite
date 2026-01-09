@@ -14,7 +14,7 @@ use tower_http::services::ServeDir;
 
 use super::types::{
     CommentPosition, CommentSettings, LayoutPreset, SetlistPosition, SetlistSettings,
-    WeatherPosition, WeatherSettings, WidgetVisibilitySettings,
+    ThemeSettings, WeatherPosition, WeatherSettings, WidgetVisibilitySettings,
 };
 use crate::commands::overlay::OverlaySettings;
 
@@ -273,7 +273,7 @@ async fn get_setlist_api(
 }
 
 /// オーバーレイ設定API（オーバーレイ初期化用）
-/// NOTE: CommentSettings, SetlistSettings, WeatherSettings, WidgetVisibilitySettings は
+/// NOTE: CommentSettings, SetlistSettings, WeatherSettings, WidgetVisibilitySettings, ThemeSettings は
 ///       types.rs から共通型を使用
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -289,10 +289,15 @@ struct OverlaySettingsApiResponse {
     weather: Option<WeatherSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     widget: Option<WidgetVisibilitySettings>,
+    /// テーマ設定（カラー・フォント統合）
+    /// normalize()でUnknown値をデフォルト値に正規化済み
+    #[serde(skip_serializing_if = "Option::is_none")]
+    theme_settings: Option<ThemeSettings>,
 }
 
 /// OverlaySettings から OverlaySettingsApiResponse への変換
 /// DBに保存されている形式をAPI応答形式に変換
+/// theme_settingsはnormalize()でUnknown値をデフォルト値に正規化
 impl From<OverlaySettings> for OverlaySettingsApiResponse {
     fn from(settings: OverlaySettings) -> Self {
         Self {
@@ -305,6 +310,8 @@ impl From<OverlaySettings> for OverlaySettingsApiResponse {
             setlist: settings.setlist,
             weather: settings.weather,
             widget: settings.widget,
+            // Unknown値をデフォルト値に正規化してからフロントへ渡す
+            theme_settings: settings.theme_settings.map(|ts| ts.normalize()),
         }
     }
 }
@@ -347,6 +354,8 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
             tanzaku: true,
             announcement: true,
         }),
+        // デフォルト値を使用（ThemeSettings::default()はすでに正規化済みの値）
+        theme_settings: Some(ThemeSettings::default()),
     }
 }
 

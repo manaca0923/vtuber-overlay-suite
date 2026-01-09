@@ -9,7 +9,7 @@
 | カテゴリ | 参照ファイル | 要点 |
 |---------|-------------|------|
 | **Tauri invoke** | [007](007_tauri-invoke-snake-case.md) | パラメータ名は `snake_case` |
-| **serde** | [021](021_serde-field-naming.md) | `rename_all` の適用範囲、戻り値の型定義 |
+| **serde** | [021](021_serde-field-naming.md), [036](036_enum-unknown-normalization.md) | `rename_all` の適用範囲、未知enum値の正規化 |
 | **入力検証** | [013](013_pr68-accessibility-defensive-coding.md) | 型ガード、上下限チェック |
 | **セキュリティ** | [002](002_overlay-security.md) | URL検証、XSS、深層防御 |
 | **定数** | [020](020_magic-number-constants.md) | マジックナンバー禁止 |
@@ -56,6 +56,9 @@
 | [021](021_serde-field-naming.md) | serde命名規則 |
 | [028](028_pr109-log-level-trace.md) | 定期実行ログは`trace` |
 | [033](033_fire-and-forget-broadcast.md) | Fire-and-forgetブロードキャスト |
+| [034](034_api-fallback-patterns.md) | APIフォールバックパターン |
+| [035](035_avoid-duplicate-api-calls.md) | 二重API呼び出し回避 |
+| [036](036_enum-unknown-normalization.md) | enum未知値の正規化 |
 
 </details>
 
@@ -158,6 +161,7 @@
 
 ## 更新履歴
 
+- 2026-01: issue 034-036 追加（APIフォールバック、二重API回避、enum正規化）
 - 2026-01: issue 033 追加（Fire-and-forgetブロードキャスト）
 - 2025-01: issue 032 追加（debounce保存パターン）
 - 2024-12: 初版作成（issues 001-025）

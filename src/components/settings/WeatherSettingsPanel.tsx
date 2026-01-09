@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getWeatherCity,
   getWeatherCacheTtl,
@@ -241,8 +241,32 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     }
   }, []);
 
-  // 成功通知状態（部分的成功時に表示）
+  // 成功通知状態（部分的成功時に表示、5秒後に自動消去）
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
+  const successInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 成功通知を設定し、5秒後に自動消去
+  const showSuccessInfo = useCallback((message: string) => {
+    // 既存のタイマーをクリア
+    if (successInfoTimerRef.current) {
+      clearTimeout(successInfoTimerRef.current);
+    }
+    setSuccessInfo(message);
+    // 5秒後に自動消去
+    successInfoTimerRef.current = setTimeout(() => {
+      setSuccessInfo(null);
+      successInfoTimerRef.current = null;
+    }, 5000);
+  }, []);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      if (successInfoTimerRef.current) {
+        clearTimeout(successInfoTimerRef.current);
+      }
+    };
+  }, []);
 
   // マルチシティ配信
   const handleBroadcastMulti = useCallback(async () => {
@@ -272,13 +296,13 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       const result = await broadcastWeatherMulti(cityTuples, multiCitySettings.rotationIntervalSec);
       const { success_count: successCount, total_count: totalCount } = result;
 
-      // 結果の通知
+      // 結果の通知（5秒後に自動消去）
       if (successCount < totalCount) {
         const failedCount = totalCount - successCount;
         console.warn(`Weather fetch partial success: ${successCount}/${totalCount} cities`);
-        setSuccessInfo(`${successCount}/${totalCount} 都市の天気を取得しました（${failedCount}都市が失敗）`);
+        showSuccessInfo(`${successCount}/${totalCount} 都市の天気を取得しました（${failedCount}都市が失敗）`);
       } else if (successCount === totalCount) {
-        setSuccessInfo(`${successCount}都市の天気を取得しました`);
+        showSuccessInfo(`${successCount}都市の天気を取得しました`);
       }
     } catch (err) {
       setError('マルチシティ配信に失敗しました');
@@ -286,7 +310,7 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
     } finally {
       setLoading(false);
     }
-  }, [multiCitySettings]);
+  }, [multiCitySettings, showSuccessInfo]);
 
   /**
    * キャッシュTTL残り時間をフォーマット

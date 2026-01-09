@@ -266,49 +266,76 @@ pub struct WidgetColorOverrides {
 
 /// グローバルテーマ名
 /// TypeScript側 `ThemeName` と対応
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// ## 後方互換性
+/// - `#[serde(other)]` により未知の値は `Unknown` にフォールバック
+/// - `Default` は `White` を返す（最も汎用的なテーマ）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum GlobalTheme {
+    #[default]
     White,
     Purple,
     Sakura,
     Ocean,
     Custom,
+    /// 未知の値（旧バージョンとの互換性用）
+    #[serde(other)]
+    Unknown,
 }
 
 /// フォントプリセット
 /// TypeScript側 `FontPresetName` と対応
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// ## 後方互換性
+/// - `#[serde(other)]` により未知の値は `Unknown` にフォールバック
+/// - `Default` は `NotoSansJp` を返す（最も互換性の高いフォント）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum FontPreset {
+    #[default]
     NotoSansJp,
     #[serde(rename = "m-plus-1")]
     MPlusOne,
     YuGothic,
     Meiryo,
     System,
+    /// 未知の値（旧バージョンとの互換性用）
+    #[serde(other)]
+    Unknown,
 }
 
 /// テーマ設定（カラー・フォント統合）
 /// - グローバルテーマ（white/purple/sakura/ocean/custom）
 /// - ウィジェット個別カラー
 /// - フォントプリセット・システムフォント
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// ## 後方互換性
+/// - 全フィールドに`#[serde(default)]`を付与し、部分欠損を許容
+/// - `Default`実装で安全なデフォルト値を提供
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
 pub struct ThemeSettings {
     /// グローバルテーマ
     pub global_theme: GlobalTheme,
     /// グローバルプライマリカラー (#RRGGBB)
+    #[serde(default = "default_primary_color")]
     pub global_primary_color: String,
     /// カスタムカラー（最大3件）
+    #[serde(default)]
     pub custom_colors: Vec<CustomColorEntry>,
     /// ウィジェット個別カラーオーバーライド
+    #[serde(default)]
     pub widget_color_overrides: WidgetColorOverrides,
     /// フォントプリセット
     pub font_preset: FontPreset,
     /// システムフォント選択時のフォントファミリー
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_font_family: Option<String>,
+}
+
+fn default_primary_color() -> String {
+    "#6366f1".to_string()
 }
 
 /// 天気ウィジェットの表示位置

@@ -324,6 +324,33 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - `src-tauri/src/commands/youtube.rs` (`load_polling_state`, `load_wizard_settings`)
   - 実装: `promo.rs`と同様のパターンでJSON破損時にバックアップ保存 + フォールバック
 
+- [ ] **APIデシリアライズ失敗時のUI警告通知** (PR#119レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/server/http.rs` (`get_overlay_settings_api`)
+  - 問題: デシリアライズ失敗時にデフォルト値で200を返すため、UI側で異常を検知できない
+  - 影響: 破損/移行不備がユーザーに気づかれずデフォルトで再保存される可能性
+  - 改善案: `OverlaySettingsApiResponse`に`fallback_used: bool`を追加し、UIで警告表示
+  - 優先度: 低（現状でも動作に問題なし、UX改善として）
+
+- [ ] **マルチシティ取得の並列化復活** (PR#119レビューで提案)
+  - 対象ファイル: `src-tauri/src/weather/mod.rs`
+  - 問題: ライフタイム問題回避のため順次処理に変更したが、都市数に比例して待機が増える
+  - 影響: 20都市で最大40秒程度の待機が発生する可能性
+  - 改善案:
+    - A) `buffer_unordered(3)` + `tokio::time::timeout` で上限付き並列化
+    - B) `WeatherClient`を`Clone`可能にしてライフタイム問題を解決
+  - 優先度: 低（実用上は10都市程度で十分）
+
+- [ ] **save_and_broadcast_*の結果通知改善** (PR#119レビューで提案)
+  - 対象ファイル:
+    - `src-tauri/src/commands/brand.rs`
+    - `src-tauri/src/commands/queue.rs`
+    - `src-tauri/src/commands/promo.rs`
+  - 問題: ブロードキャスト失敗を成功扱いに変更したため、失敗がUIに伝わらない
+  - 影響: オーバーレイ未更新でもユーザーが成功と誤認する可能性
+  - 改善案: `Result<SaveAndBroadcastResult, String>`で保存成功・配信失敗を通知可能に
+  - 優先度: 低（単一ユーザー環境が前提、ブロードキャスト失敗は稀）
+
 - [ ] **Fire-and-forgetブロードキャストのレース条件対策** (PR#118レビューで提案)
   - 対象ファイル:
     - `src-tauri/src/commands/overlay.rs` (`broadcast_settings_update`)

@@ -332,7 +332,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案: `OverlaySettingsApiResponse`に`fallback_used: bool`を追加し、UIで警告表示
   - 優先度: 低（現状でも動作に問題なし、UX改善として）
 
-- [ ] **OverlaySettingsの部分的デシリアライズ対応** (PR#119レビューで提案)
+- [x] **OverlaySettingsの部分的デシリアライズ対応** (PR#119レビューで提案) ✅ PR#120
   - 対象ファイル:
     - `src-tauri/src/commands/overlay.rs` (`OverlaySettings`、`CommonSettings`)
     - `src-tauri/src/server/types.rs` (ネスト型全般)
@@ -341,7 +341,7 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
   - 改善案:
     - `OverlaySettings`および関連ネスト型に`#[serde(default)]`と`Default`を追加
     - 欠損フィールドでも部分的に復元可能にする
-  - 優先度: 中（既存データ移行時に影響あり）
+  - ノウハウ: [issues/038_serde-partial-deserialization.md](../issues/038_serde-partial-deserialization.md)
 
 - [ ] **マルチシティ取得の並列化復活** (PR#119レビューで提案)
   - 対象ファイル: `src-tauri/src/weather/mod.rs`

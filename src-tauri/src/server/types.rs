@@ -158,8 +158,11 @@ pub struct MultiCitySettings {
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct WeatherSettings {
     pub enabled: bool,
     pub position: WeatherPosition,
@@ -168,12 +171,25 @@ pub struct WeatherSettings {
     pub multi_city: Option<MultiCitySettings>,
 }
 
+impl Default for WeatherSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: WeatherPosition::default(),
+            multi_city: None,
+        }
+    }
+}
+
 /// ウィジェット表示設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct WidgetVisibilitySettings {
     pub clock: bool,
     pub weather: bool,
@@ -184,6 +200,22 @@ pub struct WidgetVisibilitySettings {
     pub kpi: bool,
     pub tanzaku: bool,
     pub announcement: bool,
+}
+
+impl Default for WidgetVisibilitySettings {
+    fn default() -> Self {
+        Self {
+            clock: true,
+            weather: true,
+            comment: true,
+            superchat: true,
+            logo: true,
+            setlist: true,
+            kpi: true,
+            tanzaku: true,
+            announcement: true,
+        }
+    }
 }
 
 /// スパチャウィジェット設定（共通型）
@@ -398,9 +430,10 @@ fn default_primary_color() -> String {
 }
 
 /// 天気ウィジェットの表示位置
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum WeatherPosition {
+    #[default]
     LeftTop,
     LeftBottom,
     RightTop,
@@ -408,27 +441,29 @@ pub enum WeatherPosition {
 }
 
 /// コメントオーバーレイの表示位置
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum CommentPosition {
     TopLeft,
     TopRight,
     BottomLeft,
+    #[default]
     BottomRight,
 }
 
 /// セットリストオーバーレイの表示位置
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SetlistPosition {
     Top,
+    #[default]
     Bottom,
     Left,
     Right,
 }
 
 /// レイアウトプリセット
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum LayoutPreset {
     Streaming,
@@ -436,35 +471,84 @@ pub enum LayoutPreset {
     Music,
     Gaming,
     Custom,
+    #[default]
     #[serde(rename = "three-column")]
     ThreeColumn,
 }
+
+/// コメントオーバーレイ設定のデフォルトフォントサイズ
+const COMMENT_DEFAULT_FONT_SIZE: u32 = 16;
 
 /// コメントオーバーレイ設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CommentSettings {
     pub enabled: bool,
     pub position: CommentPosition,
     pub show_avatar: bool,
+    #[serde(default = "CommentSettings::default_font_size")]
     pub font_size: u32,
 }
+
+impl CommentSettings {
+    fn default_font_size() -> u32 {
+        COMMENT_DEFAULT_FONT_SIZE
+    }
+}
+
+impl Default for CommentSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: CommentPosition::default(),
+            show_avatar: true,
+            font_size: COMMENT_DEFAULT_FONT_SIZE,
+        }
+    }
+}
+
+/// セットリストオーバーレイ設定のデフォルトフォントサイズ
+const SETLIST_DEFAULT_FONT_SIZE: u32 = 24;
 
 /// セットリストオーバーレイ設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct SetlistSettings {
     pub enabled: bool,
     pub position: SetlistPosition,
     pub show_artist: bool,
+    #[serde(default = "SetlistSettings::default_font_size")]
     pub font_size: u32,
+}
+
+impl SetlistSettings {
+    fn default_font_size() -> u32 {
+        SETLIST_DEFAULT_FONT_SIZE
+    }
+}
+
+impl Default for SetlistSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: SetlistPosition::default(),
+            show_artist: true,
+            font_size: SETLIST_DEFAULT_FONT_SIZE,
+        }
+    }
 }
 
 /// slot ID（3カラムレイアウト v2）

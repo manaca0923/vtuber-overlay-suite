@@ -33,6 +33,9 @@ const WEATHER_POSITION_OPTIONS: { value: WeatherPosition; label: string }[] = [
 // 都市数の上限（パフォーマンスと実用性を考慮）
 const MAX_CITIES = 20;
 
+/** 成功通知の表示時間（ミリ秒） */
+const SUCCESS_NOTIFICATION_DURATION_MS = 5000;
+
 interface WeatherSettingsPanelProps {
   className?: string;
   settings?: WeatherSettings;
@@ -252,11 +255,11 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       clearTimeout(successInfoTimerRef.current);
     }
     setSuccessInfo(message);
-    // 5秒後に自動消去
+    // 一定時間後に自動消去
     successInfoTimerRef.current = setTimeout(() => {
       setSuccessInfo(null);
       successInfoTimerRef.current = null;
-    }, 5000);
+    }, SUCCESS_NOTIFICATION_DURATION_MS);
   }, []);
 
   // クリーンアップ

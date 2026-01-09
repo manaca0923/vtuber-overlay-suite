@@ -10,6 +10,9 @@ interface FontSelectorProps {
 // Google Fontsの読み込み済みフラグ（重複読み込み防止）
 const loadedGoogleFonts = new Set<string>();
 
+/** フォント読み込みタイムアウト（ミリ秒） */
+const FONT_LOAD_TIMEOUT_MS = 3000;
+
 /**
  * フォントファミリー名をサニタイズ（XSS対策）
  * issues/002: オーバーレイセキュリティ対応
@@ -56,7 +59,7 @@ async function loadGoogleFont(fontSpec: string): Promise<void> {
   try {
     await Promise.race([
       document.fonts.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Font load timeout')), 3000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Font load timeout')), FONT_LOAD_TIMEOUT_MS)),
     ]);
     // 特定のフォントファミリーがロードされているか確認
     await document.fonts.load(`16px "${fontFamily}"`);

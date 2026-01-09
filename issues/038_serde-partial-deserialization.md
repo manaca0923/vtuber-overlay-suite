@@ -225,6 +225,27 @@ impl Default for CommentSettings {
 }
 ```
 
+## 設計上の注意点
+
+### default_trueの適用方針
+
+`default_true`を適用すると、旧設定に新しいフラグがない場合に自動で有効化される。
+これは意図的な設計で、以下の理由による：
+
+- **既存機能の維持**: `enabled`, `show_avatar`等は元々デフォルト有効の機能
+- **新規フラグ追加時**: 新しいウィジェット追加時も既存ユーザーに表示される（オプトアウト方式）
+
+**新規フラグをデフォルト無効にしたい場合**:
+- `#[serde(default)]`を使用（`bool::default()` = `false`）
+- または`default_false`関数を用意
+
+### Option<T>フィールドの下流での扱い
+
+`weather`/`widget`/`theme_settings`が`None`の場合：
+- API応答では`skip_serializing_if = "Option::is_none"`により省略
+- フロントエンドでデフォルト値を使用する設計
+- `unwrap`は使用せず、`None`を安全にハンドリング
+
 ## 関連Issue
 
 - `issues/037_derive-default-serde-conflict.md`: `#[derive(Default)]`と`#[serde(default)]`の競合

@@ -343,6 +343,15 @@ ApiModeに応じて公式API/InnerTube APIを切り替えて使用可能にす�
     - 欠損フィールドでも部分的に復元可能にする
   - ノウハウ: [issues/038_serde-partial-deserialization.md](../issues/038_serde-partial-deserialization.md)
 
+- [ ] **部分的デシリアライズの単体テスト追加** (PR#120レビューで提案)
+  - 対象ファイル: `src-tauri/src/server/types.rs` (テストモジュール追加)
+  - テスト項目:
+    - 欠損フィールドを含む旧JSONで`enabled`/`show_*`が`true`になること
+    - `WidgetVisibilitySettings`の一部フラグ欠損で欠損フラグが`true`になること
+    - `OverlaySettings`の`weather`/`widget`/`theme_settings`欠損時に`None`になること
+    - `OverlaySettings::default()`が期待値と一致すること（回帰テスト）
+  - 優先度: 低（動作は検証済み、テストカバレッジ向上として）
+
 - [ ] **マルチシティ取得の並列化復活** (PR#119レビューで提案)
   - 対象ファイル: `src-tauri/src/weather/mod.rs`
   - 問題: ライフタイム問題回避のため順次処理に変更したが、都市数に比例して待機が増える

@@ -10,6 +10,9 @@ interface FontSelectorProps {
 // Google Fontsの読み込み済みフラグ（重複読み込み防止）
 const loadedGoogleFonts = new Set<string>();
 
+/** フォント読み込みタイムアウト（ミリ秒） */
+const FONT_LOAD_TIMEOUT_MS = 3000;
+
 /**
  * フォントファミリー名をサニタイズ（XSS対策）
  * issues/002: オーバーレイセキュリティ対応
@@ -27,8 +30,9 @@ function sanitizeFontFamily(fontFamily: string | null | undefined): string | nul
 /**
  * Google Fontsを動的に読み込む
  * @param fontSpec フォント指定（例: 'Noto+Sans+JP:wght@400;500;700'）
+ * @returns 読み込み完了を通知するPromise
  */
-function loadGoogleFont(fontSpec: string): void {
+async function loadGoogleFont(fontSpec: string): Promise<void> {
   if (!fontSpec || loadedGoogleFonts.has(fontSpec)) return;
 
   // fontSpecは既にURLエンコード済みの形式（+はスペース、:と;はそのまま）
@@ -48,6 +52,21 @@ function loadGoogleFont(fontSpec: string): void {
   link.href = url;
   document.head.appendChild(link);
   loadedGoogleFonts.add(fontSpec);
+
+  // フォント読み込み完了を待機（document.fonts API）
+  // タイムアウト付きで最大3秒待機
+  const fontFamily = (fontSpec.split(':')[0] ?? fontSpec).replace(/\+/g, ' ');
+  try {
+    await Promise.race([
+      document.fonts.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Font load timeout')), FONT_LOAD_TIMEOUT_MS)),
+    ]);
+    // 特定のフォントファミリーがロードされているか確認
+    await document.fonts.load(`16px "${fontFamily}"`);
+  } catch (error) {
+    console.warn(`Font loading may not be complete: ${fontFamily}`, error);
+    // タイムアウトしても継続（表示はフォールバックで対応）
+  }
 }
 
 /**
@@ -61,6 +80,7 @@ function loadGoogleFont(fontSpec: string): void {
 export function FontSelector({ themeSettings, onChange }: FontSelectorProps) {
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [isLoadingFonts, setIsLoadingFonts] = useState(false);
+  const [isLoadingGoogleFont, setIsLoadingGoogleFont] = useState(false);
   const [fontError, setFontError] = useState<string | null>(null);
   const fontsLoadedRef = useRef(false);
 
@@ -94,7 +114,13 @@ export function FontSelector({ themeSettings, onChange }: FontSelectorProps) {
   useEffect(() => {
     const preset = FONT_PRESETS[themeSettings.fontPreset];
     if (preset?.googleFont) {
-      loadGoogleFont(preset.googleFont);
+      // 既に読み込み済みの場合はスキップ
+      if (loadedGoogleFonts.has(preset.googleFont)) return;
+
+      setIsLoadingGoogleFont(true);
+      loadGoogleFont(preset.googleFont).finally(() => {
+        setIsLoadingGoogleFont(false);
+      });
     }
   }, [themeSettings.fontPreset]);
 
@@ -199,9 +225,14 @@ export function FontSelector({ themeSettings, onChange }: FontSelectorProps) {
       <div className="space-y-2">
         <p className="text-sm font-medium text-gray-700">プレビュー</p>
         <div
-          className="p-4 border border-gray-200 rounded-lg bg-gray-900 text-white"
+          className="p-4 border border-gray-200 rounded-lg bg-gray-900 text-white relative"
           style={{ fontFamily: getCurrentFontFamily() }}
         >
+          {isLoadingGoogleFont && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 rounded-lg">
+              <span className="text-sm text-gray-400">フォント読み込み中...</span>
+            </div>
+          )}
           <p className="text-2xl mb-2">あいうえお ABC 12345</p>
           <p className="text-sm opacity-70">The quick brown fox jumps over the lazy dog.</p>
         </div>

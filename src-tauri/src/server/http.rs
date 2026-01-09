@@ -14,8 +14,9 @@ use tower_http::services::ServeDir;
 
 use super::types::{
     CommentPosition, CommentSettings, LayoutPreset, SetlistPosition, SetlistSettings,
-    WeatherPosition, WeatherSettings, WidgetVisibilitySettings,
+    ThemeSettings, WeatherPosition, WeatherSettings, WidgetVisibilitySettings,
 };
+use crate::commands::overlay::OverlaySettings;
 
 /// HTTPサーバー用の共有状態
 #[derive(Clone)]
@@ -272,7 +273,7 @@ async fn get_setlist_api(
 }
 
 /// オーバーレイ設定API（オーバーレイ初期化用）
-/// NOTE: CommentSettings, SetlistSettings, WeatherSettings, WidgetVisibilitySettings は
+/// NOTE: CommentSettings, SetlistSettings, WeatherSettings, WidgetVisibilitySettings, ThemeSettings は
 ///       types.rs から共通型を使用
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -288,15 +289,30 @@ struct OverlaySettingsApiResponse {
     weather: Option<WeatherSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     widget: Option<WidgetVisibilitySettings>,
+    /// テーマ設定（カラー・フォント統合）
+    /// normalize()でUnknown値をデフォルト値に正規化済み
+    #[serde(skip_serializing_if = "Option::is_none")]
+    theme_settings: Option<ThemeSettings>,
 }
 
-/// 文字列からWeatherPositionに変換
-fn parse_weather_position(s: &str) -> WeatherPosition {
-    match s {
-        "left-bottom" => WeatherPosition::LeftBottom,
-        "right-top" => WeatherPosition::RightTop,
-        "right-bottom" => WeatherPosition::RightBottom,
-        _ => WeatherPosition::LeftTop, // デフォルト
+/// OverlaySettings から OverlaySettingsApiResponse への変換
+/// DBに保存されている形式をAPI応答形式に変換
+/// theme_settingsはnormalize()でUnknown値をデフォルト値に正規化
+impl From<OverlaySettings> for OverlaySettingsApiResponse {
+    fn from(settings: OverlaySettings) -> Self {
+        Self {
+            theme: settings.theme,
+            layout: settings.layout,
+            primary_color: settings.common.primary_color,
+            font_family: settings.common.font_family,
+            border_radius: settings.common.border_radius,
+            comment: settings.comment,
+            setlist: settings.setlist,
+            weather: settings.weather,
+            widget: settings.widget,
+            // Unknown値をデフォルト値に正規化してからフロントへ渡す
+            theme_settings: settings.theme_settings.map(|ts| ts.normalize()),
+        }
     }
 }
 
@@ -338,43 +354,17 @@ fn default_overlay_settings() -> OverlaySettingsApiResponse {
             tanzaku: true,
             announcement: true,
         }),
-    }
-}
-
-/// 文字列からCommentPositionに変換
-fn parse_comment_position(s: &str) -> CommentPosition {
-    match s {
-        "top-left" => CommentPosition::TopLeft,
-        "top-right" => CommentPosition::TopRight,
-        "bottom-left" => CommentPosition::BottomLeft,
-        _ => CommentPosition::BottomRight, // デフォルト
-    }
-}
-
-/// 文字列からSetlistPositionに変換
-fn parse_setlist_position(s: &str) -> SetlistPosition {
-    match s {
-        "top" => SetlistPosition::Top,
-        "left" => SetlistPosition::Left,
-        "right" => SetlistPosition::Right,
-        _ => SetlistPosition::Bottom, // デフォルト
-    }
-}
-
-/// 文字列からLayoutPresetに変換
-fn parse_layout_preset(s: &str) -> LayoutPreset {
-    match s {
-        "streaming" => LayoutPreset::Streaming,
-        "talk" => LayoutPreset::Talk,
-        "music" => LayoutPreset::Music,
-        "gaming" => LayoutPreset::Gaming,
-        "custom" => LayoutPreset::Custom,
-        "three-column" => LayoutPreset::ThreeColumn,
-        _ => LayoutPreset::Streaming, // デフォルト
+        // デフォルト値を使用（ThemeSettings::default()はすでに正規化済みの値）
+        theme_settings: Some(ThemeSettings::default()),
     }
 }
 
 /// 保存されているオーバーレイ設定を取得
+///
+/// ## 実装ノート
+/// - DBに保存されている`OverlaySettings`を直接デシリアライズ
+/// - `From<OverlaySettings>`トレイトでAPI応答形式に変換
+/// - 手動パースを排除しシンプル化（PR#95レビュー対応）
 async fn get_overlay_settings_api(
     State(state): State<HttpState>,
 ) -> impl IntoResponse {
@@ -387,91 +377,22 @@ async fn get_overlay_settings_api(
 
     match result {
         Ok(Some((json_str,))) => {
-            // JSONをパースして返す
-            match serde_json::from_str::<serde_json::Value>(&json_str) {
+            // OverlaySettingsを直接デシリアライズ
+            match serde_json::from_str::<OverlaySettings>(&json_str) {
                 Ok(settings) => {
-                    // SettingsUpdatePayloadと同じ形式に変換
-                    // 天気設定をパース（存在する場合のみ）
-                    let weather = if settings["weather"].is_object() {
-                        Some(WeatherSettings {
-                            enabled: settings["weather"]["enabled"].as_bool().unwrap_or(true),
-                            position: parse_weather_position(
-                                settings["weather"]["position"].as_str().unwrap_or("left-top")
-                            ),
-                            multi_city: None, // マルチシティ設定は後で別途パース可能
-                        })
-                    } else {
-                        // デフォルト値
-                        Some(WeatherSettings {
-                            enabled: true,
-                            position: WeatherPosition::LeftTop,
-                            multi_city: None,
-                        })
-                    };
-
-                    // ウィジェット表示設定をパース（存在する場合のみ）
-                    let widget = if settings["widget"].is_object() {
-                        Some(WidgetVisibilitySettings {
-                            clock: settings["widget"]["clock"].as_bool().unwrap_or(true),
-                            weather: settings["widget"]["weather"].as_bool().unwrap_or(true),
-                            comment: settings["widget"]["comment"].as_bool().unwrap_or(true),
-                            superchat: settings["widget"]["superchat"].as_bool().unwrap_or(true),
-                            logo: settings["widget"]["logo"].as_bool().unwrap_or(true),
-                            setlist: settings["widget"]["setlist"].as_bool().unwrap_or(true),
-                            kpi: settings["widget"]["kpi"].as_bool().unwrap_or(true),
-                            tanzaku: settings["widget"]["tanzaku"].as_bool().unwrap_or(true),
-                            announcement: settings["widget"]["announcement"].as_bool().unwrap_or(true),
-                        })
-                    } else {
-                        // デフォルト値（全て有効）
-                        Some(WidgetVisibilitySettings {
-                            clock: true,
-                            weather: true,
-                            comment: true,
-                            superchat: true,
-                            logo: true,
-                            setlist: true,
-                            kpi: true,
-                            tanzaku: true,
-                            announcement: true,
-                        })
-                    };
-
-                    let response = OverlaySettingsApiResponse {
-                        theme: settings["theme"].as_str().unwrap_or("default").to_string(),
-                        layout: parse_layout_preset(
-                            settings["layout"].as_str().unwrap_or("streaming")
-                        ),
-                        primary_color: settings["common"]["primaryColor"].as_str().unwrap_or("#6366f1").to_string(),
-                        font_family: settings["common"]["fontFamily"].as_str().unwrap_or("'Yu Gothic', 'Meiryo', sans-serif").to_string(),
-                        border_radius: settings["common"]["borderRadius"].as_u64().unwrap_or(8) as u32,
-                        comment: CommentSettings {
-                            enabled: settings["comment"]["enabled"].as_bool().unwrap_or(true),
-                            position: parse_comment_position(
-                                settings["comment"]["position"].as_str().unwrap_or("bottom-right")
-                            ),
-                            show_avatar: settings["comment"]["showAvatar"].as_bool().unwrap_or(true),
-                            font_size: settings["comment"]["fontSize"].as_u64().unwrap_or(16) as u32,
-                        },
-                        setlist: SetlistSettings {
-                            enabled: settings["setlist"]["enabled"].as_bool().unwrap_or(true),
-                            position: parse_setlist_position(
-                                settings["setlist"]["position"].as_str().unwrap_or("bottom")
-                            ),
-                            show_artist: settings["setlist"]["showArtist"].as_bool().unwrap_or(true),
-                            font_size: settings["setlist"]["fontSize"].as_u64().unwrap_or(24) as u32,
-                        },
-                        weather,
-                        widget,
-                    };
+                    // From トレイトでAPI応答形式に変換
+                    let response: OverlaySettingsApiResponse = settings.into();
                     Json(response).into_response()
                 }
                 Err(e) => {
-                    log::error!("Failed to parse overlay settings: {}", e);
-                    (
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "error": "Failed to parse settings" })),
-                    ).into_response()
+                    // デシリアライズ失敗時はデフォルト値でフォールバック
+                    // 旧スキーマ、欠損フィールド、enum不一致等でも継続動作を保証
+                    log::warn!(
+                        "Failed to parse overlay settings, using defaults: {}",
+                        e
+                    );
+                    let response = default_overlay_settings();
+                    Json(response).into_response()
                 }
             }
         }

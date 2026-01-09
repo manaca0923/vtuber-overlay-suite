@@ -124,13 +124,23 @@ pub async fn broadcast_brand_update(
 }
 
 /// ブランド設定を保存してブロードキャスト
+///
+/// ## エラーハンドリング
+/// - 保存成功後のブロードキャスト失敗は警告ログのみ、Okを返す
+/// - 保存失敗時はエラーを返す
+/// - これにより「保存完了しているのにエラー」という混乱を回避
 #[tauri::command]
 pub async fn save_and_broadcast_brand(
     brand_settings: BrandSettings,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // 保存（失敗時はエラーを返す）
     let validated = save_brand_settings(brand_settings, state.clone()).await?;
-    broadcast_brand_update(validated, state).await?;
+
+    // ブロードキャスト（失敗しても保存は完了しているのでOkを返す）
+    if let Err(e) = broadcast_brand_update(validated, state).await {
+        log::warn!("Broadcast failed after save succeeded: {}", e);
+    }
     Ok(())
 }
 

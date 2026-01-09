@@ -8,11 +8,22 @@
 use std::sync::Arc;
 use tauri::State;
 
+use serde::Serialize;
+
 use crate::server::types::{
     CityWeatherData, WeatherMultiUpdatePayload, WeatherUpdatePayload, WsMessage,
 };
 use crate::weather::WeatherData;
 use crate::AppState;
+
+/// マルチシティ配信結果
+#[derive(Debug, Clone, Serialize)]
+pub struct BroadcastMultiResult {
+    /// 成功した都市数
+    pub success_count: usize,
+    /// 総都市数
+    pub total_count: usize,
+}
 
 /// ローテーション間隔の最小値（秒）
 /// UIで最小3秒を設定しているが、0が渡された場合の防御的ガード
@@ -287,20 +298,28 @@ pub async fn get_weather_multi(
 /// * `cities` - 都市リスト [(id, name, displayName), ...]
 /// * `rotation_interval_sec` - ローテーション間隔（秒）
 ///
+/// # Returns
+/// 成功した都市数と総都市数を含む`BroadcastMultiResult`
+///
 /// ## 設計ノート
 /// - Fire-and-forgetパターン: ブロードキャストは`tokio::spawn`でバックグラウンド実行
 /// - RwLockガードをawait境界をまたいで保持しないようにtokio::spawnで分離
+/// - 成功/失敗カウントを返すことで、呼び出し元での二重取得を回避（PR#119）
 #[tauri::command(rename_all = "snake_case")]
 pub async fn broadcast_weather_multi(
     state: State<'_, AppState>,
     cities: Vec<(String, String, String)>, // (id, name, displayName)
     rotation_interval_sec: u32,
-) -> Result<(), String> {
+) -> Result<BroadcastMultiResult, String> {
     // 最小値ガード: 0が渡された場合は1秒に
     let rotation_interval_sec = rotation_interval_sec.max(MIN_ROTATION_INTERVAL_SEC);
 
+    // 総都市数を記録
+    let total_count = cities.len();
+
     // 天気データを取得
     let weather_data = get_weather_multi(state.clone(), cities).await?;
+    let success_count = weather_data.len();
 
     if weather_data.is_empty() {
         return Err("すべての都市の天気取得に失敗しました".to_string());
@@ -332,7 +351,10 @@ pub async fn broadcast_weather_multi(
         );
     });
 
-    Ok(())
+    Ok(BroadcastMultiResult {
+        success_count,
+        total_count,
+    })
 }
 
 /// マルチシティ設定を自動更新に反映する

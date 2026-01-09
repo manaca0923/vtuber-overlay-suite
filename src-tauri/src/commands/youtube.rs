@@ -428,7 +428,9 @@ pub async fn load_polling_state(
 
                 // 破損データをバックアップキーに退避（復旧調査用）
                 // バックアップ成功時のみ元キーを削除（データ損失防止）
-                let now = chrono::Utc::now().to_rfc3339();
+                // ナノ秒精度で衝突を回避
+                let now = chrono::Utc::now()
+                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
                 let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
@@ -687,7 +689,9 @@ pub async fn load_wizard_settings(
 
                 // 破損データをバックアップキーに退避（復旧調査用）
                 // バックアップ成功時のみ元キーを削除（データ損失防止）
-                let now = chrono::Utc::now().to_rfc3339();
+                // ナノ秒精度で衝突を回避
+                let now = chrono::Utc::now()
+                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
                 let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)

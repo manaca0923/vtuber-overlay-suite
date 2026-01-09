@@ -195,7 +195,9 @@ pub async fn load_overlay_settings(
 
                 // 破損データをバックアップキーに退避（復旧調査用）
                 // バックアップ成功時のみ元キーを削除（データ損失防止）
-                let now = chrono::Utc::now().to_rfc3339();
+                // ナノ秒精度で衝突を回避
+                let now = chrono::Utc::now()
+                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
                 let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
@@ -261,6 +263,7 @@ pub async fn broadcast_settings_update(
     validate_overlay_settings(&settings)?;
 
     // 型が統一されたため、直接設定を渡せる
+    // theme_settingsはnormalize()でUnknown値をデフォルト値に正規化してからフロントへ渡す
     let payload = SettingsUpdatePayload {
         theme: settings.theme.clone(),
         layout: settings.layout,
@@ -272,7 +275,7 @@ pub async fn broadcast_settings_update(
         weather: settings.weather,
         widget: settings.widget,
         superchat: settings.superchat,
-        theme_settings: settings.theme_settings,
+        theme_settings: settings.theme_settings.map(|ts| ts.normalize()),
     };
 
     // WebSocketでブロードキャスト（Fire-and-forget）

@@ -267,20 +267,31 @@ impl WeatherAutoUpdater {
     /// マルチシティ設定を更新する
     ///
     /// 設定保存時や手動配信時に呼び出し、次回の自動更新からこの設定が使用される。
+    ///
+    /// ## 非同期設計について
+    /// この関数は同期的に戻りますが、設定の反映は非同期で行われます。
+    /// - 呼び出し元は即座に制御を戻され、待機なしで次の処理に進める
+    /// - 設定は `tauri::async_runtime::spawn` でバックグラウンド更新される
+    /// - 更新完了前に次の自動更新が発生した場合、古い設定が使用される可能性がある
+    ///   （実用上は15分間隔なので問題にならない）
+    ///
+    /// ## 代替設計案（未採用）
+    /// - `async fn` にしてawaitで待機: 呼び出し元がasyncコンテキストを要求する
+    /// - 現在の設計は同期/非同期どちらからも呼び出せる柔軟性を優先
     pub fn set_multi_city_config(
         &self,
         enabled: bool,
         cities: Vec<(String, String, String)>,
         rotation_interval_sec: u32,
     ) {
-        // blockingでロックを取得（非async関数から呼び出せるように）
+        // Fire-and-forget: 非asyncコンテキストから呼び出し可能にするため
         let config = MultiCityConfig {
             enabled,
             cities,
             rotation_interval_sec,
         };
 
-        // tokio runtime内で実行
+        // tokio runtime内で実行（設定は非同期で反映される）
         let multi_city_config = Arc::clone(&self.multi_city_config);
         tauri::async_runtime::spawn(async move {
             let mut guard = multi_city_config.write().await;

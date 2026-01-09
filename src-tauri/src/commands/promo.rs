@@ -62,7 +62,9 @@ pub async fn get_promo_state(state: tauri::State<'_, AppState>) -> Result<PromoS
 
                 // 破損データをバックアップキーに退避（復旧調査用）
                 // バックアップ成功時のみ元キーを削除（データ損失防止）
-                let now = chrono::Utc::now().to_rfc3339();
+                // ナノ秒精度で衝突を回避
+                let now = chrono::Utc::now()
+                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
                 let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
@@ -325,13 +327,23 @@ pub async fn broadcast_promo_update(
 ///
 /// `save_promo_state`の戻り値（クランプ適用後）でブロードキャストすることで、
 /// 保存値と配信値の一致を保証します。
+///
+/// ## エラーハンドリング
+/// - 保存成功後のブロードキャスト失敗は警告ログのみ、Okを返す
+/// - 保存失敗時はエラーを返す
+/// - これにより「保存完了しているのにエラー」という混乱を回避
 #[tauri::command]
 pub async fn save_and_broadcast_promo(
     promo_state: PromoState,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // 保存（失敗時はエラーを返す）
     // save_promo_stateはクランプ適用後の値を返すため、その値でブロードキャスト
     let validated_state = save_promo_state(promo_state, state.clone()).await?;
-    broadcast_promo_update(validated_state, state).await?;
+
+    // ブロードキャスト（失敗しても保存は完了しているのでOkを返す）
+    if let Err(e) = broadcast_promo_update(validated_state, state).await {
+        log::warn!("Broadcast failed after save succeeded: {}", e);
+    }
     Ok(())
 }

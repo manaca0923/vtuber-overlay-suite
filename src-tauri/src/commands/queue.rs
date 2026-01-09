@@ -88,7 +88,9 @@ pub async fn get_queue_state(state: tauri::State<'_, AppState>) -> Result<QueueS
 
                 // 破損データをバックアップキーに退避（復旧調査用）
                 // バックアップ成功時のみ元キーを削除（データ損失防止）
-                let now = chrono::Utc::now().to_rfc3339();
+                // ナノ秒精度で衝突を回避
+                let now = chrono::Utc::now()
+                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
                 let backup_result = sqlx::query(
                     r#"
                     INSERT INTO settings (key, value, updated_at)
@@ -274,12 +276,22 @@ pub async fn broadcast_queue_update(
 }
 
 /// キュー状態を保存してブロードキャスト
+///
+/// ## エラーハンドリング
+/// - 保存成功後のブロードキャスト失敗は警告ログのみ、Okを返す
+/// - 保存失敗時はエラーを返す
+/// - これにより「保存完了しているのにエラー」という混乱を回避
 #[tauri::command]
 pub async fn save_and_broadcast_queue(
     queue_state: QueueState,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // 保存（失敗時はエラーを返す）
     save_queue_state(queue_state.clone(), state.clone()).await?;
-    broadcast_queue_update(queue_state, state).await?;
+
+    // ブロードキャスト（失敗しても保存は完了しているのでOkを返す）
+    if let Err(e) = broadcast_queue_update(queue_state, state).await {
+        log::warn!("Broadcast failed after save succeeded: {}", e);
+    }
     Ok(())
 }

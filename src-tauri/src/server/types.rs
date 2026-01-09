@@ -264,26 +264,137 @@ pub struct WidgetColorOverrides {
     pub announcement: Option<String>,
 }
 
+/// グローバルテーマ名
+/// TypeScript側 `ThemeName` と対応
+///
+/// ## 後方互換性
+/// - `#[serde(other)]` により未知の値は `Unknown` にフォールバック
+/// - `Default` は `White` を返す（最も汎用的なテーマ）
+/// - `normalize()` で `Unknown` を `White` に正規化（API応答前に呼び出す）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum GlobalTheme {
+    #[default]
+    White,
+    Purple,
+    Sakura,
+    Ocean,
+    Custom,
+    /// 未知の値（旧バージョンとの互換性用）
+    /// API応答前に `normalize()` でデフォルト値に変換される
+    #[serde(other)]
+    Unknown,
+}
+
+impl GlobalTheme {
+    /// Unknown値をデフォルト値に正規化
+    /// API応答でフロントエンドに渡す前に呼び出す
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::Unknown => Self::default(),
+            other => other,
+        }
+    }
+}
+
+/// フォントプリセット
+/// TypeScript側 `FontPresetName` と対応
+///
+/// ## 後方互換性
+/// - `#[serde(other)]` により未知の値は `Unknown` にフォールバック
+/// - `Default` は `NotoSansJp` を返す（最も互換性の高いフォント）
+/// - `normalize()` で `Unknown` を `NotoSansJp` に正規化（API応答前に呼び出す）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum FontPreset {
+    #[default]
+    NotoSansJp,
+    #[serde(rename = "m-plus-1")]
+    MPlusOne,
+    YuGothic,
+    Meiryo,
+    System,
+    /// 未知の値（旧バージョンとの互換性用）
+    /// API応答前に `normalize()` でデフォルト値に変換される
+    #[serde(other)]
+    Unknown,
+}
+
+impl FontPreset {
+    /// Unknown値をデフォルト値に正規化
+    /// API応答でフロントエンドに渡す前に呼び出す
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::Unknown => Self::default(),
+            other => other,
+        }
+    }
+}
+
+/// デフォルトのプライマリカラー
+/// ThemeSettings::default() と serde の両方で使用
+const DEFAULT_PRIMARY_COLOR: &str = "#6366f1";
+
 /// テーマ設定（カラー・フォント統合）
 /// - グローバルテーマ（white/purple/sakura/ocean/custom）
 /// - ウィジェット個別カラー
 /// - フォントプリセット・システムフォント
+///
+/// ## 後方互換性
+/// - 全フィールドに`#[serde(default)]`を付与し、部分欠損を許容
+/// - `Default`実装で安全なデフォルト値を提供（`global_primary_color`含む）
+/// - `normalize()`でUnknown値をデフォルト値に正規化
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct ThemeSettings {
-    /// グローバルテーマ名 (white, purple, sakura, ocean, custom)
-    pub global_theme: String,
+    /// グローバルテーマ
+    pub global_theme: GlobalTheme,
     /// グローバルプライマリカラー (#RRGGBB)
+    #[serde(default = "default_primary_color")]
     pub global_primary_color: String,
     /// カスタムカラー（最大3件）
+    #[serde(default)]
     pub custom_colors: Vec<CustomColorEntry>,
     /// ウィジェット個別カラーオーバーライド
+    #[serde(default)]
     pub widget_color_overrides: WidgetColorOverrides,
-    /// フォントプリセット (noto-sans-jp, m-plus-1, yu-gothic, meiryo, system)
-    pub font_preset: String,
+    /// フォントプリセット
+    pub font_preset: FontPreset,
     /// システムフォント選択時のフォントファミリー
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_font_family: Option<String>,
+}
+
+/// ThemeSettingsのDefaultトレイト実装
+///
+/// ## 注意
+/// `#[derive(Default)]`を使用すると`global_primary_color`が空文字になるため、
+/// 手動で実装して適切なデフォルト値を設定する
+impl Default for ThemeSettings {
+    fn default() -> Self {
+        Self {
+            global_theme: GlobalTheme::default(),
+            global_primary_color: DEFAULT_PRIMARY_COLOR.to_string(),
+            custom_colors: Vec::new(),
+            widget_color_overrides: WidgetColorOverrides::default(),
+            font_preset: FontPreset::default(),
+            custom_font_family: None,
+        }
+    }
+}
+
+impl ThemeSettings {
+    /// Unknown値をデフォルト値に正規化
+    /// API応答やWebSocket配信前に呼び出すことで、フロントエンドに未知値が渡るのを防ぐ
+    pub fn normalize(mut self) -> Self {
+        self.global_theme = self.global_theme.normalize();
+        self.font_preset = self.font_preset.normalize();
+        self
+    }
+}
+
+fn default_primary_color() -> String {
+    DEFAULT_PRIMARY_COLOR.to_string()
 }
 
 /// 天気ウィジェットの表示位置

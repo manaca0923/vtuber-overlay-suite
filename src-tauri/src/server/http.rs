@@ -376,11 +376,14 @@ async fn get_overlay_settings_api(
                     Json(response).into_response()
                 }
                 Err(e) => {
-                    log::error!("Failed to parse overlay settings: {}", e);
-                    (
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({ "error": "Failed to parse settings" })),
-                    ).into_response()
+                    // デシリアライズ失敗時はデフォルト値でフォールバック
+                    // 旧スキーマ、欠損フィールド、enum不一致等でも継続動作を保証
+                    log::warn!(
+                        "Failed to parse overlay settings, using defaults: {}",
+                        e
+                    );
+                    let response = default_overlay_settings();
+                    Json(response).into_response()
                 }
             }
         }

@@ -70,16 +70,24 @@ export interface CityWeatherData {
   humidity: number | null;
 }
 
+/** マルチシティ配信結果 */
+export interface BroadcastMultiResult {
+  /** 成功した都市数 */
+  success_count: number;
+  /** 総都市数 */
+  total_count: number;
+}
+
 /** 複数都市の天気を取得 */
 export const getWeatherMulti = (cities: CityTuple[]) =>
   invoke<CityWeatherData[]>('get_weather_multi', { cities });
 
-/** 複数都市の天気をオーバーレイに配信 */
+/** 複数都市の天気をオーバーレイに配信（成功/失敗カウントを返す） */
 export const broadcastWeatherMulti = (
   cities: CityTuple[],
   rotationIntervalSec: number
 ) =>
-  invoke<void>('broadcast_weather_multi', {
+  invoke<BroadcastMultiResult>('broadcast_weather_multi', {
     cities,
     rotation_interval_sec: rotationIntervalSec,
   });

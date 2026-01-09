@@ -7,7 +7,6 @@ import {
   setWeatherCityAndBroadcast,
   broadcastWeatherMulti,
   setMultiCityMode,
-  getWeatherMulti,
   type WeatherData,
   type CityTuple,
 } from '../../types/weather';
@@ -269,12 +268,11 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       // 自動更新にマルチシティモードを反映（15分ごとの更新で使用）
       await setMultiCityMode(true, cityTuples, multiCitySettings.rotationIntervalSec);
 
-      // まず天気データを取得して成功/失敗をカウント
-      const results = await getWeatherMulti(cityTuples);
-      const successCount = results.length;
-      const totalCount = enabledCities.length;
+      // 配信実行（成功/失敗カウントが戻り値で得られるため二重取得不要）
+      const result = await broadcastWeatherMulti(cityTuples, multiCitySettings.rotationIntervalSec);
+      const { success_count: successCount, total_count: totalCount } = result;
 
-      // 部分的成功時の通知
+      // 結果の通知
       if (successCount < totalCount) {
         const failedCount = totalCount - successCount;
         console.warn(`Weather fetch partial success: ${successCount}/${totalCount} cities`);
@@ -282,9 +280,6 @@ export function WeatherSettingsPanel({ className = '', settings, onChange }: Wea
       } else if (successCount === totalCount) {
         setSuccessInfo(`${successCount}都市の天気を取得しました`);
       }
-
-      // 今すぐ配信
-      await broadcastWeatherMulti(cityTuples, multiCitySettings.rotationIntervalSec);
     } catch (err) {
       setError('マルチシティ配信に失敗しました');
       console.error(err);

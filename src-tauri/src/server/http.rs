@@ -13,8 +13,8 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
 use super::types::{
-    CommentPosition, CommentSettings, LayoutPreset, SetlistPosition, SetlistSettings,
-    ThemeSettings, WeatherPosition, WeatherSettings, WidgetVisibilitySettings,
+    CommentSettings, LayoutPreset, SetlistSettings, ThemeSettings, WeatherSettings,
+    WidgetVisibilitySettings,
 };
 use crate::commands::overlay::OverlaySettings;
 
@@ -317,46 +317,14 @@ impl From<OverlaySettings> for OverlaySettingsApiResponse {
 }
 
 /// デフォルトのオーバーレイ設定を生成
+///
+/// ## 設計ノート
+/// - `OverlaySettings::default()`を使用してデフォルト値を一元管理
+/// - 各struct/enumのDefault実装と一貫性を保証
 fn default_overlay_settings() -> OverlaySettingsApiResponse {
-    OverlaySettingsApiResponse {
-        theme: "default".to_string(),
-        // Note: フロントエンド側で旧プリセット（streaming等）はthree-columnにマイグレーションされるため、
-        // API側もデフォルトをThreeColumnに統一
-        layout: LayoutPreset::ThreeColumn,
-        primary_color: "#6366f1".to_string(),
-        font_family: "'Yu Gothic', 'Meiryo', sans-serif".to_string(),
-        border_radius: 8,
-        comment: CommentSettings {
-            enabled: true,
-            position: CommentPosition::BottomRight,
-            show_avatar: true,
-            font_size: 16,
-        },
-        setlist: SetlistSettings {
-            enabled: true,
-            position: SetlistPosition::Bottom,
-            show_artist: true,
-            font_size: 24,
-        },
-        weather: Some(WeatherSettings {
-            enabled: true,
-            position: WeatherPosition::LeftTop,
-            multi_city: None,
-        }),
-        widget: Some(WidgetVisibilitySettings {
-            clock: true,
-            weather: true,
-            comment: true,
-            superchat: true,
-            logo: true,
-            setlist: true,
-            kpi: true,
-            tanzaku: true,
-            announcement: true,
-        }),
-        // デフォルト値を使用（ThemeSettings::default()はすでに正規化済みの値）
-        theme_settings: Some(ThemeSettings::default()),
-    }
+    // OverlaySettings::default()を使用してFrom変換
+    // これによりデフォルト値が一元管理される
+    OverlaySettings::default().into()
 }
 
 /// 保存されているオーバーレイ設定を取得

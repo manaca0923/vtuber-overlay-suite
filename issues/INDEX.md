@@ -9,7 +9,7 @@
 | カテゴリ | 参照ファイル | 要点 |
 |---------|-------------|------|
 | **Tauri invoke** | [007](007_tauri-invoke-snake-case.md) | パラメータ名は `snake_case` |
-| **serde** | [021](021_serde-field-naming.md), [036](036_enum-unknown-normalization.md) | `rename_all` の適用範囲、未知enum値の正規化 |
+| **serde** | [021](021_serde-field-naming.md), [036](036_enum-unknown-normalization.md), [038](038_serde-partial-deserialization.md) | `rename_all` の適用範囲、未知enum値の正規化、部分的デシリアライズ |
 | **入力検証** | [013](013_pr68-accessibility-defensive-coding.md) | 型ガード、上下限チェック |
 | **セキュリティ** | [002](002_overlay-security.md) | URL検証、XSS、深層防御 |
 | **定数** | [020](020_magic-number-constants.md) | マジックナンバー禁止 |
@@ -60,6 +60,7 @@
 | [035](035_avoid-duplicate-api-calls.md) | 二重API呼び出し回避 |
 | [036](036_enum-unknown-normalization.md) | enum未知値の正規化 |
 | [037](037_derive-default-serde-conflict.md) | derive(Default)とserdeの競合 |
+| [038](038_serde-partial-deserialization.md) | serde部分的デシリアライズパターン |
 
 </details>
 
@@ -162,6 +163,7 @@
 
 ## 更新履歴
 
+- 2026-01: issue 038 追加（serde部分的デシリアライズパターン）
 - 2026-01: issue 037 追加（derive(Default)とserdeの競合）
 - 2026-01: issue 034-036 追加（APIフォールバック、二重API回避、enum正規化）
 - 2026-01: issue 033 追加（Fire-and-forgetブロードキャスト）

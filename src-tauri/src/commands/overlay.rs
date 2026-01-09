@@ -99,34 +99,114 @@ fn validate_overlay_settings(settings: &OverlaySettings) -> Result<(), String> {
     Ok(())
 }
 
+/// デフォルトのプライマリカラー（ThemeSettingsと共通）
+const DEFAULT_PRIMARY_COLOR: &str = "#6366f1";
+/// デフォルトのフォントファミリー
+const DEFAULT_FONT_FAMILY: &str = "'Yu Gothic', 'Meiryo', sans-serif";
+/// デフォルトの角丸サイズ
+const DEFAULT_BORDER_RADIUS: u32 = 8;
+
 /// 共通設定
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CommonSettings {
+    #[serde(default = "CommonSettings::default_primary_color")]
     pub primary_color: String,
+    #[serde(default = "CommonSettings::default_font_family")]
     pub font_family: String,
+    #[serde(default = "CommonSettings::default_border_radius")]
     pub border_radius: u32,
 }
 
+impl CommonSettings {
+    fn default_primary_color() -> String {
+        DEFAULT_PRIMARY_COLOR.to_string()
+    }
+
+    fn default_font_family() -> String {
+        DEFAULT_FONT_FAMILY.to_string()
+    }
+
+    fn default_border_radius() -> u32 {
+        DEFAULT_BORDER_RADIUS
+    }
+}
+
+impl Default for CommonSettings {
+    fn default() -> Self {
+        Self {
+            primary_color: DEFAULT_PRIMARY_COLOR.to_string(),
+            font_family: DEFAULT_FONT_FAMILY.to_string(),
+            border_radius: DEFAULT_BORDER_RADIUS,
+        }
+    }
+}
+
+/// デフォルトのテーマ名
+const DEFAULT_THEME: &str = "default";
+
 /// オーバーレイ設定全体
 /// NOTE: WidgetVisibilitySettingsはcrate::server::typesから再利用
+///
+/// ## 部分的デシリアライズ
+/// - 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// - `Default`実装で安全なデフォルト値を提供（新規作成時）
+/// - 旧スキーマからの移行時も破損せずにフォールバック
+///
+/// ## Option<T>フィールドの欠損時挙動
+/// - `weather`/`widget`/`theme_settings`: 欠損時は`None`を維持（旧データ互換性）
+/// - `Default::default()`で新規作成時は`Some(...)`を設定
+/// - これにより「未設定」と「明示的に無効」を区別可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct OverlaySettings {
+    #[serde(default = "OverlaySettings::default_theme")]
     pub theme: String,
+    #[serde(default)]
     pub layout: LayoutPreset,
+    #[serde(default)]
     pub common: CommonSettings,
+    #[serde(default)]
     pub comment: CommentSettings,
+    #[serde(default)]
     pub setlist: SetlistSettings,
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
     #[serde(default)]
     pub weather: Option<WeatherSettings>,
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
     #[serde(default)]
     pub widget: Option<WidgetVisibilitySettings>,
     #[serde(default)]
     pub superchat: Option<SuperchatSettings>,
     /// テーマ設定（カラー・フォント統合）
+    /// 欠損時はNone（旧データ互換性）、Default::default()ではSome(...)
     #[serde(default)]
     pub theme_settings: Option<ThemeSettings>,
+}
+
+impl OverlaySettings {
+    fn default_theme() -> String {
+        DEFAULT_THEME.to_string()
+    }
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self {
+            theme: DEFAULT_THEME.to_string(),
+            layout: LayoutPreset::default(),
+            common: CommonSettings::default(),
+            comment: CommentSettings::default(),
+            setlist: SetlistSettings::default(),
+            weather: Some(WeatherSettings::default()),
+            widget: Some(WidgetVisibilitySettings::default()),
+            superchat: None,
+            theme_settings: Some(ThemeSettings::default()),
+        }
+    }
 }
 
 /// オーバーレイ設定を保存

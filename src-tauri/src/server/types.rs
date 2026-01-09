@@ -5,6 +5,13 @@ use tokio::sync::RwLock;
 use super::websocket::WebSocketState;
 use crate::weather::WeatherData;
 
+/// bool型フィールドのデフォルト値（true）
+/// 欠損時に既定で有効化されるべきフィールドに使用
+/// enabled, show_avatar, show_artist, 各widgetフラグ等
+fn default_true() -> bool {
+    true
+}
+
 /// サーバー共有状態
 pub type ServerState = Arc<RwLock<WebSocketState>>;
 
@@ -127,40 +134,91 @@ pub struct SettingsUpdatePayload {
 }
 
 /// マルチシティ用都市エントリ
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CityEntry {
     /// ユニークID
+    #[serde(default)]
     pub id: String,
     /// API用都市名（英語）
+    #[serde(default)]
     pub name: String,
     /// 表示用都市名（日本語）
+    #[serde(default)]
     pub display_name: String,
     /// 有効/無効
+    #[serde(default = "default_true")]
     pub enabled: bool,
     /// 並び順
+    #[serde(default)]
     pub order: u32,
 }
 
+impl Default for CityEntry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            display_name: String::new(),
+            enabled: true,
+            order: 0,
+        }
+    }
+}
+
+/// デフォルトのローテーション間隔（秒）
+const DEFAULT_ROTATION_INTERVAL_SEC: u32 = 10;
+
 /// マルチシティ設定
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct MultiCitySettings {
     /// マルチシティモード有効
+    #[serde(default)]
     pub enabled: bool,
     /// ローテーション間隔（秒）
+    #[serde(default = "MultiCitySettings::default_rotation_interval_sec")]
     pub rotation_interval_sec: u32,
     /// 都市リスト
+    #[serde(default)]
     pub cities: Vec<CityEntry>,
+}
+
+impl MultiCitySettings {
+    fn default_rotation_interval_sec() -> u32 {
+        DEFAULT_ROTATION_INTERVAL_SEC
+    }
+}
+
+impl Default for MultiCitySettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            rotation_interval_sec: DEFAULT_ROTATION_INTERVAL_SEC,
+            cities: Vec::new(),
+        }
+    }
 }
 
 /// 天気ウィジェット設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct WeatherSettings {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     pub position: WeatherPosition,
     /// マルチシティモード設定（オプション）
@@ -168,22 +226,61 @@ pub struct WeatherSettings {
     pub multi_city: Option<MultiCitySettings>,
 }
 
+impl Default for WeatherSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: WeatherPosition::default(),
+            multi_city: None,
+        }
+    }
+}
+
 /// ウィジェット表示設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct WidgetVisibilitySettings {
+    #[serde(default = "default_true")]
     pub clock: bool,
+    #[serde(default = "default_true")]
     pub weather: bool,
+    #[serde(default = "default_true")]
     pub comment: bool,
+    #[serde(default = "default_true")]
     pub superchat: bool,
+    #[serde(default = "default_true")]
     pub logo: bool,
+    #[serde(default = "default_true")]
     pub setlist: bool,
+    #[serde(default = "default_true")]
     pub kpi: bool,
+    #[serde(default = "default_true")]
     pub tanzaku: bool,
+    #[serde(default = "default_true")]
     pub announcement: bool,
+}
+
+impl Default for WidgetVisibilitySettings {
+    fn default() -> Self {
+        Self {
+            clock: true,
+            weather: true,
+            comment: true,
+            superchat: true,
+            logo: true,
+            setlist: true,
+            kpi: true,
+            tanzaku: true,
+            announcement: true,
+        }
+    }
 }
 
 /// スパチャウィジェット設定（共通型）
@@ -398,9 +495,10 @@ fn default_primary_color() -> String {
 }
 
 /// 天気ウィジェットの表示位置
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum WeatherPosition {
+    #[default]
     LeftTop,
     LeftBottom,
     RightTop,
@@ -408,27 +506,29 @@ pub enum WeatherPosition {
 }
 
 /// コメントオーバーレイの表示位置
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum CommentPosition {
     TopLeft,
     TopRight,
     BottomLeft,
+    #[default]
     BottomRight,
 }
 
 /// セットリストオーバーレイの表示位置
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SetlistPosition {
     Top,
+    #[default]
     Bottom,
     Left,
     Right,
 }
 
 /// レイアウトプリセット
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum LayoutPreset {
     Streaming,
@@ -436,35 +536,90 @@ pub enum LayoutPreset {
     Music,
     Gaming,
     Custom,
+    #[default]
     #[serde(rename = "three-column")]
     ThreeColumn,
 }
+
+/// コメントオーバーレイ設定のデフォルトフォントサイズ
+const COMMENT_DEFAULT_FONT_SIZE: u32 = 16;
 
 /// コメントオーバーレイ設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
 /// NOTE: maxCountは画面高さベースの自動調整に統一したため削除
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CommentSettings {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     pub position: CommentPosition,
+    #[serde(default = "default_true")]
     pub show_avatar: bool,
+    #[serde(default = "CommentSettings::default_font_size")]
     pub font_size: u32,
 }
+
+impl CommentSettings {
+    fn default_font_size() -> u32 {
+        COMMENT_DEFAULT_FONT_SIZE
+    }
+}
+
+impl Default for CommentSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: CommentPosition::default(),
+            show_avatar: true,
+            font_size: COMMENT_DEFAULT_FONT_SIZE,
+        }
+    }
+}
+
+/// セットリストオーバーレイ設定のデフォルトフォントサイズ
+const SETLIST_DEFAULT_FONT_SIZE: u32 = 24;
 
 /// セットリストオーバーレイ設定（共通型）
 /// - DB保存用（overlay.rs）
 /// - WebSocket配信用（SettingsUpdatePayload）
 /// - HTTP API用（http.rs）
+///
+/// ## 部分的デシリアライズ
+/// 全フィールドに`#[serde(default)]`を付与し、フィールド欠損時もデシリアライズ可能
+/// boolフィールドは欠損時にtrueになるよう`default_true`を使用
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct SetlistSettings {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     pub position: SetlistPosition,
+    #[serde(default = "default_true")]
     pub show_artist: bool,
+    #[serde(default = "SetlistSettings::default_font_size")]
     pub font_size: u32,
+}
+
+impl SetlistSettings {
+    fn default_font_size() -> u32 {
+        SETLIST_DEFAULT_FONT_SIZE
+    }
+}
+
+impl Default for SetlistSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: SetlistPosition::default(),
+            show_artist: true,
+            font_size: SETLIST_DEFAULT_FONT_SIZE,
+        }
+    }
 }
 
 /// slot ID（3カラムレイアウト v2）
